@@ -43,13 +43,19 @@ public class DDataProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        DDataMapBuilder.build(builder,this.processingEnv,collectionType);
+        Throwable error = null;
+        try {
+            new DDataMapBuilder(builder,this.processingEnv).build();
+        } catch (Exception e) {
+            StringWriter err = new StringWriter();
+            e.printStackTrace(new PrintWriter(err));
+            error = e;
+        }
 
         if (annotations.size() == 0) {
             return false;
         }
 
-        Throwable error = null;
         try {
             Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
             for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType);

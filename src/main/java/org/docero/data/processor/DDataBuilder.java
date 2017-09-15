@@ -1,18 +1,13 @@
 package org.docero.data.processor;
 
-import org.docero.data.DDataRep;
-
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
-import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 
 class DDataBuilder {
     private final ProcessingEnvironment environment;
@@ -31,7 +26,7 @@ class DDataBuilder {
         String typeName = beanElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
         DataBeanBuilder value = new DataBeanBuilder(beanElement, environment, collectionType);
-        beansByInterface.put(value.interfaceName.toString(), value);
+        beansByInterface.put(value.interfaceType.toString(), value);
         String key = value.schema + "/" + value.table;
         beansByTable.put(key, value);
     }
@@ -55,9 +50,9 @@ class DDataBuilder {
             repositoryBuilder.build(environment);
         }
         for (DataBeanBuilder bean : beansByTable.values()) {
-            if (!repositoriesByBean.containsKey(bean.interfaceName.toString())) {
+            if (!repositoriesByBean.containsKey(bean.interfaceType.toString())) {
                 DataRepositoryBuilder r = DataRepositoryBuilder.build(bean, environment, beansByInterface);
-                repositoriesByBean.put(bean.interfaceName.toString(), r);
+                repositoriesByBean.put(bean.interfaceType.toString(), r);
                 repositories.add(r);
             }
         }

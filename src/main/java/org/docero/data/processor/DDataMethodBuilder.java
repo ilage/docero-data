@@ -12,12 +12,12 @@ import java.util.List;
 import java.util.Map;
 
 class DDataMethodBuilder {
-    private final TypeMirror returnType;
-    private final String methodName;
-    private final ArrayList<DDataMethodParameter> parameters = new ArrayList<>();
-    private final List<? extends TypeMirror> throwTypes;
-    private final DataRepositoryBuilder repositoryBuilder;
-    private final long methodIndex;
+    final TypeMirror returnType;
+    final String methodName;
+    final ArrayList<DDataMethodParameter> parameters = new ArrayList<>();
+    final List<? extends TypeMirror> throwTypes;
+    final DataRepositoryBuilder repositoryBuilder;
+    final long methodIndex;
 
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement, ProcessingEnvironment environment) {
         this.repositoryBuilder = repositoryBuilder;
@@ -86,9 +86,9 @@ class DDataMethodBuilder {
         cf.endBlock("}");
     }
 
-    private class DDataMethodParameter {
-        private final String name;
-        private final TypeMirror type;
+    static class DDataMethodParameter {
+        final String name;
+        final TypeMirror type;
 
         DDataMethodParameter(Name simpleName, TypeMirror typeMirror) {
             this.name = simpleName.toString();
