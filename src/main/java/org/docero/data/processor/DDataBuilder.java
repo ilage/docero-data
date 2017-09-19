@@ -12,7 +12,6 @@ import java.util.HashSet;
 class DDataBuilder {
     private final ProcessingEnvironment environment;
 
-    final HashMap<String, DataBeanBuilder> beansByTable = new HashMap<>();
     final HashMap<String, DataBeanBuilder> beansByInterface = new HashMap<>();
     final ArrayList<DataRepositoryBuilder> repositories = new ArrayList<>();
     final HashMap<String, DataRepositoryBuilder> repositoriesByBean = new HashMap<>();
@@ -22,13 +21,11 @@ class DDataBuilder {
         this.environment = environment;
     }
 
-    void checkInterface(Element beanElement, TypeMirror collectionType) {
+    void checkInterface(Element beanElement, TypeMirror collectionType, TypeMirror mapType) {
         String typeName = beanElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-        DataBeanBuilder value = new DataBeanBuilder(beanElement, environment, collectionType);
+        DataBeanBuilder value = new DataBeanBuilder(beanElement, environment, collectionType, mapType);
         beansByInterface.put(value.interfaceType.toString(), value);
-        String key = value.schema + "/" + value.table;
-        beansByTable.put(key, value);
     }
 
     void checkRepository(Element repositoryElement) {
@@ -43,13 +40,13 @@ class DDataBuilder {
     }
 
     void generateClasses() throws IOException {
-        for (DataBeanBuilder bean : beansByTable.values()) {
+        for (DataBeanBuilder bean : beansByInterface.values()) {
             bean.build(environment, beansByInterface);
         }
         for (DataRepositoryBuilder repositoryBuilder : repositories) {
             repositoryBuilder.build(environment);
         }
-        for (DataBeanBuilder bean : beansByTable.values()) {
+        for (DataBeanBuilder bean : beansByInterface.values()) {
             if (!repositoriesByBean.containsKey(bean.interfaceType.toString())) {
                 DataRepositoryBuilder r = DataRepositoryBuilder.build(bean, environment, beansByInterface);
                 repositoriesByBean.put(bean.interfaceType.toString(), r);

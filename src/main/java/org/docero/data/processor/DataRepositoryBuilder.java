@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-class DataRepositoryBuilder {
+public class DataRepositoryBuilder {
     final String name;
     final TypeMirror forInterfaceName;
     final TypeMirror idClass;
@@ -28,10 +28,10 @@ class DataRepositoryBuilder {
     final Map<String, DataBeanBuilder> beansByInterface;
     final String mappingClassName;
 
-    private boolean hasGet;
-    private boolean hasInsert;
-    private boolean hasUpdate;
-    private boolean hasDelete;
+    final boolean hasGet;
+    final boolean hasInsert;
+    final boolean hasUpdate;
+    final boolean hasDelete;
 
     DataRepositoryBuilder(
             TypeElement repositoryElement,
@@ -41,7 +41,7 @@ class DataRepositoryBuilder {
         DDataRep ddRep = repositoryElement.getAnnotation(DDataRep.class);
         repositoryInterface = repositoryElement.asType();
         this.mappingClassName = environment.getTypeUtils().erasure(repositoryInterface).toString();
-        if(ddRep.value().length()>0) name = ddRep.value();
+        if (ddRep.value().length() > 0) name = ddRep.value();
         else name = mappingClassName.substring(mappingClassName.lastIndexOf('.'));
         this.beansByInterface = beansByInterface;
 
@@ -78,16 +78,11 @@ class DataRepositoryBuilder {
                 if (element.getModifiers().contains(Modifier.ABSTRACT)) {
                     methods.add(new DDataMethodBuilder(this, (ExecutableElement) element, environment));
                 }
-                if (((ExecutableElement) element).getReturnType() == null) {
-                    List<? extends VariableElement> parameters = ((ExecutableElement) element).getParameters();
-                    if (parameters.size() == 1 && environment.getTypeUtils().isSameType(parameters.get(0).asType(), idClass)) {
-                        if ("get".equals(element.getSimpleName().toString())) hasGet = true;
-                        if ("insert".equals(element.getSimpleName().toString())) hasInsert = true;
-                        if ("update".equals(element.getSimpleName().toString())) hasUpdate = true;
-                        if ("delete".equals(element.getSimpleName().toString())) hasDelete = true;
-                    }
-                }
             }
+        hasGet = methods.stream().anyMatch(m -> "get".equals(m.methodName));
+        hasInsert = methods.stream().anyMatch(m -> "insert".equals(m.methodName));
+        hasUpdate = methods.stream().anyMatch(m -> "update".equals(m.methodName));
+        hasDelete = methods.stream().anyMatch(m -> "delete".equals(m.methodName));
     }
 
     private DataRepositoryBuilder(DataBeanBuilder bean, ProcessingEnvironment environment, Map<String, DataBeanBuilder> beansByInterface) {
@@ -109,6 +104,10 @@ class DataRepositoryBuilder {
         this.isHistorical = false;
         //final ArrayList<DDataMethodBuilder> methods = new ArrayList<>();
         this.beansByInterface = beansByInterface;
+        hasGet = false;
+        hasDelete = false;
+        hasUpdate = false;
+        hasInsert = false;
     }
 
     String forInterfaceName() {
@@ -152,7 +151,7 @@ class DataRepositoryBuilder {
             }
 
             buildMethodCreate(cf);
-            buildMethodGet(cf);
+            if (!hasGet) buildMethodGet(cf);
             if (!hasInsert) buildMethodInsert(cf);
             if (!hasUpdate) buildMethodUpdate(cf);
             if (!hasDelete) buildMethodDelete(cf);
@@ -315,21 +314,5 @@ class DataRepositoryBuilder {
         cf.startBlock("public " + forInterfaceName + " create() {");
         cf.println("return new " + beanImplementation + "();");
         cf.endBlock("}");
-    }
-
-    boolean hasGet() {
-        return this.hasGet;
-    }
-
-    boolean hasInsert() {
-        return this.hasInsert;
-    }
-
-    boolean hasUpdate() {
-        return this.hasUpdate;
-    }
-
-    boolean hasDelete() {
-        return this.hasDelete;
     }
 }

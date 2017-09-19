@@ -5,12 +5,12 @@ import org.docero.data.DDataProperty;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Map;
 
-class DataBeanPropertyBuilder {
+public class DataBeanPropertyBuilder {
     final String name;
     final String enumName;
     final TypeMirror type;
@@ -18,17 +18,20 @@ class DataBeanPropertyBuilder {
     final boolean nullable;
     final String columnName;
     final boolean isId;
-    final boolean collection;
+    final boolean isCollection;
+    final boolean isMap;
     final DataBeanBuilder dataBean;
-    final String typeErasure;
+    final TypeMirror mappedType;
 
     DataBeanPropertyBuilder(
-            DataBeanBuilder bean, ExecutableElement method, ProcessingEnvironment environment, TypeMirror collectionType
+            DataBeanBuilder bean, ExecutableElement method,
+            ProcessingEnvironment environment,
+            TypeMirror collectionType, TypeMirror mapType
     ) {
         this.dataBean = bean;
         DDataProperty ddProperty = method.getAnnotation(DDataProperty.class);
         String sn = method.getSimpleName().toString();
-        if (sn.startsWith("get")) {
+        if (sn.startsWith("get") || sn.startsWith("has")) {
             name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);
             type = method.getReturnType();
         } else if (sn.startsWith("set")) {
@@ -41,7 +44,6 @@ class DataBeanPropertyBuilder {
             name = sn;
             type = method.getReturnType();
         }
-        typeErasure = environment.getTypeUtils().erasure(type).toString();
         nullable = ddProperty == null || ddProperty.nullable();
         length = ddProperty == null ? 0 : ddProperty.length();
         if (ddProperty != null && ddProperty.value().length() > 0) {
@@ -58,8 +60,16 @@ class DataBeanPropertyBuilder {
             columnName = nameBuilder.toString();
             isId = false;
         }
-        TypeMirror typeErasure = environment.getTypeUtils().erasure(type);
-        collection = environment.getTypeUtils().isSubtype(typeErasure, collectionType);
+        TypeMirror ltypeErasure = environment.getTypeUtils().erasure(type);
+        isCollection = environment.getTypeUtils().isSubtype(ltypeErasure, collectionType);
+        isMap = environment.getTypeUtils().isSubtype(ltypeErasure, mapType);
+        if (isCollection) mappedType =
+                environment.getTypeUtils().erasure(((DeclaredType) type).getTypeArguments().get(0));
+        else if (isMap) mappedType =
+                environment.getTypeUtils().erasure(((DeclaredType) type).getTypeArguments().get(1));
+        else mappedType = type.getKind().isPrimitive() ?
+                    environment.getTypeUtils().boxedClass((PrimitiveType) type).asType() :
+                    environment.getTypeUtils().erasure(type);
 
         StringBuilder elemName = new StringBuilder();
         for (char c : name.toCharArray()) {
@@ -133,7 +143,7 @@ class DataBeanPropertyBuilder {
     }
 
     void buildEnumElement(JavaClassWriter cf, HashMap<String, DataBeanBuilder> beansByInterface, ProcessingEnvironment environment) throws IOException {
-        TypeMirror typeErasure = environment.getTypeUtils().erasure(collection ?
+        TypeMirror typeErasure = environment.getTypeUtils().erasure(isCollection ?
                 ((DeclaredType) type).getTypeArguments().get(0) : type);
         DataBeanBuilder manType = beansByInterface.get(typeErasure.toString());
         if (manType == null) {
@@ -142,7 +152,7 @@ class DataBeanPropertyBuilder {
                     this.columnName + "\",\"" +
                     this.name + "\"," +
                     dataBean.interfaceType + ".class),");
-        } else if (!collection) {
+        } else {// if (!isCollection) {
             cf.println("/** Value of column " + this.columnName + "*/");
             cf.println(this.enumName + "(\"" +
                     this.columnName + "\",\"" +
@@ -157,6 +167,10 @@ class DataBeanPropertyBuilder {
     }
 
     boolean isCollection() {
-        return collection;
+        return isCollection;
+    }
+
+    public boolean isCollectionOrMap() {
+        return isCollection || isMap;
     }
 }

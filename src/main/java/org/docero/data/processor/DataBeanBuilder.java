@@ -13,7 +13,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-class DataBeanBuilder {
+public class DataBeanBuilder {
     final String schema;
     final String table;
     final String name;
@@ -25,7 +25,10 @@ class DataBeanBuilder {
     final String keyType;
     final boolean isKeyComposite;
 
-    DataBeanBuilder(Element beanElement, ProcessingEnvironment environment, TypeMirror collectionType) {
+    DataBeanBuilder(
+            Element beanElement, ProcessingEnvironment environment,
+            TypeMirror collectionType, TypeMirror mapType
+    ) {
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
         schema = (ddBean.schema());
         table = (ddBean.table());
@@ -36,7 +39,7 @@ class DataBeanBuilder {
         for (Element elt : beanElement.getEnclosedElements())
             if (elt.getKind() == ElementKind.METHOD) {
                 DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this,
-                        (ExecutableElement) elt, environment, collectionType);
+                        (ExecutableElement) elt, environment, collectionType, mapType);
                 properties.put(beanBuilder.enumName, beanBuilder);
             }
         this.collectionType = collectionType;

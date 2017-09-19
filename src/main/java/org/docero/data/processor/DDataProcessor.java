@@ -30,7 +30,9 @@ import java.util.Set;
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class DDataProcessor extends AbstractProcessor {
     private TypeMirror collectionType;
+    private TypeMirror mapType;
     private DDataBuilder builder;
+    private boolean mapBuilded = false;
 
     @Override
     public void init(ProcessingEnvironment environment) {
@@ -38,19 +40,25 @@ public class DDataProcessor extends AbstractProcessor {
         collectionType = environment.getTypeUtils().erasure(
                 environment.getElementUtils().getTypeElement("java.util.Collection").asType()
         );
+        mapType = environment.getTypeUtils().erasure(
+                environment.getElementUtils().getTypeElement("java.util.Map").asType()
+        );
         builder = new DDataBuilder(environment);
     }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         Throwable error = null;
-        try {
-            new DDataMapBuilder(builder,this.processingEnv).build();
-        } catch (Exception e) {
-            StringWriter err = new StringWriter();
-            e.printStackTrace(new PrintWriter(err));
-            error = e;
-        }
+        if (!mapBuilded)
+            try {
+                if (new DDataMapBuilder(builder, this.processingEnv).build()) {
+                    mapBuilded = true;
+                    return false;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                error = e;
+            }
 
         if (annotations.size() == 0) {
             return false;
@@ -58,14 +66,13 @@ public class DDataProcessor extends AbstractProcessor {
 
         try {
             Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
-            for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType);
+            for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType, mapType);
 
             Set<? extends Element> repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
             for (Element repositoryElement : repositories) builder.checkRepository(repositoryElement);
 
         } catch (Exception e) {
-            StringWriter err = new StringWriter();
-            e.printStackTrace(new PrintWriter(err));
+            e.printStackTrace();
             error = e;
         }
 
@@ -73,9 +80,13 @@ public class DDataProcessor extends AbstractProcessor {
             builder.generateClasses();
         } catch (Exception e) {
             e.printStackTrace();
+            error = e;
         }
 
-        if (error != null) throw new Error(error);
+        if (error != null) {
+            error.printStackTrace();
+            throw new Error(error);
+        }
 
         return false;
     }

@@ -8,6 +8,7 @@ import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -18,8 +19,10 @@ class DDataMethodBuilder {
     final List<? extends TypeMirror> throwTypes;
     final DataRepositoryBuilder repositoryBuilder;
     final long methodIndex;
+    final MType methodType;
 
-    DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement, ProcessingEnvironment environment) {
+    DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement,
+                       ProcessingEnvironment environment) {
         this.repositoryBuilder = repositoryBuilder;
         returnType = methodElement.getReturnType();
         methodName = methodElement.getSimpleName().toString();
@@ -28,6 +31,43 @@ class DDataMethodBuilder {
             parameters.add(new DDataMethodParameter(variableElement.getSimpleName(), variableElement.asType()));
         }
         throwTypes = methodElement.getThrownTypes();
+        if (returnType == null) {
+            String nameString = methodName.toLowerCase();
+            this.methodType = nameString.contains("insert") ? MType.INSERT : (
+                    nameString.contains("update") ? MType.UPDATE :
+                            MType.DELETE
+            );
+        } else {
+            String typeString = returnType.toString();
+            if (typeString.contains("java.util.List")) methodType = MType.SELECT;
+            else if (typeString.contains("java.util.Map")) methodType = MType.SELECT;
+            else methodType = MType.GET;
+        }
+    }
+
+    DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, DDataMethodBuilder.MType methodType, ProcessingEnvironment environment) {
+        this.repositoryBuilder = repositoryBuilder;
+        returnType = repositoryBuilder.forInterfaceName;
+        this.methodType = methodType;
+        methodIndex = 0;
+        throwTypes = Collections.emptyList();
+        switch (methodType) {
+            case GET:
+                methodName = "get";
+                parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
+                break;
+            case INSERT:
+                methodName = "insert";
+                parameters.add(new DDataMethodParameter("bean", repositoryBuilder.forInterfaceName));
+                break;
+            case UPDATE:
+                methodName = "update";
+                parameters.add(new DDataMethodParameter("bean", repositoryBuilder.forInterfaceName));
+                break;
+            default:
+                methodName = "delete";
+                parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
+        }
     }
 
     void build(JavaClassWriter cf, Map<String, DataBeanBuilder> beansByInterface) throws IOException {
@@ -86,12 +126,19 @@ class DDataMethodBuilder {
         cf.endBlock("}");
     }
 
+    public enum MType {SELECT, GET, INSERT, UPDATE, DELETE}
+
     static class DDataMethodParameter {
         final String name;
         final TypeMirror type;
 
         DDataMethodParameter(Name simpleName, TypeMirror typeMirror) {
             this.name = simpleName.toString();
+            this.type = typeMirror;
+        }
+
+        DDataMethodParameter(String simpleName, TypeMirror typeMirror) {
+            this.name = simpleName;
             this.type = typeMirror;
         }
     }
