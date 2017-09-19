@@ -427,9 +427,7 @@ class DDataMapBuilder {
         for (FilterOption filter : filters)
             if (filter.option != null && filter.property != null) {
                 Optional<MappedTable> table = mappedBeans.stream()
-                        .filter(mb -> mb.property.isCollectionOrMap() ?
-                                mb.property.name.equals(filter.property.name) :
-                                mb.property.columnName.equals(filter.property.columnName))
+                        .filter(mb -> mb.property.name.equals(filter.mappedBy.name))
                         .findAny();
                 table.ifPresent(joins::add);
                 int tIdx = table.map(mb -> mb.tableIndex).orElse(0);
@@ -607,28 +605,41 @@ class DDataMapBuilder {
                 mappedTable.property.isMap ? "HashMap" :
                         environment.getTypeUtils().erasure(mappedTable.property.type).toString())
         );
-        if (mappedTable.property.isCollectionOrMap())
+        Mapping mapping = mappings.get(mappedTable.property.dataBean.interfaceType + "." + mappedTable.property.name);
+        boolean lazy = false;
+        if (mappedTable.property.isCollectionOrMap()) {
             managed.setAttribute("ofType", mappedTable.property.mappedType.toString());
+            lazy = fetchOptions == null || fetchOptions.fetchType != DDataFetchType.EAGER;
+        } else {
+            lazy = fetchOptions != null && fetchOptions.fetchType == DDataFetchType.LAZY;
+        }
 
-        mappedTable.mappedBean.properties.values().stream()
-                .filter(p -> p.isId)
-                .forEach(p -> {
-                    org.w3c.dom.Element id = (org.w3c.dom.Element)
-                            managed.appendChild(doc.createElement("id"));
-                    id.setAttribute("property", p.name);
-                    id.setAttribute("column", mappedTable.property.name + "_" + p.columnName);
-                });
+        if (lazy) {
+            managed.setAttribute("column", mapping.property.columnName);
+            managed.setAttribute("foreignColumn", mapping.mappedProperty.columnName);
+            managed.setAttribute("fetchType", "lazy");
+            managed.setAttribute("select", ""); //TODO
+        } else {
+            mappedTable.mappedBean.properties.values().stream()
+                    .filter(p -> p.isId)
+                    .forEach(p -> {
+                        org.w3c.dom.Element id = (org.w3c.dom.Element)
+                                managed.appendChild(doc.createElement("id"));
+                        id.setAttribute("property", p.name);
+                        id.setAttribute("column", mappedTable.property.name + "_" + p.columnName);
+                    });
 
-        mappedTable.mappedBean.properties.values().stream()
-                .filter(p -> !p.isId)
-                .filter(p -> filter4ResultMap(p, fetchOptions))
-                .forEach(p -> {
-                    org.w3c.dom.Element id = (org.w3c.dom.Element)
-                            managed.appendChild(doc.createElement("result"));
-                    boolean isBean = builder.beansByInterface.containsKey(p.type.toString());
-                    id.setAttribute("property", p.name + (isBean ? "_foreignKey" : ""));
-                    id.setAttribute("column", mappedTable.property.name + "_" + p.columnName);
-                });
+            mappedTable.mappedBean.properties.values().stream()
+                    .filter(p -> !p.isId)
+                    .filter(p -> filter4ResultMap(p, fetchOptions))
+                    .forEach(p -> {
+                        org.w3c.dom.Element id = (org.w3c.dom.Element)
+                                managed.appendChild(doc.createElement("result"));
+                        boolean isBean = builder.beansByInterface.containsKey(p.type.toString());
+                        id.setAttribute("property", p.name + (isBean ? "_foreignKey" : ""));
+                        id.setAttribute("column", mappedTable.property.name + "_" + p.columnName);
+                    });
+        }
     }
 
     private void createSimpleDelete(org.w3c.dom.Element mapperRoot, DataRepositoryBuilder repository) {
@@ -696,6 +707,7 @@ class DDataMapBuilder {
         final DDataFilterOption option;
         final DataBeanPropertyBuilder property;
         final String parameter;
+        final DataBeanPropertyBuilder mappedBy;
 
         FilterOption(DataRepositoryBuilder repository, ExecutableElement methodElement, VariableElement variableElement) {
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName.toString());
@@ -723,6 +735,7 @@ class DDataMapBuilder {
                                 .orElse(null);
 
                 DataBeanPropertyBuilder mapped = null;
+                DataBeanPropertyBuilder mappedByProperty = null;
                 for (DataBeanPropertyBuilder property : bean.properties.values()) {
                     String mapped_value = filterProps.keySet().stream()
                             .filter(k -> property.name.equals(k.getSimpleName().toString()))
@@ -730,13 +743,9 @@ class DDataMapBuilder {
                             .map(k -> filterProps.get(k).getValue().toString())
                             .orElse(null);
                     String key = property.isCollection ?
-                            environment.getTypeUtils().erasure(
-                                    ((DeclaredType) property.type).getTypeArguments().get(0)
-                            ).toString() : (property.isMap ?
-                            environment.getTypeUtils().erasure(
-                                    ((DeclaredType) property.type).getTypeArguments().get(1)
-                            ).toString() :
-                            property.type.toString());
+                            property.mappedType.toString() :
+                            property.type.toString();
+                    mappedByProperty = property;
                     DataBeanBuilder mappedBean = builder.beansByInterface.get(key);
                     mapped = mappedBean == null || mapped_value == null ? null :
                             mappedBean.properties.values().stream()
@@ -747,6 +756,7 @@ class DDataMapBuilder {
                 }
 
                 property = mapped != null ? mapped : localProperty;
+                mappedBy = mapped != null ? mappedByProperty : localProperty;
                 option = filterProps.keySet().stream()
                         .filter(k -> "option".equals(k.getSimpleName().toString()))
                         .findAny()
@@ -757,6 +767,7 @@ class DDataMapBuilder {
             } else {
                 option = DDataFilterOption.EQUALS;
                 property = null;
+                mappedBy = null;
             }
         }
     }
