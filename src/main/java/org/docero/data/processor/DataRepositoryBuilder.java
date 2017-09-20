@@ -8,10 +8,7 @@ import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 public class DataRepositoryBuilder {
     final String name;
@@ -28,10 +25,11 @@ public class DataRepositoryBuilder {
     final Map<String, DataBeanBuilder> beansByInterface;
     final String mappingClassName;
 
-    final boolean hasGet;
+    final DDataMethodBuilder defaultGetMethod;
+    final DDataMethodBuilder defaultDeleteMethod;
     final boolean hasInsert;
     final boolean hasUpdate;
-    final boolean hasDelete;
+    final HashMap<String,org.w3c.dom.Element> lazyLoads = new HashMap<>();
 
     DataRepositoryBuilder(
             TypeElement repositoryElement,
@@ -79,10 +77,14 @@ public class DataRepositoryBuilder {
                     methods.add(new DDataMethodBuilder(this, (ExecutableElement) element, environment));
                 }
             }
-        hasGet = methods.stream().anyMatch(m -> "get".equals(m.methodName));
+        defaultGetMethod = methods.stream().filter(m ->
+                "get".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
+                .findAny().orElse(null);
+        defaultDeleteMethod = methods.stream().filter(m ->
+                "delete".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
+                .findAny().orElse(null);
         hasInsert = methods.stream().anyMatch(m -> "insert".equals(m.methodName));
         hasUpdate = methods.stream().anyMatch(m -> "update".equals(m.methodName));
-        hasDelete = methods.stream().anyMatch(m -> "delete".equals(m.methodName));
     }
 
     private DataRepositoryBuilder(DataBeanBuilder bean, ProcessingEnvironment environment, Map<String, DataBeanBuilder> beansByInterface) {
@@ -104,8 +106,8 @@ public class DataRepositoryBuilder {
         this.isHistorical = false;
         //final ArrayList<DDataMethodBuilder> methods = new ArrayList<>();
         this.beansByInterface = beansByInterface;
-        hasGet = false;
-        hasDelete = false;
+        defaultGetMethod = null;
+        defaultDeleteMethod = null;
         hasUpdate = false;
         hasInsert = false;
     }
@@ -151,10 +153,10 @@ public class DataRepositoryBuilder {
             }
 
             buildMethodCreate(cf);
-            if (!hasGet) buildMethodGet(cf);
+            if (defaultGetMethod == null) buildMethodGet(cf);
             if (!hasInsert) buildMethodInsert(cf);
             if (!hasUpdate) buildMethodUpdate(cf);
-            if (!hasDelete) buildMethodDelete(cf);
+            if (defaultDeleteMethod == null) buildMethodDelete(cf);
 
             for (DDataMethodBuilder method : methods) {
                 method.build(cf, beansByInterface);
@@ -249,6 +251,16 @@ public class DataRepositoryBuilder {
             cf.println("@return ignored fields");
             cf.endBlock("*/");
             cf.println(forInterfaceName + "_[] ignore() default " + forInterfaceName + "_.NONE_;");
+
+            cf.startBlock("/**");
+            cf.println("Truncate EAGER loaded beans associations and collections attributes<br>");
+            cf.println("0 - deny all associations and collections attributes in eager loaded beans<br>");
+            cf.println("1 - provide eager load of associations and collections attributes in first level of eager loaded beans, " +
+                    "and deny all for 2-nd level<br>");
+            cf.println("default -1 - lazy load of associations and collections attributes in eager loaded beans");
+            cf.println("@return eager loads truncation");
+            cf.endBlock("*/");
+            cf.println("int eagerTrunkLevel() default -1;");
 
             cf.endBlock("}");
         }
