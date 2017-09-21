@@ -343,10 +343,10 @@ class DDataMapBuilder {
                 if (fetchOptions.fetchType != DDataFetchType.NO)
                     mappedTables.stream().filter(MappedTable::useInFieldsList).forEach(t ->
                             addManagedBeanToFrom(sql, t, fetchOptions));
-                sql.append("\nFROM ").append(bean.table).append(" AS t0\n");
+                sql.append("\nFROM \"").append(bean.table).append("\" AS t0\n");
                 break;
             case INSERT:
-                sql.append("\nINSERT INTO ").append(bean.table).append(" (");
+                sql.append("\nINSERT INTO \"").append(bean.table).append("\" (");
                 sql.append(bean.properties.values().stream()
                         .filter(p -> !p.isCollectionOrMap())
                         .map(p -> p.columnName)
@@ -360,7 +360,7 @@ class DDataMapBuilder {
                 sql.append("\n)\n");
                 break;
             case UPDATE:
-                sql.append("\nUPDATE ").append(bean.table).append(" SET\n");
+                sql.append("\nUPDATE \"").append(bean.table).append("\" SET\n");
                 sql.append(bean.properties.values().stream()
                         .filter(p -> !p.isCollectionOrMap())
                         .map(p -> p.columnName + " = " + buildSqlParameter(bean, p))
@@ -368,7 +368,7 @@ class DDataMapBuilder {
                         .append("\n");
                 break;
             case DELETE:
-                sql.append("\nDELETE FROM ").append(bean.table).append(' ');
+                sql.append("\nDELETE FROM \"").append(bean.table).append("\" ");
         }
 
         switch (method.methodType) {
@@ -524,8 +524,8 @@ class DDataMapBuilder {
                         org.w3c.dom.Element existsElt = whereExists.get(currentJoin.mappedBean.table);
                         if (existsElt == null) {
                             existsElt = doc.createElement("trim");
-                            existsElt.setAttribute("prefix", "EXISTS (SELECT * FROM " +
-                                    currentJoin.mappedBean.table + " AS t" + tIdx + " WHERE ");
+                            existsElt.setAttribute("prefix", "AND EXISTS (SELECT * FROM \"" +
+                                    currentJoin.mappedBean.table + "\" AS t" + tIdx + " WHERE ");
                             existsElt.setAttribute("prefixOverrides", "AND ");
                             existsElt.setAttribute("suffix", ")\n");
                             Mapping joinMap = mappings.get(currentJoin.property.dataBean.interfaceType.toString() +
@@ -578,9 +578,9 @@ class DDataMapBuilder {
         for (MappedTable join : joins)
             if (join.useInFieldsList) {
                 Mapping joinMap = mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
-                sql.append("LEFT JOIN ")
+                sql.append("LEFT JOIN \"")
                         .append(join.mappedBean.table)
-                        .append(" AS t").append(join.tableIndex)
+                        .append("\" AS t").append(join.tableIndex)
                         .append(" ON (t").append(join.mappedFromTableIndex)
                         .append(".").append(joinMap.property.columnName)
                         .append(" = t").append(join.tableIndex)
@@ -654,8 +654,16 @@ class DDataMapBuilder {
 
         addPropertiesToResultMap(map, "", bean.properties.values(), fetchOptions);
 
-        mappedTables.stream().filter(b -> fetchOptions.filter4ResultMap(b.property)).forEach(b ->
-                addManagedBeanToResultMap(map, b, fetchOptions, repository, mappedTables, fetchOptions.eagerTrunkLevel));
+        mappedTables.stream()
+                .filter(b -> fetchOptions.filter4ResultMap(b.property))
+                .filter(b -> !b.property.isCollectionOrMap())
+                .forEach(b ->
+                        addManagedBeanToResultMap(map, b, fetchOptions, repository, mappedTables, fetchOptions.eagerTrunkLevel));
+        mappedTables.stream()
+                .filter(b -> fetchOptions.filter4ResultMap(b.property))
+                .filter(b -> b.property.isCollectionOrMap())
+                .forEach(b ->
+                        addManagedBeanToResultMap(map, b, fetchOptions, repository, mappedTables, fetchOptions.eagerTrunkLevel));
     }
 
     private void addPropertiesToResultMap(
@@ -697,7 +705,7 @@ class DDataMapBuilder {
                 mappedTable.property.isCollectionOrMap() ? "collection" : "association"));
         managed.setAttribute("property", mappedTable.property.name);
         managed.setAttribute("javaType", mappedTable.property.isCollection ? "ArrayList" : (
-                mappedTable.property.isMap ? "HashMap" : mappedTable.property.dataBean.getImplementationName())
+                mappedTable.property.isMap ? "HashMap" : mappedTable.mappedBean.getImplementationName())
         );
         Mapping mapping = mappings.get(mappedTable.property.dataBean.interfaceType + "." + mappedTable.property.name);
         boolean lazy;
@@ -705,16 +713,17 @@ class DDataMapBuilder {
             managed.setAttribute("ofType", mappedTable.property.dataBean.getImplementationName());
             lazy = fetchOptions.fetchType != DDataFetchType.EAGER;
         } else {
+            managed.setAttribute("column", mappedTable.property.columnName);
             lazy = fetchOptions.fetchType == DDataFetchType.LAZY;
         }
 
         if (lazy || trunkLevel == -2) {
             TypeMirror propType = mapping.manyToOne ?
                     mapping.property.type : mapping.mappedProperty.type;
-            managed.setAttribute("column", mapping.manyToOne ?
-                    mapping.mappedProperty.columnName : mapping.property.columnName);
-            managed.setAttribute("foreignColumn", mapping.manyToOne ?
-                    mapping.property.columnName : mapping.mappedProperty.columnName);
+            managed.setAttribute("column", //mapping.manyToOne ? mapping.mappedProperty.columnName :
+                    mapping.property.columnName);
+            managed.setAttribute("foreignColumn", //mapping.manyToOne ? mapping.property.columnName :
+                    mapping.mappedProperty.columnName);
 
             managed.setAttribute("fetchType", "lazy");
             String lazyLoadSelectId = "lazy_load_" + mapping.mappedProperty.dataBean.name +
@@ -750,18 +759,31 @@ class DDataMapBuilder {
                         .filter(fetchOptions::filter4ResultMap)
                         .collect(Collectors.toList());
 
-                for (DataBeanPropertyBuilder mappedBean : mappedBeans) {
-                    DataBeanBuilder mapped2Bean = builder.beansByInterface.get(mappedBean.mappedType.toString());
-                    if (mapped2Bean != null) {
-                        MappedTable mapped2Table = new MappedTable(mappedTable.tableIndex, mappedTables.size() + 1,
-                                mappedBean, mapped2Bean, fetchOptions);
-                        mappedTables.add(mapped2Table);
-
-                        addManagedBeanToResultMap(managed, mapped2Table, fetchOptions, repository, mappedTables,
-                                trunkLevel == -1 ? -2 : trunkLevel - 1);
-                    }
-                }
+                mappedBeans.stream()
+                        .filter(DataBeanPropertyBuilder::isSimple)
+                        .forEach(mappedBean ->
+                                addManaged2BeanToResultMap(managed, mappedTable, mappedBean,
+                                        fetchOptions, repository, mappedTables, trunkLevel)
+                        );
+                mappedBeans.stream()
+                        .filter(DataBeanPropertyBuilder::isCollectionOrMap)
+                        .forEach(mappedBean ->
+                                addManaged2BeanToResultMap(managed, mappedTable, mappedBean,
+                                        fetchOptions, repository, mappedTables, trunkLevel)
+                        );
             }
+        }
+    }
+
+    private void addManaged2BeanToResultMap(org.w3c.dom.Element managed, MappedTable mappedTable, DataBeanPropertyBuilder mappedBean, FetchOptions fetchOptions, DataRepositoryBuilder repository, List<MappedTable> mappedTables, int trunkLevel) {
+        DataBeanBuilder mapped2Bean = builder.beansByInterface.get(mappedBean.mappedType.toString());
+        if (mapped2Bean != null) {
+            MappedTable mapped2Table = new MappedTable(mappedTable.tableIndex, mappedTables.size() + 1,
+                    mappedBean, mapped2Bean, fetchOptions);
+            mappedTables.add(mapped2Table);
+
+            addManagedBeanToResultMap(managed, mapped2Table, fetchOptions, repository, mappedTables,
+                    trunkLevel == -1 ? -2 : trunkLevel - 1);
         }
     }
 

@@ -174,4 +174,8 @@ public class DataBeanPropertyBuilder {
     public boolean isCollectionOrMap() {
         return isCollection || isMap;
     }
+
+    public boolean isSimple() {
+        return !(isCollection || isMap);
+    }
 }
