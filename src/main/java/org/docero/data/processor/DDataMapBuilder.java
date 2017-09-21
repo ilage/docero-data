@@ -449,7 +449,7 @@ class DDataMapBuilder {
             StringBuilder sql,
             DataBeanBuilder bean,
             DDataMethodBuilder method,
-            List<MappedTable> mappedBeans,
+            List<MappedTable> mappedTables,
             ArrayList<FilterOption> filters
     ) {
         Document doc = domElement.getOwnerDocument();
@@ -459,19 +459,18 @@ class DDataMapBuilder {
         where.setAttribute("prefixOverrides", "AND ");
 
         HashSet<MappedTable> joins = new HashSet<>();
-        joins.addAll(mappedBeans.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()));
+        joins.addAll(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()));
 
         org.w3c.dom.Element e;
         for (FilterOption filter : filters)
             if (filter.option != null && filter.property != null) {
                 int tIdx = 0;
-                Optional<MappedTable> table = mappedBeans.stream()
-                        .filter(mb -> filter.property.dataBean != bean || mb.mappedFromTableIndex != 0)
-                        .filter(mb -> mb.property.dataBean.name.equals(
-                                filter.mappedBy.dataBean.name) &&
-                                mb.property.name.equals(filter.mappedBy.name)
-                        )
-                        .findAny();
+                Optional<MappedTable> table = mappedTables.stream()
+                        .filter(mb -> mb.mappedFromTableIndex == 1 || filter.property.dataBean != bean)
+                        .filter(mb -> mb.property.dataBean == filter.mappedBy.dataBean)
+                        //.filter(mb -> mb.mappedByProperty.equals(filter.mappedBy.name))
+                        .filter(mb -> mb.property.name.equals(filter.mappedBy.name)
+                        ).findAny();
                 table.ifPresent(joins::add);
                 tIdx = table.map(mb -> mb.tableIndex).orElse(0);
 
@@ -544,7 +543,8 @@ class DDataMapBuilder {
             sql.append("LEFT JOIN ")
                     .append(join.mappedBean.table)
                     .append(" AS t").append(join.tableIndex)
-                    .append(" ON (t0.").append(joinMap.property.columnName)
+                    .append(" ON (t").append(join.mappedFromTableIndex)
+                    .append(".").append(joinMap.property.columnName)
                     .append(" = t").append(join.tableIndex)
                     .append(".").append(joinMap.mappedProperty.columnName).append(")\n");
         }
@@ -827,17 +827,15 @@ class DDataMapBuilder {
                             .findAny()
                             .map(k -> filterProps.get(k).getValue().toString())
                             .orElse(null);
-                    String key = property.isCollection ?
-                            property.mappedType.toString() :
-                            property.type.toString();
-                    mappedByProperty = property;
-                    DataBeanBuilder mappedBean = builder.beansByInterface.get(key);
-                    mapped = mappedBean == null || mapped_value == null ? null :
-                            mappedBean.properties.values().stream()
-                                    .filter(p -> p.enumName.equals(mapped_value))
-                                    .findAny()
-                                    .orElse(null);
-                    if (mapped != null) break;
+                    DataBeanBuilder mappedBean = builder.beansByInterface.get(property.mappedType.toString());
+                    if (mappedBean != null) {
+                        mapped = mappedBean.properties.values().stream()
+                                .filter(p -> p.enumName.equals(mapped_value))
+                                .findAny()
+                                .orElse(null);
+                        mappedByProperty = property;
+                        break;
+                    }
                 }
 
                 property = mapped != null ? mapped : localProperty;
