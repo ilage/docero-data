@@ -21,6 +21,8 @@ class DDataMethodBuilder {
     final long methodIndex;
     final MType methodType;
 
+    private boolean defaultMethod;
+
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement,
                        ProcessingEnvironment environment) {
         this.repositoryBuilder = repositoryBuilder;
@@ -38,9 +40,9 @@ class DDataMethodBuilder {
                             MType.DELETE
             );
         } else {
-            String typeString = returnType.toString();
-            if (typeString.contains("java.util.List")) methodType = MType.SELECT;
-            else if (typeString.contains("java.util.Map")) methodType = MType.SELECT;
+            String ttype = returnType.toString();
+            if (ttype.contains("java.util.List")) methodType = MType.SELECT;
+            else if (ttype.contains("java.util.Map")) methodType = MType.SELECT;
             else methodType = MType.GET;
         }
     }
@@ -105,7 +107,8 @@ class DDataMethodBuilder {
             else if (methodName.contains("update")) cf.print("update");
             else cf.print("delete");
         }
-        cf.print("(\"" + repositoryBuilder.mappingClassName + "." + methodName + "_" + methodIndex + "\"");
+        cf.print("(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
+                defaultMethod ? "" : "_" + methodIndex) + "\"");
 
         if (parameters.size() > 0) {
             if (parameters.size() == 1 && parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
@@ -124,6 +127,10 @@ class DDataMethodBuilder {
         }
 
         cf.endBlock("}");
+    }
+
+    public void setDefault() {
+        defaultMethod = true;
     }
 
     public enum MType {SELECT, GET, INSERT, UPDATE, DELETE}

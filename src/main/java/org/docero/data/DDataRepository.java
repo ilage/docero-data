@@ -2,7 +2,7 @@ package org.docero.data;
 
 import java.io.Serializable;
 
-public interface DDataRepository<T extends Serializable, C> {
+public interface DDataRepository<T extends Serializable, C extends Serializable> {
     T create();
     T get(C id);
     void insert(T bean);

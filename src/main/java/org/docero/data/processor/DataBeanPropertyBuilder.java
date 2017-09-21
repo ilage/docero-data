@@ -26,23 +26,24 @@ public class DataBeanPropertyBuilder {
     DataBeanPropertyBuilder(
             DataBeanBuilder bean, ExecutableElement method,
             ProcessingEnvironment environment,
-            TypeMirror collectionType, TypeMirror mapType
+            TypeMirror collectionType, TypeMirror mapType, TypeMirror voidType
     ) {
         this.dataBean = bean;
         DDataProperty ddProperty = method.getAnnotation(DDataProperty.class);
         String sn = method.getSimpleName().toString();
         if (sn.startsWith("get") || sn.startsWith("has")) {
             name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);
-            type = method.getReturnType();
+            this.type = method.getReturnType();
         } else if (sn.startsWith("set")) {
             name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);
-            type = method.getTypeParameters().get(0).asType();
+            this.type = method.getTypeParameters().size() != 1 ? voidType :
+                    method.getTypeParameters().get(0).asType();
         } else if (sn.startsWith("is")) {
             name = Character.toLowerCase(sn.charAt(2)) + sn.substring(3);
-            type = method.getReturnType();
+            this.type = method.getReturnType();
         } else {
             name = sn;
-            type = method.getReturnType();
+            this.type = method.getReturnType();
         }
         nullable = ddProperty == null || ddProperty.nullable();
         length = ddProperty == null ? 0 : ddProperty.length();
@@ -60,16 +61,16 @@ public class DataBeanPropertyBuilder {
             columnName = nameBuilder.toString();
             isId = false;
         }
-        TypeMirror ltypeErasure = environment.getTypeUtils().erasure(type);
+        TypeMirror ltypeErasure = environment.getTypeUtils().erasure(this.type);
         isCollection = environment.getTypeUtils().isSubtype(ltypeErasure, collectionType);
         isMap = environment.getTypeUtils().isSubtype(ltypeErasure, mapType);
         if (isCollection) mappedType =
-                environment.getTypeUtils().erasure(((DeclaredType) type).getTypeArguments().get(0));
+                environment.getTypeUtils().erasure(((DeclaredType) this.type).getTypeArguments().get(0));
         else if (isMap) mappedType =
-                environment.getTypeUtils().erasure(((DeclaredType) type).getTypeArguments().get(1));
-        else mappedType = type.getKind().isPrimitive() ?
-                    environment.getTypeUtils().boxedClass((PrimitiveType) type).asType() :
-                    environment.getTypeUtils().erasure(type);
+                environment.getTypeUtils().erasure(((DeclaredType) this.type).getTypeArguments().get(1));
+        else mappedType = this.type.getKind().isPrimitive() ?
+                    environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
+                    environment.getTypeUtils().erasure(this.type);
 
         StringBuilder elemName = new StringBuilder();
         for (char c : name.toCharArray()) {

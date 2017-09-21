@@ -36,11 +36,13 @@ public class DataBeanBuilder {
         grown = (ddBean.growth());
         dictionary = (ddBean.dictionary());
         interfaceType = (beanElement.asType());
+        TypeMirror voidType = environment.getElementUtils().getTypeElement("java.lang.Void").asType();
         for (Element elt : beanElement.getEnclosedElements())
             if (elt.getKind() == ElementKind.METHOD) {
                 DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this,
-                        (ExecutableElement) elt, environment, collectionType, mapType);
-                properties.put(beanBuilder.enumName, beanBuilder);
+                        (ExecutableElement) elt, environment, collectionType, mapType, voidType);
+                if(beanBuilder.type!=voidType)
+                    properties.put(beanBuilder.enumName, beanBuilder);
             }
         this.collectionType = collectionType;
         List<DataBeanPropertyBuilder> ids = properties.values().stream().filter(p -> p.isId).collect(Collectors.toList());

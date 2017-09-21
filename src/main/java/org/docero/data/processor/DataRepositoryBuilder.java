@@ -80,6 +80,7 @@ public class DataRepositoryBuilder {
         defaultGetMethod = methods.stream().filter(m ->
                 "get".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
                 .findAny().orElse(null);
+        defaultGetMethod.setDefault();
         defaultDeleteMethod = methods.stream().filter(m ->
                 "delete".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
                 .findAny().orElse(null);
