@@ -454,17 +454,15 @@ class DDataMapBuilder {
     ) {
         Document doc = domElement.getOwnerDocument();
 
-        org.w3c.dom.Element where = doc.createElement("trim");
-        where.setAttribute("prefix", "WHERE");
-        where.setAttribute("prefixOverrides", "AND ");
+        List<org.w3c.dom.Element> where = new ArrayList<>();
 
         HashSet<MappedTable> joins = new HashSet<>();
         joins.addAll(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()));
 
+        HashMap<String, org.w3c.dom.Element> whereExists = new HashMap<>();
         org.w3c.dom.Element e;
         for (FilterOption filter : filters)
             if (filter.option != null && filter.property != null) {
-                int tIdx = 0;
                 Optional<MappedTable> table = mappedTables.stream()
                         .filter(mb -> mb.mappedFromTableIndex == 1 || filter.property.dataBean != bean)
                         .filter(mb -> mb.property.dataBean == filter.mappedBy.dataBean)
@@ -472,31 +470,33 @@ class DDataMapBuilder {
                         .filter(mb -> mb.property.name.equals(filter.mappedBy.name)
                         ).findAny();
                 table.ifPresent(joins::add);
-                tIdx = table.map(mb -> mb.tableIndex).orElse(0);
+                int tIdx = table.map(mb -> mb.tableIndex).orElse(0);
+                MappedTable currentJoin = table.orElse(null);
 
                 switch (filter.option) {
                     case EQUALS:
-                        e = (org.w3c.dom.Element) where.appendChild(doc.createElement("if"));
+                        e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
-                        e.appendChild(doc.createTextNode("t" + tIdx + "." +
-                                filter.property.columnName + " = #{" + filter.parameter + "}"));
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.columnName + " = #{" + filter.parameter + "}\n"));
                         break;
                     case NOT_EQUALS:
-                        e = (org.w3c.dom.Element) where.appendChild(doc.createElement("if"));
+                        e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
-                        e.appendChild(doc.createTextNode("t" + tIdx + "." +
-                                filter.property.columnName + " != #{" + filter.parameter + "}"));
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.columnName + " != #{" + filter.parameter + "}\n"));
                         break;
                     case IS_NULL:
-                        e = (org.w3c.dom.Element) where.appendChild(doc.createElement("if"));
+                        e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " == TRUE");
-                        e.appendChild(doc.createTextNode("t" + tIdx + "." +
-                                filter.property.columnName + " IS NULL}"));
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.columnName + " IS NULL\n"));
                         e.setAttribute("test", filter.parameter + " == FALSE");
-                        e.appendChild(doc.createTextNode("NOT t" + tIdx + "." +
-                                filter.property.columnName + " IS NULL}"));
+                        e.appendChild(doc.createTextNode("AND NOT t" + tIdx + "." +
+                                filter.property.columnName + " IS NULL\n"));
                         break;
                     case IN:
+                        e = null;
                         //TODO
                         break;
                     case LIKE:
@@ -505,49 +505,87 @@ class DDataMapBuilder {
                     case LIKE_ENDS:
                     case LIKE_ALL_STARTS:
                     case LIKE_ALL_HAS:
-                        e = (org.w3c.dom.Element) where.appendChild(doc.createElement("if"));
+                        e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
-                        e.appendChild(doc.createTextNode("t" + tIdx + "." +
-                                filter.property.columnName + " LIKE #{" + filter.parameter + "}"));
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.columnName + " LIKE #{" + filter.parameter + "}\n"));
                         break;
                     case ILIKE:
-                        e = (org.w3c.dom.Element) where.appendChild(doc.createElement("if"));
+                        e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
-                        e.appendChild(doc.createTextNode("t" + tIdx + "." +
-                                filter.property.columnName + " ILIKE #{" + filter.parameter + "}"));
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.columnName + " ILIKE #{" + filter.parameter + "}\n"));
+                    default:
+                        e = null;
                 }
+
+                if (e != null)
+                    if (currentJoin != null && !currentJoin.useInFieldsList) {
+                        org.w3c.dom.Element existsElt = whereExists.get(currentJoin.mappedBean.table);
+                        if (existsElt == null) {
+                            existsElt = doc.createElement("trim");
+                            existsElt.setAttribute("prefix", "EXISTS (SELECT * FROM " +
+                                    currentJoin.mappedBean.table + " AS t" + tIdx + " WHERE ");
+                            existsElt.setAttribute("prefixOverrides", "AND ");
+                            existsElt.setAttribute("suffix", ")\n");
+                            Mapping joinMap = mappings.get(currentJoin.property.dataBean.interfaceType.toString() +
+                                    "." + currentJoin.property.name);
+                            existsElt.appendChild(doc.createTextNode("\nt" +
+                                    currentJoin.mappedFromTableIndex +
+                                    "." + joinMap.property.columnName +
+                                    " = t" + currentJoin.tableIndex +
+                                    "." + joinMap.mappedProperty.columnName + "\n"));
+                            whereExists.put(currentJoin.mappedBean.table, existsElt);
+                            where.add(existsElt);
+                        }
+                        existsElt.appendChild(e);
+                    } else
+                        where.add(e);
             }
 
         addJoins(joins, sql);
 
         if (method.methodType == DDataMethodBuilder.MType.SELECT) {
             domElement.appendChild(doc.createTextNode(sql.toString()));
-            if (filters.size() > 0) domElement.appendChild(where);
+            if (where.size() > 0) {
+                org.w3c.dom.Element whereElt = doc.createElement("trim");
+                whereElt.setAttribute("prefix", "WHERE");
+                whereElt.setAttribute("prefixOverrides", "AND ");
+                domElement.appendChild(whereElt);
+                where.forEach(whereElt::appendChild);
+            }
         } else {
             sql.append("WHERE\n");
             domElement.appendChild(doc.createTextNode(sql.toString()));
-            NodeList nl = where.getChildNodes();
-            for (int i = 0; i < nl.getLength(); i++) domElement.appendChild(nl.item(i));
+            where.forEach(domElement::appendChild);
         }
+
+        filters.stream().filter(f -> f.option == DDataFilterOption.LIMIT).findAny().ifPresent(limit -> {
+            org.w3c.dom.Element limitElt = (org.w3c.dom.Element)
+                    domElement.appendChild(doc.createElement("if"));
+            limitElt.setAttribute("test", limit.parameter + " != null");
+            limitElt.appendChild(doc.createTextNode("LIMIT #{" + limit.parameter + "}\n"));
+            filters.stream().filter(f -> f.option == DDataFilterOption.START).findAny().ifPresent(offset -> {
+                org.w3c.dom.Element offsetElt = (org.w3c.dom.Element)
+                        limitElt.appendChild(doc.createElement("if"));
+                offsetElt.setAttribute("test", offset.parameter + " != null");
+                offsetElt.appendChild(doc.createTextNode("OFFSET #{" + offset.parameter + "}\n"));
+            });
+        });
     }
 
     private void addJoins(Collection<MappedTable> joins, StringBuilder sql) {
-        for (MappedTable join : joins) {
-            Mapping joinMap = mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
-                    /*System.out.println("method returns " + method.getReturnType() + " tail:");
-                        System.out.println(mappingKey + "\n   " +
-                                beanElement.asType().toString() + "." + mapping.property.name +
-                                (mapping.manyToOne ? " <- " : " -> ") +
-                                mapping.mappedProperty.dataBean.interfaceType + "." +
-                                mapping.mappedProperty.name);*/
-            sql.append("LEFT JOIN ")
-                    .append(join.mappedBean.table)
-                    .append(" AS t").append(join.tableIndex)
-                    .append(" ON (t").append(join.mappedFromTableIndex)
-                    .append(".").append(joinMap.property.columnName)
-                    .append(" = t").append(join.tableIndex)
-                    .append(".").append(joinMap.mappedProperty.columnName).append(")\n");
-        }
+        for (MappedTable join : joins)
+            if (join.useInFieldsList) {
+                Mapping joinMap = mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
+                sql.append("LEFT JOIN ")
+                        .append(join.mappedBean.table)
+                        .append(" AS t").append(join.tableIndex)
+                        .append(" ON (t").append(join.mappedFromTableIndex)
+                        .append(".").append(joinMap.property.columnName)
+                        .append(" = t").append(join.tableIndex)
+                        .append(".").append(joinMap.mappedProperty.columnName).append(")\n");
+            }
     }
 
     /**
