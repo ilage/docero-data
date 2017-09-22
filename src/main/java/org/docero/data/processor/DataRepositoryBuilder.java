@@ -119,13 +119,8 @@ class DataRepositoryBuilder {
                 forInterfaceName.toString();
     }
 
-    void build(ProcessingEnvironment environment) throws IOException {
+    void build(ProcessingEnvironment environment, boolean spring) throws IOException {
         int simpNameDel = daoClassName.lastIndexOf('.');
-        TypeElement sqlSDS = environment.getElementUtils()
-                .getTypeElement("org.mybatis.spring.support.SqlSessionDaoSupport");
-        TypeElement dS = environment.getElementUtils()
-                .getTypeElement("org.springframework.dao.support.DaoSupport");
-        boolean spring = dS != null && sqlSDS != null && sqlSDS.getKind() == ElementKind.CLASS;
 
         buildFilterAnnotation(environment);
         buildDataFetchAnnotation(environment);
@@ -262,10 +257,11 @@ class DataRepositoryBuilder {
     static DataRepositoryBuilder build(
             DataBeanBuilder bean,
             ProcessingEnvironment environment,
-            Map<String, DataBeanBuilder> beansByInterface
+            Map<String, DataBeanBuilder> beansByInterface,
+            boolean spring
     ) throws IOException {
         DataRepositoryBuilder builder = new DataRepositoryBuilder(bean, environment, beansByInterface);
-        builder.build(environment);
+        builder.build(environment,spring);
         return builder;
     }
 
