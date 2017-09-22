@@ -178,4 +178,8 @@ public class DataBeanPropertyBuilder {
     public boolean isSimple() {
         return !(isCollection || isMap);
     }
+
+    public String getColumnRef() {
+        return "\""+columnName+"\"";
+    }
 }

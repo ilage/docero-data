@@ -14,8 +14,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class DataBeanBuilder {
-    final String schema;
-    final String table;
+    private final String schema;
+    private final String table;
     final String name;
     final TypeMirror interfaceType;
     final TableGrowType grown;
@@ -59,6 +59,11 @@ public class DataBeanBuilder {
 
     String getImplementationName() {
         return interfaceType + "Impl";
+    }
+
+    String getTableRef() {
+        return (schema==null || schema.length()==0 ? "":"\""+schema+"\".") +
+                "\""+table+"\"";
     }
 
     void build(ProcessingEnvironment environment, HashMap<String, DataBeanBuilder> beansByInterface) throws IOException {

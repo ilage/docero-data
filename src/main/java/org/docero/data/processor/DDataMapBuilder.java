@@ -4,7 +4,6 @@ import org.docero.data.DDataFetchType;
 import org.docero.data.DDataFilterOption;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentType;
-import org.w3c.dom.NodeList;
 
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
@@ -338,15 +337,15 @@ class DDataMapBuilder {
                 sql.append(bean.properties.values().stream()
                         .filter(p -> !p.isCollectionOrMap())
                         .filter(fetchOptions::filterIgnored)
-                        .map(p -> "  t0." + p.columnName + " AS " + p.columnName)
+                        .map(p -> "  t0." + p.getColumnRef() + " AS " + p.columnName)
                         .collect(Collectors.joining(",\n")));
                 if (fetchOptions.fetchType != DDataFetchType.NO)
                     mappedTables.stream().filter(MappedTable::useInFieldsList).forEach(t ->
                             addManagedBeanToFrom(sql, t, fetchOptions));
-                sql.append("\nFROM \"").append(bean.table).append("\" AS t0\n");
+                sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
                 break;
             case INSERT:
-                sql.append("\nINSERT INTO \"").append(bean.table).append("\" (");
+                sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
                 sql.append(bean.properties.values().stream()
                         .filter(p -> !p.isCollectionOrMap())
                         .map(p -> p.columnName)
@@ -360,7 +359,7 @@ class DDataMapBuilder {
                 sql.append("\n)\n");
                 break;
             case UPDATE:
-                sql.append("\nUPDATE \"").append(bean.table).append("\" SET\n");
+                sql.append("\nUPDATE ").append(bean.getTableRef()).append(" SET\n");
                 sql.append(bean.properties.values().stream()
                         .filter(p -> !p.isCollectionOrMap())
                         .map(p -> p.columnName + " = " + buildSqlParameter(bean, p))
@@ -368,7 +367,7 @@ class DDataMapBuilder {
                         .append("\n");
                 break;
             case DELETE:
-                sql.append("\nDELETE FROM \"").append(bean.table).append("\" ");
+                sql.append("\nDELETE FROM ").append(bean.getTableRef()).append(' ');
         }
 
         switch (method.methodType) {
@@ -400,7 +399,7 @@ class DDataMapBuilder {
                     ssql.append("WHERE ");
                     ssql.append(bean.properties.values().stream()
                             .filter(p -> p.isId)
-                            .map(p -> p.columnName + " = " + buildSqlParameter(bean, p))
+                            .map(p -> "t0." + p.getColumnRef() + " = " + buildSqlParameter(bean, p))
                             .collect(Collectors.joining(" AND ")))
                             .append("\n");
 
@@ -478,22 +477,22 @@ class DDataMapBuilder {
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.columnName + " = #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " = #{" + filter.parameter + "}\n"));
                         break;
                     case NOT_EQUALS:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.columnName + " != #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " != #{" + filter.parameter + "}\n"));
                         break;
                     case IS_NULL:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " == TRUE");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.columnName + " IS NULL\n"));
+                                filter.property.getColumnRef() + " IS NULL\n"));
                         e.setAttribute("test", filter.parameter + " == FALSE");
                         e.appendChild(doc.createTextNode("AND NOT t" + tIdx + "." +
-                                filter.property.columnName + " IS NULL\n"));
+                                filter.property.getColumnRef() + " IS NULL\n"));
                         break;
                     case IN:
                         e = null;
@@ -508,34 +507,34 @@ class DDataMapBuilder {
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.columnName + " LIKE #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " LIKE #{" + filter.parameter + "}\n"));
                         break;
                     case ILIKE:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.columnName + " ILIKE #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " ILIKE #{" + filter.parameter + "}\n"));
                     default:
                         e = null;
                 }
 
                 if (e != null)
                     if (currentJoin != null && !currentJoin.useInFieldsList) {
-                        org.w3c.dom.Element existsElt = whereExists.get(currentJoin.mappedBean.table);
+                        org.w3c.dom.Element existsElt = whereExists.get(currentJoin.mappedBean.getTableRef());
                         if (existsElt == null) {
                             existsElt = doc.createElement("trim");
-                            existsElt.setAttribute("prefix", "AND EXISTS (SELECT * FROM \"" +
-                                    currentJoin.mappedBean.table + "\" AS t" + tIdx + " WHERE ");
+                            existsElt.setAttribute("prefix", "AND EXISTS (SELECT * FROM " +
+                                    currentJoin.mappedBean.getTableRef() + " AS t" + tIdx + " WHERE ");
                             existsElt.setAttribute("prefixOverrides", "AND ");
                             existsElt.setAttribute("suffix", ")\n");
                             Mapping joinMap = mappings.get(currentJoin.property.dataBean.interfaceType.toString() +
                                     "." + currentJoin.property.name);
                             existsElt.appendChild(doc.createTextNode("\nt" +
                                     currentJoin.mappedFromTableIndex +
-                                    "." + joinMap.property.columnName +
+                                    "." + joinMap.property.getColumnRef() +
                                     " = t" + currentJoin.tableIndex +
-                                    "." + joinMap.mappedProperty.columnName + "\n"));
-                            whereExists.put(currentJoin.mappedBean.table, existsElt);
+                                    "." + joinMap.mappedProperty.getColumnRef() + "\n"));
+                            whereExists.put(currentJoin.mappedBean.getTableRef(), existsElt);
                             where.add(existsElt);
                         }
                         existsElt.appendChild(e);
@@ -568,24 +567,26 @@ class DDataMapBuilder {
             filters.stream().filter(f -> f.option == DDataFilterOption.START).findAny().ifPresent(offset -> {
                 org.w3c.dom.Element offsetElt = (org.w3c.dom.Element)
                         limitElt.appendChild(doc.createElement("if"));
-                offsetElt.setAttribute("test", offset.parameter + " != null");
+                offsetElt.setAttribute("test", offset.parameter + " != null && " + offset.parameter + " != 0");
                 offsetElt.appendChild(doc.createTextNode("OFFSET #{" + offset.parameter + "}\n"));
             });
         });
     }
 
     private void addJoins(Collection<MappedTable> joins, StringBuilder sql) {
-        for (MappedTable join : joins)
-            if (join.useInFieldsList) {
-                Mapping joinMap = mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
-                sql.append("LEFT JOIN \"")
-                        .append(join.mappedBean.table)
-                        .append("\" AS t").append(join.tableIndex)
-                        .append(" ON (t").append(join.mappedFromTableIndex)
-                        .append(".").append(joinMap.property.columnName)
-                        .append(" = t").append(join.tableIndex)
-                        .append(".").append(joinMap.mappedProperty.columnName).append(")\n");
-            }
+        joins.stream()
+                .filter(t -> t.useInFieldsList)
+                .sorted((t1, t2) -> t1.tableIndex < t2.tableIndex ? -1 : 1)
+                .forEach(join -> {
+                    Mapping joinMap = mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
+                    sql.append("LEFT JOIN ")
+                            .append(join.mappedBean.getTableRef())
+                            .append(" AS t").append(join.tableIndex)
+                            .append(" ON (t").append(join.mappedFromTableIndex)
+                            .append(".").append(joinMap.property.getColumnRef())
+                            .append(" = t").append(join.tableIndex)
+                            .append(".").append(joinMap.mappedProperty.getColumnRef()).append(")\n");
+                });
     }
 
     /**
@@ -633,7 +634,7 @@ class DDataMapBuilder {
     private void addManagedBeanToFrom(StringBuilder sql, MappedTable mappedTable, FetchOptions fetchOptions) {
         String r = mappedTable.mappedBean.properties.values().stream()
                 .filter(fetchOptions::filter4FieldsList)
-                .map(p -> "  t" + mappedTable.tableIndex + "." + p.columnName +
+                .map(p -> "  t" + mappedTable.tableIndex + "." + p.getColumnRef() +
                         " AS t" + mappedTable.tableIndex + "_" + p.columnName)
                 .collect(Collectors.joining(",\n"));
         if (r.length() > 0) sql.append(",\n").append(r);
@@ -713,7 +714,6 @@ class DDataMapBuilder {
             managed.setAttribute("ofType", mappedTable.property.dataBean.getImplementationName());
             lazy = fetchOptions.fetchType != DDataFetchType.EAGER;
         } else {
-            managed.setAttribute("column", mappedTable.property.columnName);
             lazy = fetchOptions.fetchType == DDataFetchType.LAZY;
         }
 
@@ -741,8 +741,8 @@ class DDataMapBuilder {
                 il.setAttribute("refid", repository == beanRep ?
                         "get_select" : beanRep.mappingClassName + ".get_select");
                 ll.appendChild(doc.createTextNode("\nWHERE t0." +
-                        mapping.mappedProperty.columnName + " = " +
-                        //buildSqlParameter(mapping.mappedProperty.dataBean, mapping.mappedProperty) +
+                        mapping.mappedProperty.getColumnRef() + " = " +
+                        //TODO really columnName ?
                         "#{" + mapping.property.columnName + ", javaType=" + (propType.getKind().isPrimitive() ?
                         environment.getTypeUtils().boxedClass((PrimitiveType) propType) : propType
                 ) + jdbcTypeFor(propType, environment) + "}" +
