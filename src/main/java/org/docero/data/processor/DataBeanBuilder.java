@@ -13,7 +13,7 @@ import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class DataBeanBuilder {
+class DataBeanBuilder {
     private final String schema;
     private final String table;
     final String name;

@@ -284,13 +284,15 @@ class DDataMapBuilder {
             switch (method.methodType) {
                 case SELECT:
                 case GET:
-                    buildResultMap(mapperRoot, method.repositoryBuilder, methodName, fetchOptions, mappedTables);
+                    if (fetchOptions.resultMap.length() == 0)
+                        buildResultMap(mapperRoot, method.repositoryBuilder, methodName, fetchOptions, mappedTables);
 
                     org.w3c.dom.Element select = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("select"));
                     select.setAttribute("id", methodName);
                     select.setAttribute("parameterType", "HashMap");
-                    select.setAttribute("resultMap", methodName + "_ResultMap");
+                    select.setAttribute("resultMap", fetchOptions.resultMap.length() == 0 ?
+                            methodName + "_ResultMap" : fetchOptions.resultMap);
                     buildSql(repository, method, bean, fetchOptions, mappedTables, select, filters, false);
                     break;
                 case INSERT:
@@ -330,102 +332,106 @@ class DDataMapBuilder {
         Document doc = domElement.getOwnerDocument();
 
         StringBuilder sql = new StringBuilder();
-        switch (method.methodType) {
-            case GET:
-            case SELECT:
-                sql.append("\nSELECT\n");
-                sql.append(bean.properties.values().stream()
-                        .filter(p -> !p.isCollectionOrMap())
-                        .filter(fetchOptions::filterIgnored)
-                        .map(p -> "  t0." + p.getColumnRef() + " AS " + p.columnName)
-                        .collect(Collectors.joining(",\n")));
-                if (fetchOptions.fetchType != DDataFetchType.NO)
-                    mappedTables.stream().filter(MappedTable::useInFieldsList).forEach(t ->
-                            addManagedBeanToFrom(sql, t, fetchOptions));
-                sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
-                break;
-            case INSERT:
-                sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
-                sql.append(bean.properties.values().stream()
-                        .filter(p -> !p.isCollectionOrMap())
-                        .map(p -> p.columnName)
-                        .collect(Collectors.joining(", ")));
-                sql.append(")\n");
-                sql.append("VALUES (\n");
-                sql.append(bean.properties.values().stream()
-                        .filter(p -> !p.isCollectionOrMap())
-                        .map(p -> buildSqlParameter(bean, p))
-                        .collect(Collectors.joining(",\n")));
-                sql.append("\n)\n");
-                break;
-            case UPDATE:
-                sql.append("\nUPDATE ").append(bean.getTableRef()).append(" SET\n");
-                sql.append(bean.properties.values().stream()
-                        .filter(p -> !p.isCollectionOrMap())
-                        .map(p -> p.columnName + " = " + buildSqlParameter(bean, p))
-                        .collect(Collectors.joining(",\n")))
-                        .append("\n");
-                break;
-            case DELETE:
-                sql.append("\nDELETE FROM ").append(bean.getTableRef()).append(' ');
-        }
+        if (fetchOptions.sqlSelect.length() > 0) {
+            sql.append("\n");
+            String sqlSelect = fetchOptions.sqlSelect;
+            for (DDataMethodBuilder.DDataMethodParameter parameter : method.parameters) {
+                TypeMirror pType = parameter.type.getKind().isPrimitive() ?
+                        environment.getTypeUtils().boxedClass((PrimitiveType) parameter.type).asType() :
+                        parameter.type;
+                sqlSelect = sqlSelect.replaceAll(":" + parameter.name,
+                        "#{" + parameter.name + ", javaType=" + pType +
+                                jdbcTypeFor(pType, environment) +
+                                "}");
+            }
+            sql.append(sqlSelect).append("\n");
+            domElement.appendChild(doc.createTextNode(sql.toString()));
 
-        switch (method.methodType) {
-            case INSERT:
-                domElement.appendChild(doc.createTextNode(sql.toString()));
-                break;
-            case GET:
-            case UPDATE:
-            case DELETE:
-                if (filters != null && filters.size() > 0) {
-                    if (defaultGet || method == repository.defaultGetMethod) {
-                        buildSelect4DefaultGet(domElement, sql);
-                        domElement.appendChild(doc.createTextNode("\nWHERE " +
-                                filters.stream()
-                                        .filter(f -> f.property != null)
-                                        .map(f -> f.property.columnName + " = " + buildSqlParameter(bean, f.property))
-                                        .collect(Collectors.joining(" AND ")) +
-                                "\n"));
-                    } else
-                        addFiltersToSql(domElement, sql, bean, method, mappedTables, filters);
-                } else {
-                    addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
-                    StringBuilder ssql;
-                    if (defaultGet || method == repository.defaultGetMethod) {
-                        buildSelect4DefaultGet(domElement, sql);
-                        ssql = new StringBuilder("\n");
-                    } else ssql = sql;
-
-                    ssql.append("WHERE ");
-                    ssql.append(bean.properties.values().stream()
-                            .filter(p -> p.isId)
-                            .map(p -> "t0." + p.getColumnRef() + " = " + buildSqlParameter(bean, p))
-                            .collect(Collectors.joining(" AND ")))
+        } else {
+            switch (method.methodType) {
+                case GET:
+                case SELECT:
+                    sql.append("\nSELECT\n");
+                    sql.append(bean.properties.values().stream()
+                            .filter(p -> !p.isCollectionOrMap())
+                            .filter(fetchOptions::filterIgnored)
+                            .map(p -> "  t0." + p.getColumnRef() + " AS " + p.columnName)
+                            .collect(Collectors.joining(",\n")));
+                    if (fetchOptions.fetchType != DDataFetchType.NO)
+                        mappedTables.stream().filter(MappedTable::useInFieldsList).forEach(t ->
+                                addManagedBeanToFrom(sql, t, fetchOptions));
+                    sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
+                    break;
+                case INSERT:
+                    sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
+                    sql.append(bean.properties.values().stream()
+                            .filter(p -> !p.isCollectionOrMap())
+                            .map(p -> p.columnName)
+                            .collect(Collectors.joining(", ")));
+                    sql.append(")\n");
+                    sql.append("VALUES (\n");
+                    sql.append(bean.properties.values().stream()
+                            .filter(p -> !p.isCollectionOrMap())
+                            .map(p -> buildSqlParameter(bean, p))
+                            .collect(Collectors.joining(",\n")));
+                    sql.append("\n)\n");
+                    break;
+                case UPDATE:
+                    sql.append("\nUPDATE ").append(bean.getTableRef()).append(" AS t0 SET\n");
+                    sql.append(bean.properties.values().stream()
+                            .filter(p -> !p.isCollectionOrMap())
+                            .map(p -> p.columnName + " = " + buildSqlParameter(bean, p))
+                            .collect(Collectors.joining(",\n")))
                             .append("\n");
+                    break;
+                case DELETE:
+                    sql.append("\nDELETE FROM ").append(bean.getTableRef()).append(" AS t0\n");
+            }
 
-                    domElement.appendChild(doc.createTextNode(ssql.toString()));
-                }
-                break;
-            default: //LIST
-                /*boolean limitedList = filters.stream().anyMatch(f -> f.option == DDataFilterOption.LIMIT);
-                if (limitedList)
-                    sql.insert(0, "\nSELECT * FROM (");*/
-
-                if (filters != null && filters.size() > 0)
-                    addFiltersToSql(domElement, sql, bean, method, mappedTables, filters);
-                else {
-                    addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
+            switch (method.methodType) {
+                case INSERT:
                     domElement.appendChild(doc.createTextNode(sql.toString()));
-                }
-                /*if (limitedList) {
-                    StringBuilder limitSql = new StringBuilder();
-                    filters.stream().filter(f -> f.option == DDataFilterOption.LIMIT).findAny()
-                            .ifPresent(f -> limitSql.append("\n) LIMIT #{").append(f.parameter).append("}"));
-                    filters.stream().filter(f -> f.option == DDataFilterOption.START).findAny()
-                            .ifPresent(f -> limitSql.append(" OFFSET #{").append(f.parameter).append("}"));
-                    limitSql.append("\n");
-                    domElement.appendChild(doc.createTextNode(limitSql.toString()));
-                }*/
+                    break;
+                case GET:
+                case UPDATE:
+                case DELETE:
+                    if (filters != null && filters.size() > 0) {
+                        if (defaultGet || method == repository.defaultGetMethod) {
+                            buildSelect4DefaultGet(domElement, sql);
+                            domElement.appendChild(doc.createTextNode("\nWHERE " +
+                                    filters.stream()
+                                            .filter(f -> f.property != null)
+                                            .map(f -> f.property.columnName + " = " + buildSqlParameter(bean, f.property))
+                                            .collect(Collectors.joining(" AND ")) +
+                                    "\n"));
+                        } else
+                            addFiltersToSql(domElement, sql, bean, method, mappedTables, filters);
+                    } else {
+                        addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
+                        StringBuilder ssql;
+                        if (defaultGet || method == repository.defaultGetMethod) {
+                            buildSelect4DefaultGet(domElement, sql);
+                            ssql = new StringBuilder("\n");
+                        } else ssql = sql;
+
+                        ssql.append("WHERE ");
+                        ssql.append(bean.properties.values().stream()
+                                .filter(p -> p.isId)
+                                .map(p -> "t0." + p.getColumnRef() + " = " + buildSqlParameter(bean, p))
+                                .collect(Collectors.joining(" AND ")))
+                                .append("\n");
+
+                        domElement.appendChild(doc.createTextNode(ssql.toString()));
+                    }
+                    break;
+                default: //LIST
+                    if (filters != null && filters.size() > 0)
+                        addFiltersToSql(domElement, sql, bean, method, mappedTables, filters);
+                    else {
+                        addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
+                        domElement.appendChild(doc.createTextNode(sql.toString()));
+                    }
+            }
         }
     }
 
@@ -458,7 +464,7 @@ class DDataMapBuilder {
         HashSet<MappedTable> joins = new HashSet<>();
         joins.addAll(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()));
 
-        HashMap<String, org.w3c.dom.Element> whereExists = new HashMap<>();
+        HashMap<String, IfExists> whereExists = new HashMap<>();
         org.w3c.dom.Element e;
         for (FilterOption filter : filters)
             if (filter.option != null && filter.property != null) {
@@ -520,9 +526,9 @@ class DDataMapBuilder {
 
                 if (e != null)
                     if (currentJoin != null && !currentJoin.useInFieldsList) {
-                        org.w3c.dom.Element existsElt = whereExists.get(currentJoin.mappedBean.getTableRef());
-                        if (existsElt == null) {
-                            existsElt = doc.createElement("trim");
+                        IfExists ifExists = whereExists.get(currentJoin.mappedBean.getTableRef());
+                        if (ifExists == null) {
+                            org.w3c.dom.Element existsElt = doc.createElement("trim");
                             existsElt.setAttribute("prefix", "AND EXISTS (SELECT * FROM " +
                                     currentJoin.mappedBean.getTableRef() + " AS t" + tIdx + " WHERE ");
                             existsElt.setAttribute("prefixOverrides", "AND ");
@@ -534,14 +540,23 @@ class DDataMapBuilder {
                                     "." + joinMap.property.getColumnRef() +
                                     " = t" + currentJoin.tableIndex +
                                     "." + joinMap.mappedProperty.getColumnRef() + "\n"));
-                            whereExists.put(currentJoin.mappedBean.getTableRef(), existsElt);
-                            where.add(existsElt);
+                            ifExists = new IfExists(existsElt, filter.parameter);
+                            whereExists.put(currentJoin.mappedBean.getTableRef(), ifExists);
+                        } else {
+                            ifExists.parameters.add(filter.parameter);
+                            ifExists.element.appendChild(e);
                         }
-                        existsElt.appendChild(e);
                     } else
                         where.add(e);
             }
 
+        whereExists.values().forEach(ex -> {
+            org.w3c.dom.Element elt = doc.createElement("if");
+            elt.setAttribute("test",
+                    ex.parameters.stream().map(p -> p + " != null").collect(Collectors.joining(" || ")));
+            elt.appendChild(ex.element);
+            where.add(elt);
+        });
         addJoins(joins, sql);
 
         if (method.methodType == DDataMethodBuilder.MType.SELECT) {
@@ -576,7 +591,7 @@ class DDataMapBuilder {
     private void addJoins(Collection<MappedTable> joins, StringBuilder sql) {
         joins.stream()
                 .filter(t -> t.useInFieldsList)
-                .sorted((t1, t2) -> t1.tableIndex < t2.tableIndex ? -1 : 1)
+                .sorted(Comparator.comparingInt(t -> t.tableIndex))
                 .forEach(join -> {
                     Mapping joinMap = mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
                     sql.append("LEFT JOIN ")
@@ -795,7 +810,7 @@ class DDataMapBuilder {
         select.setAttribute("id", "delete");
 
         select.setAttribute("parameterType", bean.keyType);
-        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.DELETE, environment);
+        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.DELETE);
         buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, false);
     }
 
@@ -807,7 +822,7 @@ class DDataMapBuilder {
         select.setAttribute("id", "update");
 
         select.setAttribute("parameterType", bean.interfaceType.toString());
-        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.UPDATE, environment);
+        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.UPDATE);
         buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, false);
     }
 
@@ -819,7 +834,7 @@ class DDataMapBuilder {
         select.setAttribute("id", "insert");
 
         select.setAttribute("parameterType", bean.interfaceType.toString());
-        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.INSERT, environment);
+        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.INSERT);
         buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, false);
     }
 
@@ -844,7 +859,7 @@ class DDataMapBuilder {
         select.setAttribute("resultMap", "get_ResultMap");
 
         select.setAttribute("parameterType", bean.keyType);
-        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.GET, environment);
+        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.GET);
         buildSql(repository, method, bean, fetchOptions, mappedTables, select, null, true);
     }
 
@@ -917,9 +932,8 @@ class DDataMapBuilder {
 
     private class FetchOptions {
         final DDataFetchType fetchType;
-        final String sqlFrom;
+        final String sqlSelect;
         final String resultMap;
-        final String alias;
         final List<DataBeanPropertyBuilder> ignore;
         final int eagerTrunkLevel;
 
@@ -957,20 +971,14 @@ class DDataMapBuilder {
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
 
-            sqlFrom = fetchProps.keySet().stream()
-                    .filter(k -> "from".equals(k.getSimpleName().toString()))
+            sqlSelect = fetchProps.keySet().stream()
+                    .filter(k -> "select".equals(k.getSimpleName().toString()))
                     .findAny()
                     .map(k -> fetchProps.get(k).getValue().toString())
                     .orElse("");
 
             resultMap = fetchProps.keySet().stream()
                     .filter(k -> "resultMap".equals(k.getSimpleName().toString()))
-                    .findAny()
-                    .map(k -> fetchProps.get(k).getValue().toString())
-                    .orElse("");
-
-            alias = fetchProps.keySet().stream()
-                    .filter(k -> "alias".equals(k.getSimpleName().toString()))
                     .findAny()
                     .map(k -> fetchProps.get(k).getValue().toString())
                     .orElse("");
@@ -984,9 +992,8 @@ class DDataMapBuilder {
 
         FetchOptions(int trunkLevel) {
             fetchType = DDataFetchType.COLLECTIONS_ARE_LAZY;
-            sqlFrom = "";
+            sqlSelect = "";
             resultMap = "";
-            alias = "";
             ignore = Collections.emptyList();
             eagerTrunkLevel = trunkLevel;
         }
@@ -1033,6 +1040,16 @@ class DDataMapBuilder {
 
         boolean useInFieldsList() {
             return useInFieldsList;
+        }
+    }
+
+    private class IfExists {
+        ArrayList<String> parameters = new ArrayList<>();
+        org.w3c.dom.Element element;
+
+        IfExists(org.w3c.dom.Element element, String parameter) {
+            this.element = element;
+            this.parameters.add(parameter);
         }
     }
 }

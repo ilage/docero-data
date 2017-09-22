@@ -1,7 +1,6 @@
 package org.docero.data.processor;
 
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
 import javax.lang.model.element.VariableElement;
@@ -23,8 +22,7 @@ class DDataMethodBuilder {
 
     private boolean defaultMethod;
 
-    DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement,
-                       ProcessingEnvironment environment) {
+    DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement) {
         this.repositoryBuilder = repositoryBuilder;
         returnType = methodElement.getReturnType();
         methodName = methodElement.getSimpleName().toString();
@@ -47,7 +45,7 @@ class DDataMethodBuilder {
         }
     }
 
-    DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, DDataMethodBuilder.MType methodType, ProcessingEnvironment environment) {
+    DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, DDataMethodBuilder.MType methodType) {
         this.repositoryBuilder = repositoryBuilder;
         returnType = repositoryBuilder.forInterfaceName;
         this.methodType = methodType;
@@ -72,7 +70,7 @@ class DDataMethodBuilder {
         }
     }
 
-    void build(JavaClassWriter cf, Map<String, DataBeanBuilder> beansByInterface) throws IOException {
+    void build(JavaClassWriter cf) throws IOException {
         cf.println("");
         cf.startBlock("public " + (returnType == null ? "void" : returnType) + " " + methodName + "(");
         int i = 0;
@@ -129,11 +127,11 @@ class DDataMethodBuilder {
         cf.endBlock("}");
     }
 
-    public void setDefault() {
+    void setDefault() {
         defaultMethod = true;
     }
 
-    public enum MType {SELECT, GET, INSERT, UPDATE, DELETE}
+    enum MType {SELECT, GET, INSERT, UPDATE, DELETE}
 
     static class DDataMethodParameter {
         final String name;

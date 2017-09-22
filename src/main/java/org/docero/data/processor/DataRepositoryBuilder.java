@@ -10,7 +10,7 @@ import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.*;
 
-public class DataRepositoryBuilder {
+class DataRepositoryBuilder {
     final String name;
     final TypeMirror forInterfaceName;
     final TypeMirror idClass;
@@ -29,7 +29,7 @@ public class DataRepositoryBuilder {
     final DDataMethodBuilder defaultDeleteMethod;
     final boolean hasInsert;
     final boolean hasUpdate;
-    final HashMap<String,org.w3c.dom.Element> lazyLoads = new HashMap<>();
+    final HashMap<String, org.w3c.dom.Element> lazyLoads = new HashMap<>();
 
     DataRepositoryBuilder(
             TypeElement repositoryElement,
@@ -74,13 +74,13 @@ public class DataRepositoryBuilder {
         for (Element element : repositoryElement.getEnclosedElements())
             if (element.getKind() == ElementKind.METHOD) {
                 if (element.getModifiers().contains(Modifier.ABSTRACT)) {
-                    methods.add(new DDataMethodBuilder(this, (ExecutableElement) element, environment));
+                    methods.add(new DDataMethodBuilder(this, (ExecutableElement) element));
                 }
             }
         defaultGetMethod = methods.stream().filter(m ->
                 "get".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
                 .findAny().orElse(null);
-        defaultGetMethod.setDefault();
+        if (defaultGetMethod != null) defaultGetMethod.setDefault();
         defaultDeleteMethod = methods.stream().filter(m ->
                 "delete".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
                 .findAny().orElse(null);
@@ -159,9 +159,7 @@ public class DataRepositoryBuilder {
             if (!hasUpdate) buildMethodUpdate(cf);
             if (defaultDeleteMethod == null) buildMethodDelete(cf);
 
-            for (DDataMethodBuilder method : methods) {
-                method.build(cf, beansByInterface);
-            }
+            for (DDataMethodBuilder method : methods) method.build(cf);
 
             cf.endBlock("}");
         }
@@ -229,23 +227,17 @@ public class DataRepositoryBuilder {
             cf.println("DDataFetchType value() default DDataFetchType.COLLECTIONS_ARE_LAZY;");
 
             cf.startBlock("/**");
-            cf.println("SQL query after FROM operator, can contains method parameter names (like <i>:parameterName</i>)");
+            cf.println("SQL query, can contains method parameter names (like <i>:parameterName</i>)");
             cf.println("<p>Can call stored procedure that returns table of DDataRepository data beans, or specified resultMap</p>");
-            cf.println("@return SQL query after FROM operator");
+            cf.println("@return SQL query");
             cf.endBlock("*/");
-            cf.println("String from() default \"\";");
+            cf.println("String select() default \"\";");
 
             cf.startBlock("/**");
-            cf.println("Used with 'from' parameter");
+            cf.println("Used with 'select' parameter");
             cf.println("@return Custom resultMap name used for mapping results");
             cf.endBlock("*/");
             cf.println("String resultMap() default \"\";");
-
-            cf.startBlock("/**");
-            cf.println("Used with 'from' parameter");
-            cf.println("@return Table alias used in FROM operator, default empty");
-            cf.endBlock("*/");
-            cf.println("String alias() default \"\";");
 
             cf.startBlock("/**");
             cf.println("Fields what being not loaded at all, nor EAGER, nor LAZY");

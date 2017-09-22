@@ -10,7 +10,7 @@ import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.HashMap;
 
-public class DataBeanPropertyBuilder {
+class DataBeanPropertyBuilder {
     final String name;
     final String enumName;
     final TypeMirror type;
@@ -171,15 +171,15 @@ public class DataBeanPropertyBuilder {
         return isCollection;
     }
 
-    public boolean isCollectionOrMap() {
+    boolean isCollectionOrMap() {
         return isCollection || isMap;
     }
 
-    public boolean isSimple() {
+    boolean isSimple() {
         return !(isCollection || isMap);
     }
 
-    public String getColumnRef() {
+    String getColumnRef() {
         return "\""+columnName+"\"";
     }
 }
