@@ -47,9 +47,12 @@ class DataBeanPropertyBuilder {
         }
         nullable = ddProperty == null || ddProperty.nullable();
         length = ddProperty == null ? 0 : ddProperty.length();
-        if (ddProperty != null && ddProperty.value().length() > 0) {
-            columnName = ddProperty.value();
+        if (ddProperty != null && ddProperty.value().length == 1) {
+            columnName = ddProperty.value()[0];
             isId = ddProperty.id();
+        } else if (ddProperty != null && ddProperty.value().length > 1) {
+            columnName = null;
+            isId = false;
         } else {
             StringBuilder nameBuilder = new StringBuilder();
             for (char c : name.toCharArray())
@@ -153,7 +156,7 @@ class DataBeanPropertyBuilder {
                     this.columnName + "\",\"" +
                     this.name + "\"," +
                     dataBean.interfaceType + ".class),");
-        } else {// if (!isCollection) {
+        } else if (columnName != null) {// if (!isCollection) {
             cf.println("/** Value of column " + this.columnName + "*/");
             cf.println(this.enumName + "(\"" +
                     this.columnName + "\",\"" +
@@ -180,6 +183,6 @@ class DataBeanPropertyBuilder {
     }
 
     String getColumnRef() {
-        return "\""+columnName+"\"";
+        return columnName == null ? null : "\"" + columnName + "\"";
     }
 }

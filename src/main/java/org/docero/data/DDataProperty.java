@@ -12,7 +12,7 @@ public @interface DDataProperty {
      * Mapped column name, default (empty) lowercase property name.
      * @return
      */
-    String value() default "";
+    String[] value() default {};
 
     /**
      * Is id column, bean can contains no one or number of id properties,

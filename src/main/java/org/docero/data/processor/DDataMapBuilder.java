@@ -746,7 +746,7 @@ class DDataMapBuilder {
                 });
 
         properties.stream()
-                .filter(p -> !(p.isId || p.isCollectionOrMap()))
+                .filter(p -> !(p.isId || p.isCollectionOrMap() || p.columnName==null))
                 .filter(fetchOptions::filterIgnored)
                 .forEach(p -> {
                     org.w3c.dom.Element id = (org.w3c.dom.Element)

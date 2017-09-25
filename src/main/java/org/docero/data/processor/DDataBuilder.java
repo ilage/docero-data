@@ -43,13 +43,16 @@ class DDataBuilder {
         repositories.add(builder);
     }
 
-    void generateClasses() throws IOException {
+    void generateBeans() throws IOException {
         for (DataBeanBuilder bean : beansByInterface.values()) {
             bean.build(environment, beansByInterface);
         }
         for (DataRepositoryBuilder repositoryBuilder : repositories) {
             repositoryBuilder.build(environment, spring);
         }
+    }
+
+    void generateDdata() throws IOException {
         for (DataBeanBuilder bean : beansByInterface.values()) {
             if (!repositoriesByBean.containsKey(bean.interfaceType.toString())) {
                 DataRepositoryBuilder r = DataRepositoryBuilder.build(this, bean);

@@ -33,6 +33,8 @@ public class DDataProcessor extends AbstractProcessor {
     private TypeMirror mapType;
     private DDataBuilder builder;
     private boolean mapBuilded = false;
+    private boolean beansGenerated = false;
+    private boolean ddataClassesGenerated = false;
 
     @Override
     public void init(ProcessingEnvironment environment) {
@@ -49,7 +51,7 @@ public class DDataProcessor extends AbstractProcessor {
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         Throwable error = null;
-        if (!mapBuilded)
+        if (!mapBuilded && ddataClassesGenerated)
             try {
                 if (new DDataMapBuilder(builder, this.processingEnv).build()) {
                     mapBuilded = true;
@@ -60,27 +62,31 @@ public class DDataProcessor extends AbstractProcessor {
                 error = e;
             }
 
-        if (annotations.size() == 0) {
-            return false;
-        }
+        if(!ddataClassesGenerated) {
+            try {
+                Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
+                for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType, mapType);
 
-        try {
-            Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
-            for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType, mapType);
+                Set<? extends Element> repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
+                for (Element repositoryElement : repositories) builder.checkRepository(repositoryElement);
 
-            Set<? extends Element> repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
-            for (Element repositoryElement : repositories) builder.checkRepository(repositoryElement);
+            } catch (Exception e) {
+                e.printStackTrace();
+                error = e;
+            }
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            error = e;
-        }
-
-        try {
-            builder.generateClasses();
-        } catch (Exception e) {
-            e.printStackTrace();
-            error = e;
+            try {
+                if (beansGenerated) {
+                    builder.generateDdata();
+                    ddataClassesGenerated = true;
+                } else {
+                    builder.generateBeans();
+                    beansGenerated = true;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                error = e;
+            }
         }
 
         if (error != null) {

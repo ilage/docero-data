@@ -89,10 +89,7 @@ class DataRepositoryBuilder {
 
     private DataRepositoryBuilder(DDataBuilder rootBuilder, DataBeanBuilder bean) {
         this.forInterfaceName = bean.interfaceType;
-        Optional<DataBeanPropertyBuilder> idOpt = bean.properties.values().stream().filter(p -> p.isId).findAny();
-        this.idClass = idOpt.isPresent() ? (!idOpt.get().type.getKind().isPrimitive() ? idOpt.get().type :
-                rootBuilder.environment.getTypeUtils().boxedClass((PrimitiveType) idOpt.get().type).asType()) :
-                rootBuilder.environment.getElementUtils().getTypeElement("java.lang.Void").asType();
+        this.idClass = rootBuilder.environment.getElementUtils().getTypeElement(bean.keyType).asType();
         this.actualTimeClass = null;
         this.daoClassName = bean.interfaceType + "_Dao_";
         this.restClassName = null;
