@@ -100,10 +100,16 @@ class DDataMethodBuilder {
                 cf.print("selectOne");
             }
         } else {
-            //TODO if(methodType)
-            if (methodName.contains("insert")) cf.print("insert");
-            else if (methodName.contains("update")) cf.print("update");
-            else cf.print("delete");
+            switch (methodType) {
+                case INSERT:
+                    cf.print("insert");
+                    break;
+                case UPDATE:
+                    cf.print("update");
+                    break;
+                default:
+                    cf.print("delete");
+            }
         }
         cf.print("(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                 defaultMethod ? "" : "_" + methodIndex) + "\"");

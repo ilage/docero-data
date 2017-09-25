@@ -22,7 +22,7 @@ class DataRepositoryBuilder {
     final boolean isCreatedByInterface;
     final boolean isHistorical;
     final ArrayList<DDataMethodBuilder> methods = new ArrayList<>();
-    final Map<String, DataBeanBuilder> beansByInterface;
+    final DDataBuilder rootBuilder;
     final String mappingClassName;
 
     final DDataMethodBuilder defaultGetMethod;
@@ -32,16 +32,15 @@ class DataRepositoryBuilder {
     final HashMap<String, org.w3c.dom.Element> lazyLoads = new HashMap<>();
 
     DataRepositoryBuilder(
-            TypeElement repositoryElement,
-            ProcessingEnvironment environment,
-            Map<String, DataBeanBuilder> beansByInterface
+            DDataBuilder rootBuilder,
+            TypeElement repositoryElement
     ) {
         DDataRep ddRep = repositoryElement.getAnnotation(DDataRep.class);
         repositoryInterface = repositoryElement.asType();
-        this.mappingClassName = environment.getTypeUtils().erasure(repositoryInterface).toString();
+        this.mappingClassName = rootBuilder.environment.getTypeUtils().erasure(repositoryInterface).toString();
         if (ddRep.value().length() > 0) name = ddRep.value();
         else name = mappingClassName.substring(mappingClassName.lastIndexOf('.'));
-        this.beansByInterface = beansByInterface;
+        this.rootBuilder = rootBuilder;
 
         boolean isHistorical = false;
         DeclaredType interfaceType = null;
@@ -60,7 +59,7 @@ class DataRepositoryBuilder {
             forInterfaceName = gens.get(0);
             idClass = gens.get(1);
             actualTimeClass = !isHistorical ? null : gens.get(2);
-            beanImplementation = beansByInterface.get(forInterfaceName.toString())
+            beanImplementation = rootBuilder.beansByInterface.get(forInterfaceName.toString())
                     .getImplementationName();
         } else {
             forInterfaceName = null;
@@ -88,25 +87,25 @@ class DataRepositoryBuilder {
         hasUpdate = methods.stream().anyMatch(m -> "update".equals(m.methodName));
     }
 
-    private DataRepositoryBuilder(DataBeanBuilder bean, ProcessingEnvironment environment, Map<String, DataBeanBuilder> beansByInterface) {
+    private DataRepositoryBuilder(DDataBuilder rootBuilder, DataBeanBuilder bean) {
         this.forInterfaceName = bean.interfaceType;
         Optional<DataBeanPropertyBuilder> idOpt = bean.properties.values().stream().filter(p -> p.isId).findAny();
         this.idClass = idOpt.isPresent() ? (!idOpt.get().type.getKind().isPrimitive() ? idOpt.get().type :
-                environment.getTypeUtils().boxedClass((PrimitiveType) idOpt.get().type).asType()) :
-                environment.getElementUtils().getTypeElement("java.lang.Void").asType();
+                rootBuilder.environment.getTypeUtils().boxedClass((PrimitiveType) idOpt.get().type).asType()) :
+                rootBuilder.environment.getElementUtils().getTypeElement("java.lang.Void").asType();
         this.actualTimeClass = null;
         this.daoClassName = bean.interfaceType + "_Dao_";
         this.restClassName = null;
-        this.repositoryInterface = environment.getTypeUtils().getDeclaredType(
-                environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
+        this.repositoryInterface = rootBuilder.environment.getTypeUtils().getDeclaredType(
+                rootBuilder.environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
                 forInterfaceName, idClass);
-        this.mappingClassName = environment.getTypeUtils().erasure(forInterfaceName).toString();
+        this.mappingClassName = rootBuilder.environment.getTypeUtils().erasure(forInterfaceName).toString();
         this.name = mappingClassName.substring(mappingClassName.lastIndexOf('.'));
         this.beanImplementation = bean.getImplementationName();
         this.isCreatedByInterface = true;
         this.isHistorical = false;
         //final ArrayList<DDataMethodBuilder> methods = new ArrayList<>();
-        this.beansByInterface = beansByInterface;
+        this.rootBuilder = rootBuilder;
         defaultGetMethod = null;
         defaultDeleteMethod = null;
         hasUpdate = false;
@@ -181,11 +180,11 @@ class DataRepositoryBuilder {
             cf.println(forInterfaceName + "_ value() default " +
                     forInterfaceName + "_.NONE_;");
             cf.println("DDataFilterOption option() default DDataFilterOption.EQUALS;");
-            DataBeanBuilder bean = beansByInterface.get(forInterfaceName.toString());
+            DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
             for (DataBeanPropertyBuilder property : bean.properties.values()) {
                 TypeMirror typeErasure = environment.getTypeUtils().erasure(property.isCollection() ?
                         ((DeclaredType) property.type).getTypeArguments().get(0) : property.type);
-                DataBeanBuilder manType = beansByInterface.get(typeErasure.toString());
+                DataBeanBuilder manType = rootBuilder.beansByInterface.get(typeErasure.toString());
                 if (manType != null) {
                     cf.println(manType.interfaceType + "_ " +
                             property.name + "() default " +
@@ -255,13 +254,11 @@ class DataRepositoryBuilder {
     }
 
     static DataRepositoryBuilder build(
-            DataBeanBuilder bean,
-            ProcessingEnvironment environment,
-            Map<String, DataBeanBuilder> beansByInterface,
-            boolean spring
+            DDataBuilder rootBuilder,
+            DataBeanBuilder bean
     ) throws IOException {
-        DataRepositoryBuilder builder = new DataRepositoryBuilder(bean, environment, beansByInterface);
-        builder.build(environment,spring);
+        DataRepositoryBuilder builder = new DataRepositoryBuilder(rootBuilder, bean);
+        builder.build(rootBuilder.environment, rootBuilder.spring);
         return builder;
     }
 
