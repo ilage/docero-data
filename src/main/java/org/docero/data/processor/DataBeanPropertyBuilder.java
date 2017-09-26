@@ -47,12 +47,9 @@ class DataBeanPropertyBuilder {
         }
         nullable = ddProperty == null || ddProperty.nullable();
         length = ddProperty == null ? 0 : ddProperty.length();
-        if (ddProperty != null && ddProperty.value().length == 1) {
-            columnName = ddProperty.value()[0];
+        if (ddProperty != null && ddProperty.value().length() > 0) {
+            columnName = ddProperty.value();
             isId = ddProperty.id();
-        } else if (ddProperty != null && ddProperty.value().length > 1) {
-            columnName = null;
-            isId = false;
         } else {
             StringBuilder nameBuilder = new StringBuilder();
             for (char c : name.toCharArray())

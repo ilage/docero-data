@@ -24,6 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 class DDataMapBuilder {
     private final DDataBuilder builder;
@@ -128,7 +129,7 @@ class DDataMapBuilder {
                     DeclaredType getType = environment.getTypeUtils().getDeclaredType(
                             environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
                             repository.forInterfaceName, repository.idClass);
-                    ;
+
                     cf.println(getType + " r = DData.getRepository(" + repository.forInterfaceName + ".class);");
                     cf.println("if (r != null)\n                " +
                             "((org.mybatis.spring.support.SqlSessionDaoSupport) r).setSqlSessionFactory(sqlSessionFactory);");
@@ -157,46 +158,60 @@ class DDataMapBuilder {
     }
 
     class Mapping {
-        final DataBeanPropertyBuilder property;
-        final DataBeanPropertyBuilder mappedProperty;
+        final List<DataBeanPropertyBuilder> properties = new ArrayList<>();
+        final List<DataBeanPropertyBuilder> mappedProperties = new ArrayList<>();
         final boolean manyToOne;
 
         Mapping(AnnotationMirror annotationMirror, DataBeanBuilder bean) {
             Map<? extends ExecutableElement, ? extends AnnotationValue> map =
                     environment.getElementUtils().getElementValuesWithDefaults(annotationMirror);
 
-            DataBeanPropertyBuilder localField = null;
-            DataBeanPropertyBuilder mappedField = null;
             AtomicBoolean hasCollection = new AtomicBoolean(false);
             for (ExecutableElement executableElement : map.keySet()) {
                 String mapKey = executableElement.getSimpleName().toString();
-                String enumName;
                 if ("value".equals(mapKey)) {
-                    enumName = map.get(executableElement).getValue().toString();
-                    localField = bean.properties.values().stream()
-                            .filter(p -> p.enumName.equals(enumName)).findAny().orElse(null);
+                    //noinspection unchecked
+                    ((List) map.get(executableElement).getValue()).stream()
+                            .map(Object::toString)
+                            .forEach(enumName -> bean.properties.values().stream()
+                                    .filter(p -> p.enumName.equals(enumName))
+                                    .findAny()
+                                    .ifPresent(properties::add));
                 } else {
-                    Object mapValue = map.get(executableElement).getValue();
-                    if (mapValue instanceof List) {
-                        if (((List) mapValue).size() > 0) {
-                            mappedField = mappedField(mapKey,
-                                    ((List) mapValue).get(0).toString(), bean, hasCollection);
-                        }
-                    } else {
-                        mappedField = mappedField(mapKey, mapValue.toString(), bean, hasCollection);
-                    }
+                    //noinspection unchecked
+                    ((List) map.get(executableElement).getValue()).stream()
+                            .map(Object::toString)
+                            .forEach(mapValue -> mappedProperties.add(mappedField(mapKey,
+                                    ((String) mapValue), bean, hasCollection)));
                 }
             }
-            property = localField;
-            mappedProperty = mappedField;
             manyToOne = hasCollection.get();
         }
 
         Mapping(DataBeanPropertyBuilder property, DataBeanBuilder mappedBean) {
-            this.property = property;
+            properties.add(property);
             manyToOne = false;
-            mappedProperty = mappedBean.properties.values().stream()
-                    .filter(p -> p.isId).findFirst().orElse(null);
+            mappedBean.properties.values().stream()
+                    .filter(p -> p.isId).forEach(mappedProperties::add);
+        }
+
+        private Mapping(DataBeanPropertyBuilder property, DataBeanPropertyBuilder mappedBeanProperty, boolean manyToOne) {
+            properties.add(property);
+            mappedProperties.add(mappedBeanProperty);
+            this.manyToOne = manyToOne;
+        }
+
+        Stream<Mapping> stream() {
+            List<Mapping> l = new ArrayList<>();
+            if (properties.size() > 0 && mappedProperties.size() > 0)
+                for (int i = 0; i < Math.max(properties.size(), mappedProperties.size()); i++) {
+                    l.add(new Mapping(
+                            properties.get(i < properties.size() ? i : 0),
+                            mappedProperties.get(i < mappedProperties.size() ? i : 0),
+                            manyToOne
+                    ));
+                }
+            return l.stream();
         }
     }
 
@@ -340,7 +355,7 @@ class DDataMapBuilder {
                         select.setAttribute("resultMap", methodName + "_ResultMap");
                     else {
                         select.setAttribute("resultMap", fetchOptions.resultMap);
-                        userMappingFiles.add(fetchOptions.resultMap.substring(0,fetchOptions.resultMap.lastIndexOf('.')));
+                        userMappingFiles.add(fetchOptions.resultMap.substring(0, fetchOptions.resultMap.lastIndexOf('.')));
                     }
                     buildSql(repository, method, bean, fetchOptions, mappedTables, select, filters, false);
                     break;
@@ -404,7 +419,7 @@ class DDataMapBuilder {
                     sql.append(bean.properties.values().stream()
                             .filter(p -> !p.isCollectionOrMap())
                             .filter(fetchOptions::filterIgnored)
-                            .map(p -> "  t0." + p.getColumnRef() + " AS " + p.columnName)
+                            .map(p -> "  t0." + p.getColumnRef() + " AS " + p.getColumnRef())
                             .collect(Collectors.joining(",\n")));
                     if (fetchOptions.fetchType != DDataFetchType.NO)
                         mappedTables.stream().filter(MappedTable::useInFieldsList).forEach(t ->
@@ -415,7 +430,7 @@ class DDataMapBuilder {
                     sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
                     sql.append(bean.properties.values().stream()
                             .filter(p -> !p.isCollectionOrMap())
-                            .map(p -> p.columnName)
+                            .map(DataBeanPropertyBuilder::getColumnRef)
                             .collect(Collectors.joining(", ")));
                     sql.append(")\n");
                     sql.append("VALUES (\n");
@@ -429,7 +444,7 @@ class DDataMapBuilder {
                     sql.append("\nUPDATE ").append(bean.getTableRef()).append(" AS t0 SET\n");
                     sql.append(bean.properties.values().stream()
                             .filter(p -> !p.isCollectionOrMap())
-                            .map(p -> p.columnName + " = " + buildSqlParameter(bean, p))
+                            .map(p -> p.getColumnRef() + " = " + buildSqlParameter(bean, p))
                             .collect(Collectors.joining(",\n")))
                             .append("\n");
                     break;
@@ -450,7 +465,7 @@ class DDataMapBuilder {
                             domElement.appendChild(doc.createTextNode("\nWHERE " +
                                     filters.stream()
                                             .filter(f -> f.property != null)
-                                            .map(f -> f.property.columnName + " = " + buildSqlParameter(bean, f.property))
+                                            .map(f -> f.property.getColumnRef() + " = " + buildSqlParameter(bean, f.property))
                                             .collect(Collectors.joining(" AND ")) +
                                     "\n"));
                         } else
@@ -584,11 +599,14 @@ class DDataMapBuilder {
                             existsElt.setAttribute("suffix", ")\n");
                             Mapping joinMap = mappings.get(currentJoin.property.dataBean.interfaceType.toString() +
                                     "." + currentJoin.property.name);
-                            existsElt.appendChild(doc.createTextNode("\nt" +
-                                    currentJoin.mappedFromTableIndex +
-                                    "." + joinMap.property.getColumnRef() +
-                                    " = t" + currentJoin.tableIndex +
-                                    "." + joinMap.mappedProperty.getColumnRef() + "\n"));
+                            existsElt.appendChild(doc.createTextNode(
+                                    joinMap.stream().map(m -> "\nt" +
+                                            currentJoin.mappedFromTableIndex +
+                                            "." + m.properties.get(0).getColumnRef() +
+                                            " = t" + currentJoin.tableIndex +
+                                            "." + m.mappedProperties.get(0).getColumnRef() + "\n")
+                                            .collect(Collectors.joining(" AND "))
+                            ));
                             ifExists = new IfExists(existsElt, filter.parameter);
                             whereExists.put(currentJoin.mappedBean.getTableRef(), ifExists);
                         } else {
@@ -646,10 +664,14 @@ class DDataMapBuilder {
                     sql.append("LEFT JOIN ")
                             .append(join.mappedBean.getTableRef())
                             .append(" AS t").append(join.tableIndex)
-                            .append(" ON (t").append(join.mappedFromTableIndex)
-                            .append(".").append(joinMap.property.getColumnRef())
-                            .append(" = t").append(join.tableIndex)
-                            .append(".").append(joinMap.mappedProperty.getColumnRef()).append(")\n");
+                            .append(" ON (")
+                            .append(joinMap.stream().map(m ->
+                                    "t" + join.mappedFromTableIndex
+                                            + "." + m.properties.get(0).getColumnRef()
+                                            + " = t" + join.tableIndex
+                                            + "." + m.mappedProperties.get(0).getColumnRef()
+                            ).collect(Collectors.joining(" AND ")))
+                            .append(")\n");
                 });
     }
 
@@ -661,10 +683,10 @@ class DDataMapBuilder {
     private String buildSqlParameter(DataBeanBuilder dataBean, DataBeanPropertyBuilder beanProperty) {
         DDataMapBuilder.Mapping mapping = mappings.get(dataBean.interfaceType.toString() + "." + beanProperty.name);
         if (mapping != null) {
-            return "#{" + beanProperty.name + "_foreignKey, javaType=" + (mapping.mappedProperty.type.getKind().isPrimitive() ?
-                    environment.getTypeUtils().boxedClass((PrimitiveType) mapping.mappedProperty.type) :
-                    mapping.mappedProperty.type
-            ) + jdbcTypeFor(mapping.mappedProperty.type, environment) + "}";
+            TypeMirror mappedType = mapping.mappedProperties.get(0).type;
+            return "#{" + beanProperty.name + "_foreignKey, javaType=" + (mappedType.getKind().isPrimitive() ?
+                    environment.getTypeUtils().boxedClass((PrimitiveType) mappedType) : mappedType
+            ) + jdbcTypeFor(mappedType, environment) + "}";
         } else
             return "#{" + beanProperty.name + ", javaType=" + (beanProperty.type.getKind().isPrimitive() ?
                     environment.getTypeUtils().boxedClass((PrimitiveType) beanProperty.type) :
@@ -674,8 +696,10 @@ class DDataMapBuilder {
 
     private String jdbcTypeFor(TypeMirror type, ProcessingEnvironment environment) {
         String s = type.toString();
-        if (environment.getTypeUtils().isSubtype(type, temporalType) ||
-                environment.getTypeUtils().isSubtype(type, oldDateType)
+        if (//not work environment.getTypeUtils().isSubtype(type, temporalType) ||
+                environment.getTypeUtils().directSupertypes(type).stream()
+                        .anyMatch(c -> c.toString().equals(temporalType.toString())) ||
+                        environment.getTypeUtils().isSubtype(type, oldDateType)
                 ) return ", jdbcType=TIMESTAMP";
 
         if (String.class.getCanonicalName().equals(s))
@@ -746,7 +770,7 @@ class DDataMapBuilder {
                 });
 
         properties.stream()
-                .filter(p -> !(p.isId || p.isCollectionOrMap() || p.columnName==null))
+                .filter(p -> !(p.isId || p.isCollectionOrMap() || p.columnName == null))
                 .filter(fetchOptions::filterIgnored)
                 .forEach(p -> {
                     org.w3c.dom.Element id = (org.w3c.dom.Element)
@@ -782,20 +806,22 @@ class DDataMapBuilder {
         }
 
         if (lazy || trunkLevel == -2) {
-            TypeMirror propType = mapping.manyToOne ?
-                    mapping.property.type : mapping.mappedProperty.type;
-            managed.setAttribute("column", //mapping.manyToOne ? mapping.mappedProperty.columnName :
-                    mapping.property.columnName);
-            managed.setAttribute("foreignColumn", //mapping.manyToOne ? mapping.property.columnName :
-                    mapping.mappedProperty.columnName);
+            managed.setAttribute("column", mapping.properties.stream()
+                    .map(p -> p.columnName)
+                    .collect(Collectors.joining(",")));
+            managed.setAttribute("foreignColumn", mapping.mappedProperties.stream()
+                    .map(p -> p.columnName)
+                    .collect(Collectors.joining(",")));
 
             managed.setAttribute("fetchType", "lazy");
-            String lazyLoadSelectId = "lazy_load_" + mapping.mappedProperty.dataBean.name +
-                    "_" + mapping.mappedProperty.columnName;
+
+            DataBeanBuilder mappedBean = mapping.mappedProperties.get(0).dataBean;
+            String lazyLoadSelectId = "lazy_load_" + mappedBean.name +
+                    "_" + mapping.mappedProperties.get(0).columnName;
             managed.setAttribute("select", lazyLoadSelectId);
             if (!repository.lazyLoads.containsKey(lazyLoadSelectId)) {
                 DataRepositoryBuilder beanRep =
-                        builder.repositoriesByBean.get(mapping.mappedProperty.dataBean.interfaceType.toString());
+                        builder.repositoriesByBean.get(mappedBean.interfaceType.toString());
                 org.w3c.dom.Element ll = doc.createElement("select");
                 ll.setAttribute("id", lazyLoadSelectId);
                 ll.setAttribute("resultMap", repository == beanRep ?
@@ -804,12 +830,17 @@ class DDataMapBuilder {
                         ll.appendChild(doc.createElement("include"));
                 il.setAttribute("refid", repository == beanRep ?
                         "get_select" : beanRep.mappingClassName + ".get_select");
-                ll.appendChild(doc.createTextNode("\nWHERE t0." +
-                        mapping.mappedProperty.getColumnRef() + " = " +
-                        //TODO really columnName ?
-                        "#{" + mapping.property.columnName + ", javaType=" + (propType.getKind().isPrimitive() ?
-                        environment.getTypeUtils().boxedClass((PrimitiveType) propType) : propType
-                ) + jdbcTypeFor(propType, environment) + "}" +
+                ll.appendChild(doc.createTextNode("\nWHERE " +
+                        mapping.stream().map(m -> {
+                            TypeMirror propType = m.manyToOne ?
+                                    m.properties.get(0).type : mapping.mappedProperties.get(0).type;
+                            return "t0." +
+                                    m.mappedProperties.get(0).getColumnRef() + " = " +
+                                    "#{" + m.properties.get(0).columnName +
+                                    ", javaType=" + (propType.getKind().isPrimitive() ?
+                                    environment.getTypeUtils().boxedClass((PrimitiveType) propType) : propType) +
+                                    jdbcTypeFor(propType, environment) + "}";
+                        }).collect(Collectors.joining(" AND ")) +
                         "\n"));
 
                 repository.lazyLoads.put(lazyLoadSelectId, ll);
@@ -870,7 +901,7 @@ class DDataMapBuilder {
                 mapperRoot.appendChild(doc.createElement("update"));
         select.setAttribute("id", "update");
 
-        select.setAttribute("parameterType", bean.interfaceType.toString());
+        select.setAttribute("parameterType", bean.getImplementationName());
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.UPDATE);
         buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, false);
     }
@@ -882,7 +913,7 @@ class DDataMapBuilder {
                 mapperRoot.appendChild(doc.createElement("insert"));
         select.setAttribute("id", "insert");
 
-        select.setAttribute("parameterType", bean.interfaceType.toString());
+        select.setAttribute("parameterType", bean.getImplementationName());
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.INSERT);
         buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, false);
     }
