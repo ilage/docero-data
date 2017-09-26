@@ -193,7 +193,7 @@ class DataBeanBuilder {
             cf.print(interfaceType + "_[] value()");
             Optional<DataBeanPropertyBuilder> opt = properties.values().stream().filter(DataBeanPropertyBuilder::isId).findAny();
             if (opt.isPresent()) {
-                cf.print(" default " + interfaceType + "_." + opt.get().enumName);
+                cf.print(" default {" + interfaceType + "_." + opt.get().enumName + "}");
             }
             cf.println(";");
 

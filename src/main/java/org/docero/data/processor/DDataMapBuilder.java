@@ -172,9 +172,12 @@ class DDataMapBuilder {
                 if ("value".equals(mapKey)) {
                     //noinspection unchecked
                     ((List) map.get(executableElement).getValue()).stream()
-                            .map(Object::toString)
+                            .map(o -> {
+                                String n = o.toString();
+                                return n.substring(n.lastIndexOf('.') + 1);
+                            })
                             .forEach(enumName -> bean.properties.values().stream()
-                                    .filter(p -> p.enumName.equals(enumName))
+                                    .filter(p -> enumName.equals(p.enumName))
                                     .findAny()
                                     .ifPresent(properties::add));
                 } else {
