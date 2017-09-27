@@ -25,7 +25,13 @@ public @interface DDataProperty {
      * Column contains version part of table composite key used in DDataVersionalBean
      * @return
      */
-    boolean versionData() default false;
+    boolean versionFrom() default false;
+
+    /**
+     * Column contains upper restriction of version part used in DDataVersionalBean
+     * @return
+     */
+    boolean versionTo() default false;
 
     /**
      * Is column may be NULL, default true.

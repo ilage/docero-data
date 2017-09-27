@@ -288,7 +288,7 @@ class DataRepositoryBuilder {
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
             cf.startBlock("public void update(" +
                     forInterfaceName + " bean) {");
-            cf.println(bean.properties.values().stream().filter(p -> p.isVersionData).findAny().map(p ->
+            cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                     "bean.set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
                             "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
                     .orElse("")
@@ -311,7 +311,7 @@ class DataRepositoryBuilder {
                 forInterfaceName + " bean) {");
         if (versionalType != null) {
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
-            cf.println(bean.properties.values().stream().filter(p -> p.isVersionData).findAny().map(p ->
+            cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                     "bean.set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
                             "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
                     .orElse("")

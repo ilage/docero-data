@@ -309,8 +309,8 @@ class DDataMapBuilder {
                 case INSERT:
                     domElement.appendChild(doc.createTextNode(sql.toString()));
                     break;
-                case GET:
                 case UPDATE:
+                case GET:
                 case DELETE:
                     if (filters != null && filters.size() > 0) {
                         if (defaultGet || method == repository.defaultGetMethod) {
@@ -332,12 +332,39 @@ class DDataMapBuilder {
                         } else ssql = sql;
 
                         ssql.append("WHERE ");
-                        ssql.append(bean.properties.values().stream()
-                                .filter(p -> p.isId)
-                                .map(p -> "t0." + p.getColumnRef() + " = " + buildSqlParameter(bean, p))
-                                .collect(Collectors.joining(" AND ")))
-                                .append("\n");
-
+                        if (repository.versionalType == null) {
+                            ssql.append(bean.properties.values().stream()
+                                    .filter(p -> p.isId)
+                                    .map(p -> "t0." + p.getColumnRef() + " = " + buildSqlParameter(bean, p))
+                                    .collect(Collectors.joining(" AND ")))
+                                    .append("\n");
+                        } else {
+                            ssql.append(bean.properties.values().stream()
+                                    .filter(p -> p.isId && !p.isVersionFrom)
+                                    .map(p -> "t0." + p.getColumnRef() + " = " + buildSqlParameter(bean, p))
+                                    .collect(Collectors.joining(" AND ")))
+                                    .append("\n");
+                            if (method.methodType == DDataMethodBuilder.MType.GET) {
+                                ssql.append(bean.properties.values().stream()
+                                        .filter(p -> p.isVersionFrom)
+                                        .findAny().map(p -> " AND t0." + p.getColumnRef() +
+                                                " <= " + buildSqlParameter(bean, p) +
+                                                bean.properties.values().stream()
+                                                        .filter(p1 -> p1.isVersionTo)
+                                                        .findAny().map(p1 -> "\n AND (t0." + p1.getColumnRef() +
+                                                        " > " + buildSqlParameter(bean, p) + " OR t0." + p1.getColumnRef() +
+                                                        " IS NULL)")
+                                                        .orElse("")
+                                        )
+                                        .orElse(""));
+                            } else if (method.methodType == DDataMethodBuilder.MType.UPDATE) {
+                                ssql.append(bean.properties.values().stream()
+                                        .filter(p -> p.isVersionFrom)
+                                        .findAny().map(p -> " AND t0." + p.getColumnRef() +
+                                                " = " + buildSqlParameter(bean, p))
+                                        .orElse(""));
+                            }
+                        }
                         domElement.appendChild(doc.createTextNode(ssql.toString()));
                     }
                     break;

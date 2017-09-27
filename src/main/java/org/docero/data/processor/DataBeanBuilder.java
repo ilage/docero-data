@@ -73,7 +73,7 @@ class DataBeanBuilder {
         } else {
             isKeyComposite = true;
             List<DataBeanPropertyBuilder> iids = properties.values().stream()
-                    .filter(p -> p.isId && !p.isVersionData)
+                    .filter(p -> p.isId && !p.isVersionFrom)
                     .collect(Collectors.toList());
             if (versionalType != null) {
                 keyType = interfaceType + "_HKey_";
@@ -132,7 +132,7 @@ class DataBeanBuilder {
                 cf.endBlock("}");
                 if (versionalType != null) {
                     DataBeanPropertyBuilder actProperty =
-                            properties.values().stream().filter(p -> p.isVersionData).findAny().orElse(null);
+                            properties.values().stream().filter(p -> p.isVersionFrom).findAny().orElse(null);
                     if (actProperty != null) {
                         cf.println("");
                         cf.startBlock("public " + actProperty.type + " getActualFrom_() {");
@@ -179,7 +179,7 @@ class DataBeanBuilder {
                 cf.endBlock("*/");
                 cf.startBlock("public class " + inversionalKey.substring(simpNameDel + 1) + " implements java.io.Serializable {");
                 List<DataBeanPropertyBuilder> ids = properties.values().stream()
-                        .filter(p -> p.isId && !p.isVersionData)
+                        .filter(p -> p.isId && !p.isVersionFrom)
                         .sorted(Comparator.comparing(p -> p.name))
                         .collect(Collectors.toList());
                 for (DataBeanPropertyBuilder property : ids) {
@@ -231,28 +231,28 @@ class DataBeanBuilder {
                             inversionalKey + " key, " +
                             versionalType + " at) {");
                     for (DataBeanPropertyBuilder property : ids)
-                        if (!property.isVersionData)
+                        if (!property.isVersionFrom)
                             cf.println("this." + property.name + " = key" +
                                     (inversionalKey.endsWith("_") ? ".get" +
                                             Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
                                             "()" :
                                             "") +
                                     ";");
-                    cf.println(ids.stream().filter(p -> p.isVersionData).findAny().map(p ->
+                    cf.println(ids.stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                             "this." + p.name + " = at;").orElse(""));
                     cf.endBlock("}");
                     cf.println("");
                     cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
                             inversionalKey + " key) {");
                     for (DataBeanPropertyBuilder property : ids)
-                        if (!property.isVersionData)
+                        if (!property.isVersionFrom)
                             cf.println("this." + property.name + " = key" +
                                     (inversionalKey.endsWith("_") ? ".get" +
                                             Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
                                             "()" :
                                             "") +
                                     ";");
-                    cf.println(ids.stream().filter(p -> p.isVersionData).findAny().map(p ->
+                    cf.println(ids.stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                             "this." + p.name + " = " + dateNowFrom(versionalType) + ";").orElse(""));
                     cf.endBlock("}");
                 }
