@@ -3,13 +3,12 @@ package org.docero.data.processor;
 import org.docero.data.DDataProperty;
 
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.element.*;
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Map;
 
 class DataBeanPropertyBuilder {
     final String name;
@@ -23,6 +22,7 @@ class DataBeanPropertyBuilder {
     final boolean isMap;
     final DataBeanBuilder dataBean;
     final TypeMirror mappedType;
+    final boolean isVersionData;
 
     DataBeanPropertyBuilder(
             DataBeanBuilder bean, ExecutableElement method,
@@ -47,6 +47,7 @@ class DataBeanPropertyBuilder {
             this.type = method.getReturnType();
         }
         nullable = ddProperty == null || ddProperty.nullable();
+        isVersionData = ddProperty != null && ddProperty.versionData();
         length = ddProperty == null ? 0 : ddProperty.length();
         if (ddProperty != null && ddProperty.value().length() > 0) {
             columnName = ddProperty.value();

@@ -26,11 +26,14 @@ public class DDataProcessor extends AbstractProcessor {
     private TypeMirror collectionType;
     private TypeMirror mapType;
     private DDataBuilder builder;
+    private TypeMirror versionalBeanType;
+    private TypeMirror versionalRepositoryType;
 
     private enum Stage {
         STEP1_ENUM_GEN,
-        STEP2_BEANS_GEN,
-        STEP3_MAPS_GEN,
+        STEP2_REPOSITORIES_GEN,
+        STEP3_BEANS_GEN,
+        STEP4_MAPS_GEN,
         STEP_END
     }
 
@@ -45,6 +48,12 @@ public class DDataProcessor extends AbstractProcessor {
         mapType = environment.getTypeUtils().erasure(
                 environment.getElementUtils().getTypeElement("java.util.Map").asType()
         );
+        versionalBeanType = environment.getTypeUtils().erasure(
+                environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalBean").asType()
+        );
+        versionalRepositoryType = environment.getTypeUtils().erasure(
+                environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalRepository").asType()
+        );
         builder = new DDataBuilder(environment);
     }
 
@@ -54,15 +63,19 @@ public class DDataProcessor extends AbstractProcessor {
             switch (stage) {
                 case STEP1_ENUM_GEN:
                     Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
-                    for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType, mapType);
+                    for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType, mapType, versionalBeanType);
 
                     Set<? extends Element> repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
-                    for (Element repositoryElement : repositories) builder.checkRepository(repositoryElement);
+                    for (Element repositoryElement : repositories)
+                        builder.checkRepository(repositoryElement, versionalRepositoryType);
 
                     builder.generateAnnotationsAndEnums();
-                    stage = Stage.STEP2_BEANS_GEN;
+
+                    stage = Stage.STEP2_REPOSITORIES_GEN;
                     break;
-                case STEP2_BEANS_GEN:
+                case STEP2_REPOSITORIES_GEN:
+                    stage = Stage.STEP3_BEANS_GEN;
+                case STEP3_BEANS_GEN:
                     HashMap<String, TypeElement> pkgClasses = listClasses();
                     for (DataBeanBuilder bean : builder.beansByInterface.values()) {
                         buildMappingFor(pkgClasses.get(bean.interfaceType.toString()), bean);
@@ -70,9 +83,9 @@ public class DDataProcessor extends AbstractProcessor {
 
                     builder.generateImplementation();
                     builder.generateDdata();
-                    stage = Stage.STEP3_MAPS_GEN;
+                    stage = Stage.STEP4_MAPS_GEN;
                     break;
-                case STEP3_MAPS_GEN:
+                case STEP4_MAPS_GEN:
                     if (new DDataMapBuilder(builder, this.processingEnv).build(listClasses()))
                         stage = Stage.STEP_END;
                     break;

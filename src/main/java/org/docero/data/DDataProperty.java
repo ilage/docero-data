@@ -22,6 +22,12 @@ public @interface DDataProperty {
     boolean id() default false;
 
     /**
+     * Column contains version part of table composite key used in DDataVersionalBean
+     * @return
+     */
+    boolean versionData() default false;
+
+    /**
      * Is column may be NULL, default true.
      * @return
      */

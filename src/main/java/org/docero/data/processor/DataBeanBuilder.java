@@ -25,10 +25,12 @@ class DataBeanBuilder {
     final TypeMirror collectionType;
     final String keyType;
     final boolean isKeyComposite;
+    final TypeMirror versionalType;
+    final String inversionalKey;
 
     DataBeanBuilder(
             Element beanElement, DDataBuilder builder,
-            TypeMirror collectionType, TypeMirror mapType
+            TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType
     ) {
         rootBuilder = builder;
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
@@ -47,15 +49,44 @@ class DataBeanBuilder {
                     properties.put(beanBuilder.enumName, beanBuilder);
             }
         this.collectionType = collectionType;
-        List<DataBeanPropertyBuilder> ids = properties.values().stream().filter(p -> p.isId).collect(Collectors.toList());
+        List<DataBeanPropertyBuilder> ids = properties.values().stream()
+                .filter(p -> p.isId)
+                .collect(Collectors.toList());
+        if (rootBuilder.environment.getTypeUtils().isSubtype(
+                rootBuilder.environment.getTypeUtils().erasure(interfaceType),
+                versionedBeanType)) {
+            if (interfaceType.toString().startsWith("org.docero.data.DDataVersionalBean"))
+                versionalType = ((DeclaredType) interfaceType).getTypeArguments().get(0);
+            else
+                versionalType = rootBuilder.environment.getTypeUtils().directSupertypes(interfaceType).stream()
+                        .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
+                        .findAny().map(t -> ((DeclaredType) t).getTypeArguments().get(0)).orElse(null);
+        } else
+            versionalType = null;
+
         if (ids.size() == 1) {
             keyType = ids.get(0).type.getKind().isPrimitive() ?
                     builder.environment.getTypeUtils().boxedClass((PrimitiveType) ids.get(0).type).toString() :
                     ids.get(0).type.toString();
             isKeyComposite = false;
+            inversionalKey = keyType;
         } else {
-            keyType = interfaceType + "_Key_";
             isKeyComposite = true;
+            List<DataBeanPropertyBuilder> iids = properties.values().stream()
+                    .filter(p -> p.isId && !p.isVersionData)
+                    .collect(Collectors.toList());
+            if (versionalType != null) {
+                keyType = interfaceType + "_HKey_";
+                if (iids.size() == 1)
+                    inversionalKey = iids.get(0).type.getKind().isPrimitive() ?
+                            builder.environment.getTypeUtils().boxedClass((PrimitiveType) iids.get(0).type).toString() :
+                            iids.get(0).type.toString();
+                else
+                    inversionalKey = interfaceType + "_Key_";
+            } else {
+                keyType = interfaceType + "_Key_";
+                inversionalKey = keyType;
+            }
         }
     }
 
@@ -68,7 +99,7 @@ class DataBeanBuilder {
                 "\"" + table + "\"";
     }
 
-    void buildImplementation(ProcessingEnvironment environment, HashMap<String, DataBeanBuilder> beansByInterface) throws IOException {
+    void buildImplementation(ProcessingEnvironment environment) throws IOException {
         /*
             Build Implementation
         */
@@ -99,6 +130,21 @@ class DataBeanBuilder {
                                 .collect(Collectors.joining(", ")) +
                         ");");
                 cf.endBlock("}");
+                if (versionalType != null) {
+                    DataBeanPropertyBuilder actProperty =
+                            properties.values().stream().filter(p -> p.isVersionData).findAny().orElse(null);
+                    if (actProperty != null) {
+                        cf.println("");
+                        cf.startBlock("public " + actProperty.type + " getActualFrom_() {");
+                        cf.println("return " + actProperty.name + ";");
+                        cf.endBlock("}");
+                        cf.println("");
+                        cf.startBlock("public void setActualFrom_(" + actProperty.type + " dt) {");
+                        cf.println("" + actProperty.name + " = dt;");
+                        cf.endBlock("}");
+                    }
+
+                }
             } else {
                 cf.startBlock("public " + keyType + " getDDataBeanKey_() {");
                 Optional<DataBeanPropertyBuilder> idPropOpt = properties.values().stream().filter(p -> p.isId).findAny();
@@ -123,6 +169,35 @@ class DataBeanBuilder {
         */
         String className = getImplementationName();
         int simpNameDel = className.lastIndexOf('.');
+
+        if (versionalType != null && inversionalKey.endsWith("_"))
+            try (JavaClassWriter cf = new JavaClassWriter(environment, inversionalKey)) {
+                cf.println("package " +
+                        className.substring(0, simpNameDel) + ";");
+                cf.startBlock("/*");
+                cf.println("Class generated by docero-data processor.");
+                cf.endBlock("*/");
+                cf.startBlock("public class " + inversionalKey.substring(simpNameDel + 1) + " implements java.io.Serializable {");
+                List<DataBeanPropertyBuilder> ids = properties.values().stream()
+                        .filter(p -> p.isId && !p.isVersionData)
+                        .sorted(Comparator.comparing(p -> p.name))
+                        .collect(Collectors.toList());
+                for (DataBeanPropertyBuilder property : ids) {
+                    cf.println("private final " + property.type + " " + property.name + ";");
+                    cf.println("public " + property.type + " get" +
+                            Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
+                            "() { return " + property.name + "; }");
+                    cf.println("");
+                }
+                cf.startBlock("public " + inversionalKey.substring(simpNameDel + 1) + "(" +
+                        ids.stream().map(p -> p.type + " " + p.name)
+                                .collect(Collectors.joining(",")) + ") {");
+                for (DataBeanPropertyBuilder property : ids)
+                    cf.println("this." + property.name + " = " + property.name + ";");
+                cf.endBlock("}");
+
+                cf.endBlock("}");
+            }
 
         if (isKeyComposite)
             try (JavaClassWriter cf = new JavaClassWriter(environment, keyType)) {
@@ -149,6 +224,38 @@ class DataBeanBuilder {
                 for (DataBeanPropertyBuilder property : ids)
                     cf.println("this." + property.name + " = " + property.name + ";");
                 cf.endBlock("}");
+
+                if (versionalType != null) {
+                    cf.println("");
+                    cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
+                            inversionalKey + " key, " +
+                            versionalType + " at) {");
+                    for (DataBeanPropertyBuilder property : ids)
+                        if (!property.isVersionData)
+                            cf.println("this." + property.name + " = key" +
+                                    (inversionalKey.endsWith("_") ? ".get" +
+                                            Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
+                                            "()" :
+                                            "") +
+                                    ";");
+                    cf.println(ids.stream().filter(p -> p.isVersionData).findAny().map(p ->
+                            "this." + p.name + " = at;").orElse(""));
+                    cf.endBlock("}");
+                    cf.println("");
+                    cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
+                            inversionalKey + " key) {");
+                    for (DataBeanPropertyBuilder property : ids)
+                        if (!property.isVersionData)
+                            cf.println("this." + property.name + " = key" +
+                                    (inversionalKey.endsWith("_") ? ".get" +
+                                            Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
+                                            "()" :
+                                            "") +
+                                    ";");
+                    cf.println(ids.stream().filter(p -> p.isVersionData).findAny().map(p ->
+                            "this." + p.name + " = " + dateNowFrom(versionalType) + ";").orElse(""));
+                    cf.endBlock("}");
+                }
 
                 cf.endBlock("}");
             }
@@ -229,5 +336,17 @@ class DataBeanBuilder {
 
             cf.endBlock("}");
         }
+    }
+
+    static String dateNowFrom(TypeMirror versionalType) {
+        if ("java.time.LocalDateTime".equals(versionalType.toString()))
+            return "java.time.LocalDateTime.now()";
+        else if ("java.time.LocalDate".equals(versionalType.toString()))
+            return "java.time.LocalDate.now()";
+        else if ("java.util.Date".equals(versionalType.toString()))
+            return "new java.util.Date()";
+        else if ("java.sql.Timestamp".equals(versionalType.toString()))
+            return "new java.sql.Timestamp(System.currentTimeMillis())";
+        return null;
     }
 }

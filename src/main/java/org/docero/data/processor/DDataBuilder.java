@@ -28,14 +28,14 @@ class DDataBuilder {
         spring = dS != null && sqlSDS != null && sqlSDS.getKind() == ElementKind.CLASS;
     }
 
-    void checkInterface(Element beanElement, TypeMirror collectionType, TypeMirror mapType) {
+    void checkInterface(Element beanElement, TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType) {
         String typeName = beanElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-        DataBeanBuilder value = new DataBeanBuilder(beanElement, this, collectionType, mapType);
+        DataBeanBuilder value = new DataBeanBuilder(beanElement, this, collectionType, mapType, versionedBeanType);
         beansByInterface.put(value.interfaceType.toString(), value);
     }
 
-    void checkRepository(Element repositoryElement) {
+    void checkRepository(Element repositoryElement, TypeMirror versionalType) {
         String typeName = repositoryElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
         DataRepositoryBuilder builder =
@@ -52,7 +52,7 @@ class DDataBuilder {
 
     void generateImplementation() throws IOException {
         for (DataBeanBuilder bean : beansByInterface.values()) {
-            bean.buildImplementation(environment, beansByInterface);
+            bean.buildImplementation(environment);
         }
         for (DataRepositoryBuilder repositoryBuilder : repositories) {
             repositoryBuilder.build(environment, spring);
