@@ -21,15 +21,12 @@ import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 class DDataMapBuilder {
     private final DDataBuilder builder;
     private final ProcessingEnvironment environment;
-    private final HashMap<String, Mapping> mappings = new HashMap<>();
     private final TypeMirror temporalType;
     private final TypeMirror oldDateType;
     private final HashSet<String> userMappingFiles = new HashSet<>();
@@ -41,25 +38,13 @@ class DDataMapBuilder {
         oldDateType = environment.getElementUtils().getTypeElement("java.util.Date").asType();
     }
 
-    boolean build() throws Exception {
+    boolean build(HashMap<String, TypeElement> pkgClasses) throws Exception {
         if (builder.beansByInterface.isEmpty()) return false;
 
         DocumentBuilderFactory docBuilderFactory = DocumentBuilderFactory.newInstance();
         docBuilderFactory.setIgnoringComments(false);
         docBuilderFactory.setNamespaceAware(true);
         docBuilderFactory.setValidating(false);
-
-        HashMap<String, TypeElement> pkgClasses = new HashMap<>();
-        for (String aPackage : builder.packages) {
-            PackageElement pkg = environment.getElementUtils().getPackageElement(aPackage);
-            for (Element element : pkg.getEnclosedElements()) {
-                pkgClasses.put(element.asType().toString(), (TypeElement) element);
-            }
-        }
-
-        for (DataBeanBuilder bean : builder.beansByInterface.values()) {
-            buildMappingFor(pkgClasses.get(bean.interfaceType.toString()), bean);
-        }
 
         for (DataRepositoryBuilder repository : builder.repositories) {
             DocumentBuilder docBuilder = docBuilderFactory.newDocumentBuilder();
@@ -155,146 +140,6 @@ class DDataMapBuilder {
             }
 
         return true;
-    }
-
-    class Mapping {
-        final List<DataBeanPropertyBuilder> properties = new ArrayList<>();
-        final List<DataBeanPropertyBuilder> mappedProperties = new ArrayList<>();
-        final boolean manyToOne;
-
-        Mapping(AnnotationMirror annotationMirror, DataBeanBuilder bean) {
-            Map<? extends ExecutableElement, ? extends AnnotationValue> map =
-                    environment.getElementUtils().getElementValuesWithDefaults(annotationMirror);
-
-            AtomicBoolean hasCollection = new AtomicBoolean(false);
-            for (ExecutableElement executableElement : map.keySet()) {
-                String mapKey = executableElement.getSimpleName().toString();
-                if ("value".equals(mapKey)) {
-                    //noinspection unchecked
-                    ((List) map.get(executableElement).getValue()).stream()
-                            .map(o -> {
-                                String n = o.toString();
-                                return n.substring(n.lastIndexOf('.') + 1);
-                            })
-                            .forEach(enumName -> bean.properties.values().stream()
-                                    .filter(p -> enumName.equals(p.enumName))
-                                    .findAny()
-                                    .ifPresent(properties::add));
-                } else {
-                    //noinspection unchecked
-                    ((List) map.get(executableElement).getValue()).stream()
-                            .map(Object::toString)
-                            .forEach(mapValue -> mappedProperties.add(mappedField(mapKey,
-                                    ((String) mapValue), bean, hasCollection)));
-                }
-            }
-            manyToOne = hasCollection.get();
-        }
-
-        Mapping(DataBeanPropertyBuilder property, DataBeanBuilder mappedBean) {
-            properties.add(property);
-            manyToOne = false;
-            mappedBean.properties.values().stream()
-                    .filter(p -> p.isId).forEach(mappedProperties::add);
-        }
-
-        private Mapping(DataBeanPropertyBuilder property, DataBeanPropertyBuilder mappedBeanProperty, boolean manyToOne) {
-            properties.add(property);
-            mappedProperties.add(mappedBeanProperty);
-            this.manyToOne = manyToOne;
-        }
-
-        Stream<Mapping> stream() {
-            List<Mapping> l = new ArrayList<>();
-            if (properties.size() > 0 && mappedProperties.size() > 0)
-                for (int i = 0; i < Math.max(properties.size(), mappedProperties.size()); i++) {
-                    l.add(new Mapping(
-                            properties.get(i < properties.size() ? i : 0),
-                            mappedProperties.get(i < mappedProperties.size() ? i : 0),
-                            manyToOne
-                    ));
-                }
-            return l.stream();
-        }
-    }
-
-    private DataBeanPropertyBuilder mappedField(String aParam, String enumName, DataBeanBuilder bean, AtomicBoolean hasCollection) {
-        final String shortEnumName = enumName.substring(enumName.lastIndexOf('.') + 1);
-        DataBeanPropertyBuilder mappedField = null;
-        DataBeanPropertyBuilder mappedBy = bean.properties.values().stream()
-                .filter(p -> p.name.equals(aParam)).findAny().orElse(null);
-        if (mappedBy != null) {
-            DataBeanBuilder mappedBean;
-            if (!mappedBy.isCollectionOrMap()) {
-                mappedBean = builder.beansByInterface.get(
-                        environment.getTypeUtils().erasure(mappedBy.type).toString()
-                );
-            } else {
-                hasCollection.set(true);
-                TypeMirror beanType = ((DeclaredType) mappedBy.type).getTypeArguments().get(0);
-                mappedBean = builder.beansByInterface.get(
-                        environment.getTypeUtils().erasure(beanType).toString()
-                );
-            }
-            mappedField = mappedBean == null ? null : mappedBean.properties.values().stream()
-                    .filter(p -> p.enumName.equals(shortEnumName)).findAny().orElse(null);
-        }
-        return mappedField;
-    }
-
-    private void buildMappingFor(TypeElement beanElement, DataBeanBuilder bean) {
-        for (Element element : beanElement.getEnclosedElements()) {
-            if (element.getKind() == ElementKind.METHOD) {
-                ExecutableElement method = (ExecutableElement) element;
-                String mappingKey = beanElement.asType().toString() + "." +
-                        propertyName4Method(method.getSimpleName().toString());
-                Mapping mapping = null;
-                for (AnnotationMirror annotationMirror : method.getAnnotationMirrors())
-                    if (annotationMirror.getAnnotationType().toString().contains("_Map_")) {
-                        mapping = new Mapping(annotationMirror, bean);
-                        mappings.put(mappingKey, mapping);
-
-                        /*System.out.println(annotationMirror.getAnnotationType() + " tail:");
-                        System.out.println(mappingKey + "\n   " +
-                                beanElement.asType().toString() + "." + mapping.property.name +
-                                (mapping.manyToOne ? " <- " : " -> ") +
-                                mapping.mappedProperty.dataBean.interfaceType + "." +
-                                mapping.mappedProperty.name);*/
-                        break;
-                    }
-                if (mapping == null && method.getReturnType() != null) {
-                    DataBeanBuilder mappedBean = builder.beansByInterface.get(environment.getTypeUtils().erasure(
-                            method.getReturnType()
-                    ).toString());
-                    if (mappedBean != null) {
-                        DataBeanPropertyBuilder property = propertyName4Method(bean, method);
-                        mapping = new Mapping(property, mappedBean);
-                        mappings.put(mappingKey, mapping);
-
-                        /*System.out.println("method returns " + method.getReturnType() + " tail:");
-                        System.out.println(mappingKey + "\n   " +
-                                beanElement.asType().toString() + "." + mapping.property.name +
-                                (mapping.manyToOne ? " <- " : " -> ") +
-                                mapping.mappedProperty.dataBean.interfaceType + "." +
-                                mapping.mappedProperty.name);*/
-                    }
-                }
-            }
-        }
-    }
-
-    private DataBeanPropertyBuilder propertyName4Method(DataBeanBuilder bean, ExecutableElement method) {
-        String propName = propertyName4Method(method.getSimpleName().toString());
-        return bean.properties.values().stream().filter(p -> p.name.equals(propName)).findAny().orElse(null);
-    }
-
-    private String propertyName4Method(String methodSimpleName) {
-        if (methodSimpleName.startsWith("get") | methodSimpleName.startsWith("has") || methodSimpleName.startsWith("set"))
-            return Character.toLowerCase(methodSimpleName.charAt(3)) + methodSimpleName.substring(4);
-        else if (methodSimpleName.startsWith("is"))
-            return Character.toLowerCase(methodSimpleName.charAt(2)) + methodSimpleName.substring(3);
-        else
-            return methodSimpleName;
     }
 
     private void createDefinedMethod(
@@ -420,7 +265,8 @@ class DDataMapBuilder {
                 case SELECT:
                     sql.append("\nSELECT\n");
                     sql.append(bean.properties.values().stream()
-                            .filter(p -> !p.isCollectionOrMap())
+                            .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                            .filter(this::notManagedBean)
                             .filter(fetchOptions::filterIgnored)
                             .map(p -> "  t0." + p.getColumnRef() + " AS " + p.getColumnRef())
                             .collect(Collectors.joining(",\n")));
@@ -432,13 +278,15 @@ class DDataMapBuilder {
                 case INSERT:
                     sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
                     sql.append(bean.properties.values().stream()
-                            .filter(p -> !p.isCollectionOrMap())
+                            .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                            .filter(this::notManagedBean)
                             .map(DataBeanPropertyBuilder::getColumnRef)
                             .collect(Collectors.joining(", ")));
                     sql.append(")\n");
                     sql.append("VALUES (\n");
                     sql.append(bean.properties.values().stream()
-                            .filter(p -> !p.isCollectionOrMap())
+                            .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                            .filter(this::notManagedBean)
                             .map(p -> buildSqlParameter(bean, p))
                             .collect(Collectors.joining(",\n")));
                     sql.append("\n)\n");
@@ -446,7 +294,8 @@ class DDataMapBuilder {
                 case UPDATE:
                     sql.append("\nUPDATE ").append(bean.getTableRef()).append(" AS t0 SET\n");
                     sql.append(bean.properties.values().stream()
-                            .filter(p -> !p.isCollectionOrMap())
+                            .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                            .filter(this::notManagedBean)
                             .map(p -> p.getColumnRef() + " = " + buildSqlParameter(bean, p))
                             .collect(Collectors.joining(",\n")))
                             .append("\n");
@@ -500,6 +349,10 @@ class DDataMapBuilder {
                     }
             }
         }
+    }
+
+    private boolean notManagedBean(DataBeanPropertyBuilder propertyBuilder) {
+        return !this.builder.beansByInterface.containsKey(propertyBuilder.type.toString());
     }
 
     private void buildSelect4DefaultGet(
@@ -600,7 +453,7 @@ class DDataMapBuilder {
                                     currentJoin.mappedBean.getTableRef() + " AS t" + tIdx + " WHERE ");
                             existsElt.setAttribute("prefixOverrides", "AND ");
                             existsElt.setAttribute("suffix", ")\n");
-                            Mapping joinMap = mappings.get(currentJoin.property.dataBean.interfaceType.toString() +
+                            Mapping joinMap = builder.mappings.get(currentJoin.property.dataBean.interfaceType.toString() +
                                     "." + currentJoin.property.name);
                             existsElt.appendChild(doc.createTextNode(
                                     joinMap.stream().map(m -> "\nt" +
@@ -663,7 +516,7 @@ class DDataMapBuilder {
                 .filter(t -> t.useInFieldsList)
                 .sorted(Comparator.comparingInt(t -> t.tableIndex))
                 .forEach(join -> {
-                    Mapping joinMap = mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
+                    Mapping joinMap = builder.mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
                     sql.append("LEFT JOIN ")
                             .append(join.mappedBean.getTableRef())
                             .append(" AS t").append(join.tableIndex)
@@ -684,7 +537,7 @@ class DDataMapBuilder {
      * @return string like #{name,javaType=...,jdbcType=...}
      */
     private String buildSqlParameter(DataBeanBuilder dataBean, DataBeanPropertyBuilder beanProperty) {
-        DDataMapBuilder.Mapping mapping = mappings.get(dataBean.interfaceType.toString() + "." + beanProperty.name);
+        Mapping mapping = builder.mappings.get(dataBean.interfaceType.toString() + "." + beanProperty.name);
         if (mapping != null) {
             TypeMirror mappedType = mapping.mappedProperties.get(0).type;
             return "#{" + beanProperty.name + "_foreignKey, javaType=" + (mappedType.getKind().isPrimitive() ?
@@ -725,6 +578,7 @@ class DDataMapBuilder {
     private void addManagedBeanToFrom(StringBuilder sql, MappedTable mappedTable, FetchOptions fetchOptions) {
         String r = mappedTable.mappedBean.properties.values().stream()
                 .filter(fetchOptions::filter4FieldsList)
+                .filter(this::notManagedBean)
                 .map(p -> "  t" + mappedTable.tableIndex + "." + p.getColumnRef() +
                         " AS t" + mappedTable.tableIndex + "_" + p.columnName)
                 .collect(Collectors.joining(",\n"));
@@ -775,11 +629,11 @@ class DDataMapBuilder {
         properties.stream()
                 .filter(p -> !(p.isId || p.isCollectionOrMap() || p.columnName == null))
                 .filter(fetchOptions::filterIgnored)
+                .filter(p -> !builder.beansByInterface.containsKey(p.type.toString()))
                 .forEach(p -> {
                     org.w3c.dom.Element id = (org.w3c.dom.Element)
                             element.appendChild(doc.createElement("result"));
-                    boolean isBean = builder.beansByInterface.containsKey(p.type.toString());
-                    id.setAttribute("property", p.name + (isBean ? "_foreignKey" : ""));
+                    id.setAttribute("property", p.name);
                     id.setAttribute("column", prefix + p.columnName);
                 });
     }
@@ -799,7 +653,7 @@ class DDataMapBuilder {
         managed.setAttribute("javaType", mappedTable.property.isCollection ? "ArrayList" : (
                 mappedTable.property.isMap ? "HashMap" : mappedTable.mappedBean.getImplementationName())
         );
-        Mapping mapping = mappings.get(mappedTable.property.dataBean.interfaceType + "." + mappedTable.property.name);
+        Mapping mapping = builder.mappings.get(mappedTable.property.dataBean.interfaceType + "." + mappedTable.property.name);
         boolean lazy;
         if (mappedTable.property.isCollectionOrMap()) {
             managed.setAttribute("ofType", mappedTable.property.dataBean.getImplementationName());

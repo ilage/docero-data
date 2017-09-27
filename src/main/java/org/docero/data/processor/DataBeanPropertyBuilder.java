@@ -9,6 +9,7 @@ import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Map;
 
 class DataBeanPropertyBuilder {
     final String name;
@@ -80,15 +81,11 @@ class DataBeanPropertyBuilder {
         enumName = elemName.toString();
     }
 
-    void buildProperty(JavaClassWriter cf, HashMap<String, DataBeanBuilder> beansByInterface) throws IOException {
+    void buildProperty(JavaClassWriter cf) throws IOException {
         cf.println("private " + type.toString() + " " + name + ";");
-        DataBeanBuilder bean = beansByInterface.get(type.toString());
-        if (bean != null) { // managed bean
-            cf.println("private " + bean.keyType + " " + name + "_foreignKey;");
-        }
     }
 
-    void buildGetter(JavaClassWriter cf, HashMap<String, DataBeanBuilder> beansByInterface) throws IOException {
+    void buildGetter(JavaClassWriter cf) throws IOException {
         cf.println("");
         cf.startBlock("public " +
                 type.toString() + " get" +
@@ -97,22 +94,9 @@ class DataBeanPropertyBuilder {
         );
         cf.println("return " + name + ";");
         cf.endBlock("}");
-        DataBeanBuilder bean = beansByInterface.get(type.toString());
-        if (bean != null) { // managed bean
-            cf.println("");
-            cf.startBlock("public " +
-                    bean.keyType + " get" +
-                    Character.toUpperCase(name.charAt(0)) +
-                    name.substring(1) + "_foreignKey() {"
-            );
-            cf.println("return " + name + "_foreignKey;");
-            cf.endBlock("}");
-        }
     }
 
-    void buildSetter(JavaClassWriter cf, HashMap<String, DataBeanBuilder> beansByInterface) throws IOException {
-        DataBeanBuilder bean = beansByInterface.get(type.toString());
-
+    void buildSetter(JavaClassWriter cf) throws IOException {
         cf.println("");
         cf.startBlock("public void set" +
                 Character.toUpperCase(name.charAt(0)) +
@@ -121,26 +105,24 @@ class DataBeanPropertyBuilder {
                 name + ") {"
         );
         cf.println("this." + name + " = " + name + ";");
-        if (bean != null) { // managed bean
-            cf.startBlock("try {");
-            cf.println("this." + name + "_foreignKey = " + name + " == null ? null : (" +
-                    bean.keyType + ")" +
-                    name + ".getClass().getMethod(\"getDDataBeanKey_\").invoke(" + name + ");");
-            cf.endBlock("} catch (Exception e) {;}");
+        if (notCollectionOrMap()) {
+            Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
+            if (mapping != null) {
+                mapping.stream().forEach(m -> {
+                    try {
+                        String setter = "this.set" +
+                                Character.toUpperCase(m.properties.get(0).name.charAt(0)) + m.properties.get(0).name.substring(1);
+                        String getter = name + ".get" +
+                                Character.toUpperCase(m.mappedProperties.get(0).name.charAt(0)) + m.mappedProperties.get(0).name.substring(1);
+                        cf.println(setter + "(" + name + " == null ? " +
+                                (type.getKind().isPrimitive() ? "0" : "null") +
+                                " : " + getter + "());");
+                    } catch (IOException ignore) {
+                    }
+                });
+            }
         }
         cf.endBlock("}");
-
-        if (bean != null) { // managed bean
-            cf.println("");
-            cf.startBlock("public void set" +
-                    Character.toUpperCase(name.charAt(0)) +
-                    name.substring(1) + "_foreignKey(" +
-                    bean.keyType + " " +
-                    name + ") {"
-            );
-            cf.println("this." + name + "_foreignKey = " + name + ";");
-            cf.endBlock("}");
-        }
     }
 
     void buildEnumElement(JavaClassWriter cf, HashMap<String, DataBeanBuilder> beansByInterface, ProcessingEnvironment environment) throws IOException {
@@ -153,13 +135,6 @@ class DataBeanPropertyBuilder {
                     this.columnName + "\",\"" +
                     this.name + "\"," +
                     dataBean.interfaceType + ".class),");
-        } else if (columnName != null) {// if (!isCollection) {
-            cf.println("/** Value of column " + this.columnName + "*/");
-            cf.println(this.enumName + "(\"" +
-                    this.columnName + "\",\"" +
-                    this.name + "\"," +
-                    dataBean.interfaceType + ".class," +
-                    manType.interfaceType + ".class),");
         }
     }
 
@@ -173,6 +148,10 @@ class DataBeanPropertyBuilder {
 
     boolean isCollectionOrMap() {
         return isCollection || isMap;
+    }
+
+    boolean notCollectionOrMap() {
+        return !(isCollection || isMap);
     }
 
     boolean isSimple() {

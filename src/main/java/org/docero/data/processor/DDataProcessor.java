@@ -5,15 +5,9 @@ import org.docero.data.DDataRep;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.PackageElement;
-import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.TypeMirror;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -32,9 +26,15 @@ public class DDataProcessor extends AbstractProcessor {
     private TypeMirror collectionType;
     private TypeMirror mapType;
     private DDataBuilder builder;
-    private boolean mapBuilded = false;
-    private boolean beansGenerated = false;
-    private boolean ddataClassesGenerated = false;
+
+    private enum Stage {
+        STEP1_ENUM_GEN,
+        STEP2_BEANS_GEN,
+        STEP3_MAPS_GEN,
+        STEP_END
+    }
+
+    private Stage stage = Stage.STEP1_ENUM_GEN;
 
     @Override
     public void init(ProcessingEnvironment environment) {
@@ -50,50 +50,98 @@ public class DDataProcessor extends AbstractProcessor {
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
-        Throwable error = null;
-        if (!mapBuilded && ddataClassesGenerated)
-            try {
-                if (new DDataMapBuilder(builder, this.processingEnv).build()) {
-                    mapBuilded = true;
-                    return false;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                error = e;
-            }
+        try {
+            switch (stage) {
+                case STEP1_ENUM_GEN:
+                    Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
+                    for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType, mapType);
 
-        if(!ddataClassesGenerated) {
-            try {
-                Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
-                for (Element beanElement : entities) builder.checkInterface(beanElement, collectionType, mapType);
+                    Set<? extends Element> repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
+                    for (Element repositoryElement : repositories) builder.checkRepository(repositoryElement);
 
-                Set<? extends Element> repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
-                for (Element repositoryElement : repositories) builder.checkRepository(repositoryElement);
+                    builder.generateAnnotationsAndEnums();
+                    stage = Stage.STEP2_BEANS_GEN;
+                    break;
+                case STEP2_BEANS_GEN:
+                    HashMap<String, TypeElement> pkgClasses = listClasses();
+                    for (DataBeanBuilder bean : builder.beansByInterface.values()) {
+                        buildMappingFor(pkgClasses.get(bean.interfaceType.toString()), bean);
+                    }
 
-            } catch (Exception e) {
-                e.printStackTrace();
-                error = e;
-            }
-
-            try {
-                if (beansGenerated) {
+                    builder.generateImplementation();
                     builder.generateDdata();
-                    ddataClassesGenerated = true;
-                } else {
-                    builder.generateBeans();
-                    beansGenerated = true;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                error = e;
+                    stage = Stage.STEP3_MAPS_GEN;
+                    break;
+                case STEP3_MAPS_GEN:
+                    if (new DDataMapBuilder(builder, this.processingEnv).build(listClasses()))
+                        stage = Stage.STEP_END;
+                    break;
+                default:
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new Error(e);
+        }
+        return false;
+    }
+
+    private HashMap<String, TypeElement> listClasses() {
+        HashMap<String, TypeElement> pkgClasses = new HashMap<>();
+        for (String aPackage : builder.packages) {
+            PackageElement pkg = builder.environment.getElementUtils().getPackageElement(aPackage);
+            for (Element element : pkg.getEnclosedElements()) {
+                pkgClasses.put(element.asType().toString(), (TypeElement) element);
             }
         }
+        return pkgClasses;
+    }
 
-        if (error != null) {
-            error.printStackTrace();
-            throw new Error(error);
+    private void buildMappingFor(TypeElement beanElement, DataBeanBuilder bean) {
+        for (Element element : beanElement.getEnclosedElements()) {
+            if (element.getKind() == ElementKind.METHOD) {
+                ExecutableElement method = (ExecutableElement) element;
+                String mappingKey = beanElement.asType().toString() + "." +
+                        propertyName4Method(method.getSimpleName().toString());
+                Mapping mapping = null;
+                for (AnnotationMirror annotationMirror : method.getAnnotationMirrors())
+                    if (annotationMirror.getAnnotationType().toString().contains("_Map_")) {
+                        mapping = new Mapping(annotationMirror, bean);
+                        builder.mappings.put(mappingKey, mapping);
+
+                        /*System.out.println(annotationMirror.getAnnotationType() + " tail:");
+                        System.out.println(mappingKey + "\n   " +
+                                beanElement.asType().toString() + "." + mapping.property.name +
+                                (mapping.manyToOne ? " <- " : " -> ") +
+                                mapping.mappedProperty.dataBean.interfaceType + "." +
+                                mapping.mappedProperty.name);*/
+                        break;
+                    }
+                if (mapping == null && method.getReturnType() != null) {
+                    DataBeanBuilder mappedBean = builder.beansByInterface.get(builder.environment.getTypeUtils().erasure(
+                            method.getReturnType()
+                    ).toString());
+                    if (mappedBean != null) {
+                        //TODO надо ли это?
+                        /*DataBeanPropertyBuilder property = propertyName4Method(bean, method);
+                        mapping = new Mapping(property, mappedBean);
+                        mappings.put(mappingKey, mapping);*/
+                    }
+                }
+            }
         }
+    }
 
-        return false;
+    private DataBeanPropertyBuilder propertyName4Method(DataBeanBuilder bean, ExecutableElement method) {
+        String propName = propertyName4Method(method.getSimpleName().toString());
+        return bean.properties.values().stream().filter(p -> p.name.equals(propName)).findAny().orElse(null);
+    }
+
+    private String propertyName4Method(String methodSimpleName) {
+        if (methodSimpleName.startsWith("get") | methodSimpleName.startsWith("has") || methodSimpleName.startsWith("set"))
+            return Character.toLowerCase(methodSimpleName.charAt(3)) + methodSimpleName.substring(4);
+        else if (methodSimpleName.startsWith("is"))
+            return Character.toLowerCase(methodSimpleName.charAt(2)) + methodSimpleName.substring(3);
+        else
+            return methodSimpleName;
     }
 }

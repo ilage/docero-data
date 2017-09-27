@@ -17,6 +17,7 @@ class DDataBuilder {
     final HashMap<String, DataRepositoryBuilder> repositoriesByBean = new HashMap<>();
     final HashSet<String> packages = new HashSet<>();
     final boolean spring;
+    final HashMap<String, Mapping> mappings = new HashMap<>();
 
     DDataBuilder(ProcessingEnvironment environment) {
         this.environment = environment;
@@ -30,7 +31,7 @@ class DDataBuilder {
     void checkInterface(Element beanElement, TypeMirror collectionType, TypeMirror mapType) {
         String typeName = beanElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-        DataBeanBuilder value = new DataBeanBuilder(beanElement, environment, collectionType, mapType);
+        DataBeanBuilder value = new DataBeanBuilder(beanElement, this, collectionType, mapType);
         beansByInterface.put(value.interfaceType.toString(), value);
     }
 
@@ -43,9 +44,15 @@ class DDataBuilder {
         repositories.add(builder);
     }
 
-    void generateBeans() throws IOException {
+    void generateAnnotationsAndEnums() throws IOException {
         for (DataBeanBuilder bean : beansByInterface.values()) {
-            bean.build(environment, beansByInterface);
+            bean.buildAnnotationsAndEnums(environment, beansByInterface);
+        }
+    }
+
+    void generateImplementation() throws IOException {
+        for (DataBeanBuilder bean : beansByInterface.values()) {
+            bean.buildImplementation(environment, beansByInterface);
         }
         for (DataRepositoryBuilder repositoryBuilder : repositories) {
             repositoryBuilder.build(environment, spring);

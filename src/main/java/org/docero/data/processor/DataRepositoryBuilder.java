@@ -120,7 +120,7 @@ class DataRepositoryBuilder {
 
         buildFilterAnnotation(environment);
         buildDataFetchAnnotation(environment);
-        // build bean implementation
+        // buildAnnotationsAndEnums bean implementation
         try (JavaClassWriter cf = new JavaClassWriter(environment, daoClassName)) {
             cf.println("package " +
                     daoClassName.substring(0, simpNameDel) + ";");
