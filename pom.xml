@@ -38,6 +38,23 @@
             <plugin>
                 <artifactId>maven-jar-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+            </plugin>
         </plugins>
+        <extensions>
+            <extension>
+                <groupId>org.apache.maven.wagon</groupId>
+                <artifactId>wagon-http-lightweight</artifactId>
+            </extension>
+        </extensions>
     </build>
+    <distributionManagement>
+        <repository>
+            <id>telda-snapshots</id>
+            <name>telda repository</name>
+            <url>http://172.16.6.184:8081/nexus/content/repositories/snapshots</url>
+        </repository>
+    </distributionManagement>
 </project>
