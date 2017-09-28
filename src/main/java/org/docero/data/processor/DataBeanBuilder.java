@@ -226,21 +226,23 @@ class DataBeanBuilder {
                 cf.endBlock("}");
 
                 if (versionalType != null) {
-                    cf.println("");
-                    cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
-                            inversionalKey + " key, " +
-                            versionalType + " at) {");
-                    for (DataBeanPropertyBuilder property : ids)
-                        if (!property.isVersionFrom)
-                            cf.println("this." + property.name + " = key" +
-                                    (inversionalKey.endsWith("_") ? ".get" +
-                                            Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
-                                            "()" :
-                                            "") +
-                                    ";");
-                    cf.println(ids.stream().filter(p -> p.isVersionFrom).findAny().map(p ->
-                            "this." + p.name + " = at;").orElse(""));
-                    cf.endBlock("}");
+                    if (!ids.get(ids.size() - 1).isVersionFrom) {
+                        cf.println("");
+                        cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
+                                inversionalKey + " key, " +
+                                versionalType + " at) {");
+                        for (DataBeanPropertyBuilder property : ids)
+                            if (!property.isVersionFrom)
+                                cf.println("this." + property.name + " = key" +
+                                        (inversionalKey.endsWith("_") ? ".get" +
+                                                Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
+                                                "()" :
+                                                "") +
+                                        ";");
+                        cf.println(ids.stream().filter(p -> p.isVersionFrom).findAny().map(p ->
+                                "this." + p.name + " = at;").orElse(""));
+                        cf.endBlock("}");
+                    }
                     cf.println("");
                     cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
                             inversionalKey + " key) {");

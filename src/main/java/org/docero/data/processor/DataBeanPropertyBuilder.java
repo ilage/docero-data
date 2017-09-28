@@ -63,7 +63,7 @@ class DataBeanPropertyBuilder {
                     nameBuilder.append('_').append(Character.toLowerCase(c));
                 else nameBuilder.append(c);
             columnName = nameBuilder.toString();
-            isId = false;
+            isId = ddProperty != null && ddProperty.id();
         }
         TypeMirror ltypeErasure = environment.getTypeUtils().erasure(this.type);
         isCollection = environment.getTypeUtils().isSubtype(ltypeErasure, collectionType);
