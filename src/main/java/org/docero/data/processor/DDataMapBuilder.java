@@ -277,6 +277,27 @@ class DDataMapBuilder {
                     sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
                     break;
                 case INSERT:
+                    if (bean.versionalType != null) {
+                        sql.append(bean.properties.values().stream()
+                                .filter(p -> p.isVersionFrom).findAny()
+                                .map(vfrom -> bean.properties.values().stream()
+                                        .filter(p -> p.isVersionTo).findAny()
+                                        .map(vto -> "\nUPDATE " + bean.getTableRef() + " SET " + vto.getColumnRef() +
+                                                " = " + buildSqlParameter(bean, vfrom) +
+                                                "\nWHERE " +
+                                                bean.properties.values().stream()
+                                                        .filter(p -> p.isId && !p.isVersionFrom)
+                                                        .map(p -> p.getColumnRef() + " = " + buildSqlParameter(bean, p))
+                                                        .collect(Collectors.joining(" AND ")) +
+                                                " AND " + vfrom.getColumnRef() +
+                                                " <= " + buildSqlParameter(bean, vfrom) +
+                                                " AND ( " + vto.getColumnRef() +
+                                                " > " + buildSqlParameter(bean, vfrom) +
+                                                " OR " + vto.getColumnRef() +
+                                                " IS NULL);")
+                                        .orElse("")
+                                ).orElse(""));
+                    }
                     sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
                     sql.append(bean.properties.values().stream()
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
