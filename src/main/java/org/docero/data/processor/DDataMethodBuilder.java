@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 class DDataMethodBuilder {
     final TypeMirror returnType;
@@ -19,8 +20,6 @@ class DDataMethodBuilder {
     final DataRepositoryBuilder repositoryBuilder;
     final long methodIndex;
     final MType methodType;
-
-    private boolean defaultMethod;
 
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement) {
         this.repositoryBuilder = repositoryBuilder;
@@ -71,6 +70,9 @@ class DDataMethodBuilder {
     }
 
     void build(JavaClassWriter cf) throws IOException {
+        String throwsPart = throwTypes.size() > 0 ?
+                "throws " + throwTypes.stream().map(TypeMirror::toString).collect(Collectors.joining(", ")) :
+                "";
         cf.println("");
         cf.startBlock("public " + (returnType == null ? "void" : returnType) + " " + methodName + "(");
         int i = 0;
@@ -79,17 +81,8 @@ class DDataMethodBuilder {
             if (++i < parameters.size()) cf.println(",");
             else cf.println("");
         }
-        cf.endBlock(")");
-        if (throwTypes.size() != 0) {
-            cf.print("throws ");
-            i = 0;
-            for (TypeMirror throwType : throwTypes) {
-                cf.print(throwType.toString());
-                if (++i < throwTypes.size()) cf.print(", ");
-                else cf.print(" ");
-            }
-        }
-        cf.startBlock("{");
+        cf.println(")" + throwsPart + " {");
+
         if (returnType != null) {
             cf.print("return getSqlSession().");
             if (returnType.toString().contains("java.util.List")) {
@@ -112,7 +105,7 @@ class DDataMethodBuilder {
             }
         }
         cf.print("(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
-                defaultMethod ? "" : "_" + methodIndex) + "\"");
+                repositoryBuilder.defaultGetMethod == this ? "" : "_" + methodIndex) + "\"");
 
         if (parameters.size() > 0) {
             if (parameters.size() == 1 && parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
@@ -131,10 +124,25 @@ class DDataMethodBuilder {
         }
 
         cf.endBlock("}");
-    }
 
-    void setDefault() {
-        defaultMethod = true;
+        if (repositoryBuilder.defaultGetMethod == this && repositoryBuilder.versionalType != null) {
+            cf.println("");
+            if (throwTypes.size() != 0) {
+                cf.print("throws ");
+                i = 0;
+                for (TypeMirror throwType : throwTypes) {
+                    cf.print(throwType.toString());
+                    if (++i < throwTypes.size()) cf.print(", ");
+                    else cf.print(" ");
+                }
+            }
+            cf.startBlock("public " + returnType + " get(" +
+                    repositoryBuilder.idClass + " id)" + throwsPart + " {");
+            cf.println("return get(id, " +
+                    DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
+                    ");");
+            cf.endBlock("}");
+        }
     }
 
     enum MType {SELECT, GET, INSERT, UPDATE, DELETE}

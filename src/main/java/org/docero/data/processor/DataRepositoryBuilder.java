@@ -44,7 +44,7 @@ class DataRepositoryBuilder {
         boolean isHistorical = false;
         DeclaredType interfaceType = null;
         for (TypeMirror i : repositoryElement.getInterfaces()) {
-            isHistorical = i.toString().contains("org.docero.data.DDataHistoryRepository");
+            isHistorical = i.toString().contains("org.docero.data.DDataVersionalRepository");
             if (isHistorical || i.toString().contains("org.docero.data.DDataRepository"))
                 interfaceType = (DeclaredType) i;
             if (isHistorical) break;
@@ -77,9 +77,10 @@ class DataRepositoryBuilder {
                 }
             }
         defaultGetMethod = methods.stream().filter(m ->
-                "get".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
+                "get".equals(m.methodName) &&
+                        m.parameters.size() == (versionalType==null ? 1 : 2) &&
+                        m.parameters.get(0).type == idClass)
                 .findAny().orElse(null);
-        if (defaultGetMethod != null) defaultGetMethod.setDefault();
         defaultDeleteMethod = methods.stream().filter(m ->
                 "delete".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
                 .findAny().orElse(null);
