@@ -261,9 +261,11 @@ class DDataMapBuilder {
             domElement.appendChild(doc.createTextNode(sql.toString()));
 
         } else {
+            boolean limitedSelect = false;
             switch (method.methodType) {
-                case GET:
                 case SELECT:
+                    limitedSelect = filters.stream().anyMatch(f -> f.option == DDataFilterOption.LIMIT);
+                case GET:
                     sql.append("\nSELECT\n");
                     sql.append(bean.properties.values().stream()
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
@@ -274,7 +276,7 @@ class DDataMapBuilder {
                     if (fetchOptions.fetchType != DDataFetchType.NO)
                         mappedTables.stream().filter(MappedTable::useInFieldsList).forEach(t ->
                                 addManagedBeanToFrom(sql, t, fetchOptions));
-                    sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
+                    if (!limitedSelect) sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
                     break;
                 case INSERT:
                     if (bean.versionalType != null) {
@@ -343,7 +345,7 @@ class DDataMapBuilder {
                                             .collect(Collectors.joining(" AND ")) +
                                     "\n"));
                         } else
-                            addFiltersToSql(domElement, sql, bean, method, mappedTables, filters);
+                            addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, true);
                     } else {
                         addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
                         StringBuilder ssql;
@@ -390,8 +392,17 @@ class DDataMapBuilder {
                     }
                     break;
                 default: //LIST
-                    if (filters != null && filters.size() > 0)
-                        addFiltersToSql(domElement, sql, bean, method, mappedTables, filters);
+                    if (limitedSelect) {
+                        sql.append("\nFROM (SELECT * FROM ").append(bean.getTableRef()).append(" AS t0\n");
+                        domElement.appendChild(doc.createTextNode(sql.toString()));
+
+                        StringBuilder ssql = new StringBuilder();
+                        addFiltersToSql(domElement, ssql, bean, method, mappedTables, filters, false);
+                        ssql.append("\n) AS t0\n");
+                        addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), ssql);
+                        domElement.appendChild(doc.createTextNode(ssql.toString()));
+                    } else if (filters != null && filters.size() > 0)
+                        addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, true);
                     else {
                         addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
                         domElement.appendChild(doc.createTextNode(sql.toString()));
@@ -424,7 +435,8 @@ class DDataMapBuilder {
             DataBeanBuilder bean,
             DDataMethodBuilder method,
             List<MappedTable> mappedTables,
-            ArrayList<FilterOption> filters
+            ArrayList<FilterOption> filters,
+            boolean addJoins
     ) {
         Document doc = domElement.getOwnerDocument();
 
@@ -438,7 +450,7 @@ class DDataMapBuilder {
         for (FilterOption filter : filters)
             if (filter.option != null && filter.property != null) {
                 Optional<MappedTable> table = mappedTables.stream()
-                        .filter(mb -> mb.mappedFromTableIndex == 1 || filter.property.dataBean != bean)
+                        .filter(mb -> mb.mappedFromTableIndex <= 1 || filter.property.dataBean != bean)
                         .filter(mb -> mb.property.dataBean == filter.mappedBy.dataBean)
                         //.filter(mb -> mb.mappedByProperty.equals(filter.mappedBy.name))
                         .filter(mb -> mb.property.name.equals(filter.mappedBy.name)
@@ -494,8 +506,8 @@ class DDataMapBuilder {
                 }
 
                 if (e != null)
-                    if (currentJoin != null && !currentJoin.useInFieldsList) {
-                        IfExists ifExists = whereExists.get(currentJoin.mappedBean.getTableRef());
+                    if (currentJoin != null && (!addJoins || !currentJoin.useInFieldsList)) {
+                        IfExists ifExists = whereExists.get(currentJoin.property.name);
                         if (ifExists == null) {
                             org.w3c.dom.Element existsElt = doc.createElement("trim");
                             existsElt.setAttribute("prefix", "AND EXISTS (SELECT * FROM " +
@@ -513,11 +525,11 @@ class DDataMapBuilder {
                                             .collect(Collectors.joining(" AND "))
                             ));
                             ifExists = new IfExists(existsElt, filter.parameter);
-                            whereExists.put(currentJoin.mappedBean.getTableRef(), ifExists);
+                            whereExists.put(currentJoin.property.name, ifExists);
                         } else {
                             ifExists.parameters.add(filter.parameter);
-                            ifExists.element.appendChild(e);
                         }
+                        ifExists.element.appendChild(e);
                     } else
                         where.add(e);
             }
@@ -529,7 +541,7 @@ class DDataMapBuilder {
             elt.appendChild(ex.element);
             where.add(elt);
         });
-        addJoins(joins, sql);
+        if (addJoins) addJoins(joins, sql);
 
         if (method.methodType == DDataMethodBuilder.MType.SELECT) {
             domElement.appendChild(doc.createTextNode(sql.toString()));
@@ -888,7 +900,8 @@ class DDataMapBuilder {
                             .findAny()
                             .map(k -> filterProps.get(k).getValue().toString())
                             .orElse(null);
-                    DataBeanBuilder mappedBean = builder.beansByInterface.get(property.mappedType.toString());
+                    DataBeanBuilder mappedBean = mapped_value == null || "NONE_".equals(mapped_value) ? null :
+                            builder.beansByInterface.get(property.mappedType.toString());
                     if (mappedBean != null) {
                         mapped = mappedBean.properties.values().stream()
                                 .filter(p -> p.enumName.equals(mapped_value))
