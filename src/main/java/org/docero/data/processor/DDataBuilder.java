@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.stream.Collectors;
 
 class DDataBuilder {
     final ProcessingEnvironment environment;
@@ -84,6 +85,19 @@ class DDataBuilder {
                         repository.daoClassName + "();");
             }
             cf.println("return null;");
+            cf.endBlock("}");
+
+            cf.println("");
+            cf.startBlock("private static Class<?>[] implementations = " +
+                    "new Class<?>[] {");
+            cf.println(
+                    repositoriesByBean.values().stream()
+                            .map(r -> r.beanImplementation+".class")
+                            .collect(Collectors.joining(",\n\t\t"))
+            );
+            cf.endBlock("};");
+            cf.startBlock("public static Class<?>[] beansImplementations() {");
+            cf.println("return implementations;");
             cf.endBlock("}");
 
             cf.endBlock("}");
