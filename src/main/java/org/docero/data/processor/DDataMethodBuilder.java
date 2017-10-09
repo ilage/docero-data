@@ -1,6 +1,5 @@
 package org.docero.data.processor;
 
-import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
 import javax.lang.model.element.VariableElement;
@@ -9,7 +8,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 class DDataMethodBuilder {
@@ -20,6 +18,7 @@ class DDataMethodBuilder {
     final DataRepositoryBuilder repositoryBuilder;
     final long methodIndex;
     final MType methodType;
+    final boolean returnSimpleType;
 
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement) {
         this.repositoryBuilder = repositoryBuilder;
@@ -36,17 +35,22 @@ class DDataMethodBuilder {
                     nameString.contains("update") ? MType.UPDATE :
                             MType.DELETE
             );
+            returnSimpleType = false;
         } else {
             String ttype = returnType.toString();
             if (ttype.contains("java.util.List")) methodType = MType.SELECT;
             else if (ttype.contains("java.util.Map")) methodType = MType.SELECT;
             else methodType = MType.GET;
+            returnSimpleType = returnType.getKind().isPrimitive() ||
+                    "java.lang.Long".equals(returnType.toString()) ||
+                    "java.math.BigInteger".equals(returnType.toString());
         }
     }
 
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, DDataMethodBuilder.MType methodType) {
         this.repositoryBuilder = repositoryBuilder;
         returnType = repositoryBuilder.forInterfaceName;
+        returnSimpleType = false;
         this.methodType = methodType;
         methodIndex = 0;
         throwTypes = Collections.emptyList();

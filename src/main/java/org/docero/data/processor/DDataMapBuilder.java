@@ -72,7 +72,10 @@ class DDataMapBuilder {
 
                 //System.out.println(repository.repositoryInterface + ":" + repositoryElement.getEnclosedElements());
                 for (Element methodElement : repositoryElement.getEnclosedElements())
-                    createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository);
+                    if (methodElement.getKind() == ElementKind.METHOD && repository.isCreatedByInterface ?
+                            !methodElement.getModifiers().contains(Modifier.DEFAULT) :
+                            methodElement.getModifiers().contains(Modifier.ABSTRACT))
+                        createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository);
             }
             repository.lazyLoads.values().forEach(mapperRoot::appendChild);
             mapperRoot.setAttribute("namespace", repositoryNamespace);
@@ -124,8 +127,8 @@ class DDataMapBuilder {
                 }
                 cf.println("");
                 cf.println("@org.springframework.context.annotation.Bean");
-                cf.startBlock("public org.springframework.core.io.Resource[] dDataResources(org.springframework.context.ApplicationContext context) {");
-                cf.println("java.util.List<org.springframework.core.io.Resource> r = new java.util.ArrayList<>();");
+                cf.startBlock("public org.docero.data.DDataResources dDataResources(org.springframework.context.ApplicationContext context) {");
+                cf.println("org.docero.data.DDataResources r = new org.docero.data.DDataResources();");
                 for (DataRepositoryBuilder repository : builder.repositories)
                     cf.println("r.add(context.getResource(\"classpath:" +
                             repository.mappingClassName.replaceAll("\\.", "/") +
@@ -135,7 +138,7 @@ class DDataMapBuilder {
                             umf.replaceAll("\\.", "/") +
                             ".xml\"));");
                 }
-                cf.println("return r.toArray(new org.springframework.core.io.Resource[r.size()]);");
+                cf.println("return r;");
                 cf.endBlock("}");
                 cf.endBlock("}");
             }
@@ -156,9 +159,11 @@ class DDataMapBuilder {
                 ) &&
                         m.parameters.size() == methodElement.getParameters().size() &&
                         m.parameters.stream()
-                                .map(p -> p.type.toString()).collect(Collectors.joining("|")).equals(
+                                .map(p -> environment.getTypeUtils().erasure(p.type).toString())
+                                .collect(Collectors.joining("|")).equals(
                                 methodElement.getParameters().stream()
-                                        .map(p -> p.asType().toString()).collect(Collectors.joining("|"))
+                                        .map(p -> environment.getTypeUtils().erasure(p.asType()).toString())
+                                        .collect(Collectors.joining("|"))
                         )
         ).findAny();
 
@@ -173,9 +178,13 @@ class DDataMapBuilder {
                     .orElse(new FetchOptions(-1));
 
             ArrayList<FilterOption> filters = new ArrayList<>();
+            VariableElement order = null;
             for (VariableElement variableElement : methodElement.getParameters()) {
                 FilterOption filter = new FilterOption(repository, variableElement);
-                filters.add(filter);
+                if (filter.option != null) filters.add(filter);
+                else if (variableElement.asType().toString().startsWith("org.docero.data.DDataOrder")) {
+                    order = variableElement;
+                }
             }
 
             AtomicInteger index = new AtomicInteger();
@@ -193,41 +202,43 @@ class DDataMapBuilder {
             switch (method.methodType) {
                 case SELECT:
                 case GET:
-                    if (fetchOptions.resultMap.length() == 0)
+                    if (fetchOptions.resultMap.length() == 0 && !method.returnSimpleType)
                         buildResultMap(mapperRoot, method.repositoryBuilder, methodName, fetchOptions, mappedTables);
 
                     org.w3c.dom.Element select = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("select"));
                     select.setAttribute("id", methodName);
                     select.setAttribute("parameterType", "HashMap");
-                    if (fetchOptions.resultMap.length() == 0)
+                    if (method.returnSimpleType)
+                        select.setAttribute("resultType", method.returnType.toString());
+                    else if (fetchOptions.resultMap.length() == 0)
                         select.setAttribute("resultMap", methodName + "_ResultMap");
                     else {
                         select.setAttribute("resultMap", fetchOptions.resultMap);
                         userMappingFiles.add(fetchOptions.resultMap.substring(0, fetchOptions.resultMap.lastIndexOf('.')));
                     }
-                    buildSql(repository, method, bean, fetchOptions, mappedTables, select, filters, false);
+                    buildSql(repository, method, bean, fetchOptions, mappedTables, select, filters, order, false);
                     break;
                 case INSERT:
                     org.w3c.dom.Element insert = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("insert"));
                     insert.setAttribute("id", methodName);
                     insert.setAttribute("parameterType", "HashMap");
-                    buildSql(repository, method, bean, fetchOptions, mappedTables, insert, filters, false);
+                    buildSql(repository, method, bean, fetchOptions, mappedTables, insert, filters, order, false);
                     break;
                 case UPDATE:
                     org.w3c.dom.Element update = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("update"));
                     update.setAttribute("id", methodName);
                     update.setAttribute("parameterType", "HashMap");
-                    buildSql(repository, method, bean, fetchOptions, mappedTables, update, filters, false);
+                    buildSql(repository, method, bean, fetchOptions, mappedTables, update, filters, order, false);
                     break;
                 default: //case DELETE:
                     org.w3c.dom.Element delete = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("select"));
                     delete.setAttribute("id", methodName);
                     delete.setAttribute("parameterType", "HashMap");
-                    buildSql(repository, method, bean, fetchOptions, mappedTables, delete, filters, false);
+                    buildSql(repository, method, bean, fetchOptions, mappedTables, delete, filters, order, false);
             }
         } else throw new Exception("not found info about method '" + methodElement.getSimpleName() +
                 " of " + repository.repositoryInterface);
@@ -241,6 +252,7 @@ class DDataMapBuilder {
             List<MappedTable> mappedTables,
             org.w3c.dom.Element domElement,
             ArrayList<FilterOption> filters,
+            VariableElement order,
             boolean defaultGet) {
         Document doc = domElement.getOwnerDocument();
 
@@ -399,7 +411,9 @@ class DDataMapBuilder {
                         StringBuilder ssql = new StringBuilder();
                         addFiltersToSql(domElement, ssql, bean, method, mappedTables, filters, false);
                         ssql.append("\n) AS t0\n");
-                        addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), ssql);
+                        addJoins(mappedTables.stream()
+                                .filter(MappedTable::useInFieldsList)
+                                .collect(Collectors.toList()), ssql);
                         domElement.appendChild(doc.createTextNode(ssql.toString()));
                     } else if (filters != null && filters.size() > 0)
                         addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, true);
@@ -407,6 +421,10 @@ class DDataMapBuilder {
                         addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
                         domElement.appendChild(doc.createTextNode(sql.toString()));
                     }
+                    if (order != null)
+                        addOrder(order, mappedTables.stream()
+                                .filter(MappedTable::useInFieldsList)
+                                .collect(Collectors.toList()), domElement);
             }
         }
     }
@@ -471,6 +489,30 @@ class DDataMapBuilder {
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
                                 filter.property.getColumnRef() + " != #{" + filter.parameter + "}\n"));
+                        break;
+                    case LOWER_THAN:
+                        e = doc.createElement("if");
+                        e.setAttribute("test", filter.parameter + " != null");
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.getColumnRef() + " < #{" + filter.parameter + "}\n"));
+                        break;
+                    case NO_LOWER_THAN:
+                        e = doc.createElement("if");
+                        e.setAttribute("test", filter.parameter + " != null");
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.getColumnRef() + " >= #{" + filter.parameter + "}\n"));
+                        break;
+                    case GREATER_THAN:
+                        e = doc.createElement("if");
+                        e.setAttribute("test", filter.parameter + " != null");
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.getColumnRef() + " > #{" + filter.parameter + "}\n"));
+                        break;
+                    case NO_GREATER_THAN:
+                        e = doc.createElement("if");
+                        e.setAttribute("test", filter.parameter + " != null");
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.getColumnRef() + " <= #{" + filter.parameter + "}\n"));
                         break;
                     case IS_NULL:
                         e = doc.createElement("if");
@@ -570,6 +612,20 @@ class DDataMapBuilder {
                 offsetElt.appendChild(doc.createTextNode("OFFSET #{" + offset.parameter + "}\n"));
             });
         });
+    }
+
+    private void addOrder(VariableElement order, List<MappedTable> tablesInSelect, org.w3c.dom.Element dynSql) {
+        org.w3c.dom.Element ifElt = (org.w3c.dom.Element)
+                dynSql.appendChild(dynSql.getOwnerDocument().createElement("if"));
+        ifElt.setAttribute("test", order.getSimpleName() + " != null");
+        ifElt.appendChild(dynSql.getOwnerDocument().createTextNode("\nORDER BY "));
+        org.w3c.dom.Element forElt = (org.w3c.dom.Element)
+                ifElt.appendChild(dynSql.getOwnerDocument().createElement("foreach"));
+        forElt.setAttribute("item", "item");
+        forElt.setAttribute("index", "index");
+        forElt.setAttribute("collection", order.getSimpleName() + ".order");
+        forElt.setAttribute("separator", ", ");
+        forElt.appendChild(dynSql.getOwnerDocument().createTextNode("${item.attribute.columnName} ${item.order}"));
     }
 
     private void addJoins(Collection<MappedTable> joins, StringBuilder sql) {
@@ -809,7 +865,7 @@ class DDataMapBuilder {
 
         select.setAttribute("parameterType", bean.keyType);
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.DELETE);
-        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, false);
+        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
     private void createSimpleUpdate(org.w3c.dom.Element mapperRoot, DataRepositoryBuilder repository, FetchOptions fetchOptions) {
@@ -821,7 +877,7 @@ class DDataMapBuilder {
 
         select.setAttribute("parameterType", bean.getImplementationName());
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.UPDATE);
-        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, false);
+        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
     private void createSimpleInsert(org.w3c.dom.Element mapperRoot, DataRepositoryBuilder repository, FetchOptions fetchOptions) {
@@ -833,7 +889,7 @@ class DDataMapBuilder {
 
         select.setAttribute("parameterType", bean.getImplementationName());
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.INSERT);
-        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, false);
+        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
     private void createSimpleGet(org.w3c.dom.Element mapperRoot, DataRepositoryBuilder repository, FetchOptions fetchOptions) {
@@ -858,7 +914,7 @@ class DDataMapBuilder {
 
         select.setAttribute("parameterType", bean.keyType);
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.GET);
-        buildSql(repository, method, bean, fetchOptions, mappedTables, select, null, true);
+        buildSql(repository, method, bean, fetchOptions, mappedTables, select, null, null, true);
     }
 
     private class FilterOption {
@@ -922,7 +978,7 @@ class DDataMapBuilder {
                         ))
                         .orElse(DDataFilterOption.EQUALS);
             } else {
-                option = DDataFilterOption.EQUALS;
+                option = null;
                 property = null;
                 mappedBy = null;
             }

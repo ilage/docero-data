@@ -3,6 +3,8 @@ package org.docero.data;
 public enum DDataFilterOption {
     START, LIMIT,
     EQUALS, NOT_EQUALS,
+    LOWER_THAN, GREATER_THAN,
+    NO_LOWER_THAN, NO_GREATER_THAN,
     IS_NULL, NOT_IS_NULL, IN,
     LIKE, LIKE_HAS, LIKE_STARTS, LIKE_ENDS, LIKE_ALL_STARTS, LIKE_ALL_HAS,
     ILIKE;

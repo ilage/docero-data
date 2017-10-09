@@ -42,7 +42,7 @@ class DataBeanBuilder {
         interfaceType = (beanElement.asType());
         TypeMirror voidType = builder.environment.getElementUtils().getTypeElement("java.lang.Void").asType();
         for (Element elt : beanElement.getEnclosedElements())
-            if (elt.getKind() == ElementKind.METHOD) {
+            if (elt.getKind() == ElementKind.METHOD && !elt.getModifiers().contains(Modifier.DEFAULT)) {
                 DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this,
                         (ExecutableElement) elt, builder.environment, collectionType, mapType, voidType);
                 if (beanBuilder.type != voidType)
