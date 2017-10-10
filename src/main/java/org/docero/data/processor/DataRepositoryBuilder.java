@@ -72,7 +72,7 @@ class DataRepositoryBuilder {
 
         for (Element element : repositoryElement.getEnclosedElements())
             if (element.getKind() == ElementKind.METHOD) {
-                if (isCreatedByInterface ?
+                if (!element.getModifiers().contains(Modifier.STATIC) && isCreatedByInterface ?
                         !element.getModifiers().contains(Modifier.DEFAULT) :
                         element.getModifiers().contains(Modifier.ABSTRACT)) {
                     methods.add(new DDataMethodBuilder(this, (ExecutableElement) element));
@@ -134,7 +134,7 @@ class DataRepositoryBuilder {
 
             String beanPkg = forInterfaceName.toString();
             beanPkg = beanPkg.substring(0, beanPkg.lastIndexOf('.'));
-            if(!daoClassName.substring(0,daoClassName.lastIndexOf(".")).equals(beanPkg))
+            if (!daoClassName.substring(0, daoClassName.lastIndexOf(".")).equals(beanPkg))
                 cf.println("import " + beanPkg + ".*;");
 
             cf.startBlock("/*");

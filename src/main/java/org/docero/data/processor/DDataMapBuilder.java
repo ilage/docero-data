@@ -72,7 +72,7 @@ class DDataMapBuilder {
 
                 //System.out.println(repository.repositoryInterface + ":" + repositoryElement.getEnclosedElements());
                 for (Element methodElement : repositoryElement.getEnclosedElements())
-                    if (methodElement.getKind() == ElementKind.METHOD && repository.isCreatedByInterface ?
+                    if (methodElement.getKind() == ElementKind.METHOD && !methodElement.getModifiers().contains(Modifier.STATIC) && repository.isCreatedByInterface ?
                             !methodElement.getModifiers().contains(Modifier.DEFAULT) :
                             methodElement.getModifiers().contains(Modifier.ABSTRACT))
                         createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository);
