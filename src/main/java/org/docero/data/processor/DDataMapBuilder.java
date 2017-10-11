@@ -357,7 +357,7 @@ class DDataMapBuilder {
                                             .collect(Collectors.joining(" AND ")) +
                                     "\n"));
                         } else
-                            addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, true);
+                            addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, order, true);
                     } else {
                         addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
                         StringBuilder ssql;
@@ -409,22 +409,22 @@ class DDataMapBuilder {
                         domElement.appendChild(doc.createTextNode(sql.toString()));
 
                         StringBuilder ssql = new StringBuilder();
-                        addFiltersToSql(domElement, ssql, bean, method, mappedTables, filters, false);
+                        addFiltersToSql(domElement, ssql, bean, method, mappedTables, filters, order, false);
                         ssql.append("\n) AS t0\n");
                         addJoins(mappedTables.stream()
                                 .filter(MappedTable::useInFieldsList)
                                 .collect(Collectors.toList()), ssql);
                         domElement.appendChild(doc.createTextNode(ssql.toString()));
-                    } else if (filters != null && filters.size() > 0)
-                        addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, true);
-                    else {
+                    } else if (filters != null && filters.size() > 0) {
+                        addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, order, true);
+                    } else {
                         addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
                         domElement.appendChild(doc.createTextNode(sql.toString()));
+                        if (order != null)
+                            addOrder(order, mappedTables.stream()
+                                    .filter(MappedTable::useInFieldsList)
+                                    .collect(Collectors.toList()), domElement);
                     }
-                    if (order != null)
-                        addOrder(order, mappedTables.stream()
-                                .filter(MappedTable::useInFieldsList)
-                                .collect(Collectors.toList()), domElement);
             }
         }
     }
@@ -454,6 +454,7 @@ class DDataMapBuilder {
             DDataMethodBuilder method,
             List<MappedTable> mappedTables,
             ArrayList<FilterOption> filters,
+            VariableElement order,
             boolean addJoins
     ) {
         Document doc = domElement.getOwnerDocument();
@@ -516,11 +517,20 @@ class DDataMapBuilder {
                         break;
                     case IS_NULL:
                         e = doc.createElement("if");
-                        e.setAttribute("test", filter.parameter + " == TRUE");
-                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                        e.setAttribute("test", filter.parameter + " != null");
+
+                        org.w3c.dom.Element e_c = (org.w3c.dom.Element)
+                                e.appendChild(doc.createElement("choose"));
+
+                        org.w3c.dom.Element e_w = (org.w3c.dom.Element)
+                                e_c.appendChild(doc.createElement("when"));
+                        e_w.setAttribute("test", filter.parameter + " == TRUE");
+                        e_w.appendChild(doc.createTextNode("AND t" + tIdx + "." +
                                 filter.property.getColumnRef() + " IS NULL\n"));
-                        e.setAttribute("test", filter.parameter + " == FALSE");
-                        e.appendChild(doc.createTextNode("AND NOT t" + tIdx + "." +
+
+                        org.w3c.dom.Element e_o = (org.w3c.dom.Element)
+                                e_c.appendChild(doc.createElement("otherwise"));
+                        e_o.appendChild(doc.createTextNode("AND NOT t" + tIdx + "." +
                                 filter.property.getColumnRef() + " IS NULL\n"));
                         break;
                     case IN:
@@ -599,6 +609,11 @@ class DDataMapBuilder {
             domElement.appendChild(doc.createTextNode(sql.toString()));
             where.forEach(domElement::appendChild);
         }
+
+        if (order != null)
+            addOrder(order, mappedTables.stream()
+                    .filter(MappedTable::useInFieldsList)
+                    .collect(Collectors.toList()), domElement);
 
         filters.stream().filter(f -> f.option == DDataFilterOption.LIMIT).findAny().ifPresent(limit -> {
             org.w3c.dom.Element limitElt = (org.w3c.dom.Element)
