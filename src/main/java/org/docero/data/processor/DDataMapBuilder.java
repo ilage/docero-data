@@ -534,8 +534,18 @@ class DDataMapBuilder {
                                 filter.property.getColumnRef() + " IS NULL\n"));
                         break;
                     case IN:
-                        e = null;
-                        //TODO
+                        e = doc.createElement("if");
+                        e.setAttribute("test", filter.parameter + " != null");
+                        org.w3c.dom.Element e_in = (org.w3c.dom.Element)
+                                e.appendChild(doc.createElement("foreach"));
+                        e_in.setAttribute("item", "item");
+                        e_in.setAttribute("index", "index");
+                        e_in.setAttribute("collection", filter.parameter);
+                        e_in.setAttribute("open",
+                                "AND t" + tIdx + "." + filter.property.getColumnRef() + " IN (");
+                        e_in.setAttribute("close", ")");
+                        e_in.setAttribute("separator", ",");
+                        e_in.appendChild(doc.createTextNode("#{item}"));
                         break;
                     case LIKE:
                     case LIKE_HAS:
