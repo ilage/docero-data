@@ -312,6 +312,28 @@ class DDataMapBuilder {
                                         .orElse("")
                                 ).orElse(""));
                     }
+                    bean.properties.values().stream()
+                            .filter(DataBeanPropertyBuilder::isGenerated)
+                            .forEach(prop ->
+                            {
+                                org.w3c.dom.Element sk = (org.w3c.dom.Element)
+                                        domElement.appendChild(doc.createElement("selectKey"));
+                                sk.setAttribute("keyProperty", prop.columnName);
+                                sk.setAttribute("resultType", prop.type.toString());
+                                sk.setAttribute("statementType", "PREPARED");
+                                switch (prop.generatedStrategy) {
+                                    case SEQUENCE:
+                                        sk.setAttribute("order", "BEFORE");
+                                        sk.appendChild(doc.createTextNode("SELECT nextval('" +
+                                                prop.generatedValue + "');"));
+                                        break;
+                                    case SELECT:
+                                        sk.setAttribute("order", prop.generatedBefore ? "BEFORE" : "AFTER");
+                                        sk.appendChild(doc.createTextNode(prop.generatedValue));
+                                        break;
+                                    default:
+                                }
+                            });
                     sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
                     sql.append(bean.properties.values().stream()
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
@@ -330,6 +352,7 @@ class DDataMapBuilder {
                 case UPDATE:
                     sql.append("\nUPDATE ").append(bean.getTableRef()).append(" AS t0 SET\n");
                     sql.append(bean.properties.values().stream()
+                            .filter(DataBeanPropertyBuilder::notId)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                             .filter(this::notManagedBean)
                             .map(p -> p.getColumnRef() + " = " + buildSqlParameter(bean, p))

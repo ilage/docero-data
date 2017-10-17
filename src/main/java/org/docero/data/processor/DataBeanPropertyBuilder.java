@@ -1,6 +1,8 @@
 package org.docero.data.processor;
 
 import org.docero.data.DDataProperty;
+import org.docero.data.GeneratedValue;
+import org.docero.data.GenerationType;
 
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.ExecutableElement;
@@ -24,6 +26,9 @@ class DataBeanPropertyBuilder {
     final TypeMirror mappedType;
     final boolean isVersionFrom;
     final boolean isVersionTo;
+    final GenerationType generatedStrategy;
+    final String generatedValue;
+    final boolean generatedBefore;
 
     DataBeanPropertyBuilder(
             DataBeanBuilder bean, DDataProperty ddProperty, ExecutableElement method,
@@ -31,6 +36,19 @@ class DataBeanPropertyBuilder {
             TypeMirror collectionType, TypeMirror mapType, TypeMirror voidType
     ) {
         this.dataBean = bean;
+        GeneratedValue genVal = method.getAnnotation(GeneratedValue.class);
+        if (genVal != null) {
+            this.generatedStrategy = genVal.strategy();
+            if (genVal.value().length() == 0)
+                this.generatedValue = genVal.generator();
+            else
+                this.generatedValue = genVal.value();
+            generatedBefore = genVal.before();
+        } else {
+            this.generatedStrategy = null;
+            this.generatedValue = null;
+            this.generatedBefore = true;
+        }
         String sn = method.getSimpleName().toString();
         if (sn.startsWith("get") || sn.startsWith("has")) {
             name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);
@@ -163,4 +181,12 @@ class DataBeanPropertyBuilder {
     String getColumnRef() {
         return columnName == null ? null : "\"" + columnName + "\"";
     }
+
+    boolean notId() {
+        return !isId;
+    }
+
+    boolean isGenerated() { return generatedStrategy!=null; }
+
+    boolean notGenerated() { return generatedStrategy==null; }
 }

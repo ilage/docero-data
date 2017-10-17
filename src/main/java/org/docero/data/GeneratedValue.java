@@ -8,4 +8,13 @@ public @interface GeneratedValue {
      * @return value
      */
     String generator() default "";
+    /**
+     * If set to FALSE, it runs the insert statement and then
+     * the selectKey statement – which is common with databases
+     * like Oracle that may have embedded sequence calls
+     * inside of insert statements.
+     *
+     * @return do generation before insert
+     */
+    boolean before() default true;
 }
