@@ -804,7 +804,7 @@ class DDataMapBuilder {
             lazy = fetchOptions.fetchType == DDataFetchType.LAZY;
         }
 
-        if (lazy || trunkLevel == -2) {
+        if (mapping != null && (lazy || trunkLevel == -2)) {
             managed.setAttribute("column", mapping.properties.stream()
                     .map(p -> p.columnName)
                     .collect(Collectors.joining(",")));

@@ -26,12 +26,11 @@ class DataBeanPropertyBuilder {
     final boolean isVersionTo;
 
     DataBeanPropertyBuilder(
-            DataBeanBuilder bean, ExecutableElement method,
+            DataBeanBuilder bean, DDataProperty ddProperty, ExecutableElement method,
             ProcessingEnvironment environment,
             TypeMirror collectionType, TypeMirror mapType, TypeMirror voidType
     ) {
         this.dataBean = bean;
-        DDataProperty ddProperty = method.getAnnotation(DDataProperty.class);
         String sn = method.getSimpleName().toString();
         if (sn.startsWith("get") || sn.startsWith("has")) {
             name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);

@@ -1,6 +1,7 @@
 package org.docero.data.processor;
 
 import org.docero.data.DDataBean;
+import org.docero.data.DDataProperty;
 import org.docero.data.DictionaryType;
 import org.docero.data.TableGrowType;
 
@@ -41,16 +42,33 @@ class DataBeanBuilder {
         dictionary = (ddBean.dictionary());
         interfaceType = (beanElement.asType());
         TypeMirror voidType = builder.environment.getElementUtils().getTypeElement("java.lang.Void").asType();
+
         for (Element elt : beanElement.getEnclosedElements())
             if (elt.getKind() == ElementKind.METHOD &&
                     !elt.getModifiers().contains(Modifier.DEFAULT) &&
                     !elt.getModifiers().contains(Modifier.STATIC)
                     ) {
-                DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this,
+                DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
+                DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this, ddProperty,
                         (ExecutableElement) elt, builder.environment, collectionType, mapType, voidType);
                 if (beanBuilder.type != voidType)
                     properties.put(beanBuilder.enumName, beanBuilder);
             }
+
+        for (Element elt : builder.environment.getElementUtils().getAllMembers((TypeElement) beanElement))
+            if (elt.getKind() == ElementKind.METHOD &&
+                    !elt.getModifiers().contains(Modifier.DEFAULT) &&
+                    !elt.getModifiers().contains(Modifier.STATIC)
+                    ) {
+                DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
+                if (ddProperty != null) {
+                    DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this, ddProperty,
+                            (ExecutableElement) elt, builder.environment, collectionType, mapType, voidType);
+                    if (!properties.containsKey(beanBuilder.enumName) && beanBuilder.type != voidType)
+                        properties.put(beanBuilder.enumName, beanBuilder);
+                }
+            }
+
         this.collectionType = collectionType;
         List<DataBeanPropertyBuilder> ids = properties.values().stream()
                 .filter(p -> p.isId)
