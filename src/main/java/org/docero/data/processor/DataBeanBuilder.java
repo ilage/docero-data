@@ -190,9 +190,17 @@ class DataBeanBuilder {
 
             cf.println("");
             cf.startBlock("public boolean equals(Object o) {");
-            cf.println("return o!=null && o instanceof " + this.getImplementationName() +
-                    " && getDDataBeanKey_().equals(((" + this.getImplementationName() +
-                    ")o).getDDataBeanKey_());");
+            cf.println("return o!=null && o instanceof " + interfaceType + " && " +
+                    properties.values().stream()
+                            .filter(DataBeanPropertyBuilder::isId)
+                            .map(p -> {
+                                String propertyGetter = "((" + interfaceType + ")o).get" +
+                                        Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) + "()";
+                                if (p.type.getKind().isPrimitive()) return p.name + "==" + propertyGetter;
+                                else return "((" + p.name + "==null && " + propertyGetter + "==null )||(" +
+                                        p.name + "!=null && " + p.name + ".equals(" + propertyGetter + ")" + "))";
+                            }).collect(Collectors.joining(" && ")) +
+                    ";");
             cf.endBlock("}");
 
             cf.endBlock("}");
