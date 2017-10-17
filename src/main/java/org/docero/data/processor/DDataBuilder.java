@@ -87,18 +87,52 @@ class DDataBuilder {
             cf.println("return null;");
             cf.endBlock("}");
 
-            cf.println("");
-            cf.startBlock("private static Class<?>[] implementations = " +
+            /*cf.println("");
+            cf.startBlock("public static final Class<?>[] implementations = " +
                     "new Class<?>[] {");
             cf.println(
                     repositoriesByBean.values().stream()
-                            .map(r -> r.beanImplementation+".class")
+                            .map(r -> r.beanImplementation + ".class")
                             .collect(Collectors.joining(",\n\t\t"))
             );
-            cf.endBlock("};");
-            cf.startBlock("public static Class<?>[] beansImplementations() {");
-            cf.println("return implementations;");
-            cf.endBlock("}");
+            cf.endBlock("};");*/
+
+            cf.println("");
+            cf.startBlock("public static final java.util.Map<Class<?>,Class<?>> implementations = " +
+                    "new java.util.HashMap<Class<?>,Class<?>>() {{");
+            for (String interfaceName : beansByInterface.keySet()) {
+                cf.println("this.put(" +
+                        interfaceName + ".class," +
+                        beansByInterface.get(interfaceName).getImplementationName() + ".class);");
+            }
+            cf.endBlock("}};");
+
+            if (environment.getElementUtils().getTypeElement("com.fasterxml.jackson.databind.JsonDeserializer") != null) {
+                cf.println("");
+                cf.startBlock("/**");
+                cf.println("simple usage: DData.deserializers.forEach(builder::deserializerByType);");
+                cf.println("<p>where builder is org.springframework.http.converter.json.Jackson2ObjectMapperBuilder</p>");
+                cf.endBlock("*/");
+                cf.startBlock("public static final java.util.Map<Class<?>,com.fasterxml.jackson.databind.JsonDeserializer<?>> deserializers = " +
+                        "new java.util.HashMap<Class<?>,com.fasterxml.jackson.databind.JsonDeserializer<?>>() {{");
+
+                for (String interfaceName : beansByInterface.keySet()) {
+                    cf.startBlock("this.put(" +
+                            interfaceName + ".class, new com.fasterxml.jackson.databind.JsonDeserializer<" +
+                            interfaceName + ">() {");
+                    cf.println("@Override");
+                    cf.startBlock("public " + interfaceName + " deserialize(com.fasterxml.jackson.core.JsonParser p, " +
+                            "com.fasterxml.jackson.databind.DeserializationContext ctxt) throws " +
+                            "java.io.IOException, com.fasterxml.jackson.core.JsonProcessingException {");
+                    cf.println("return ctxt.readValue(p, " +
+                            beansByInterface.get(interfaceName).getImplementationName() +
+                            ".class);");
+                    cf.endBlock("}");
+                    cf.endBlock("});");
+                }
+
+                cf.endBlock("}};");
+            }
 
             cf.endBlock("}");
         }
