@@ -869,7 +869,9 @@ class DDataMapBuilder {
 
         if (mapping != null && (lazy || trunkLevel == -2)) {
             managed.setAttribute("column", mapping.properties.stream()
-                    .map(p -> p.columnName)
+                    .map(p -> (mappedTable.mappedFromTableIndex == 0 ? "" :
+                            "t" + mappedTable.mappedFromTableIndex + "_") +
+                            p.columnName)
                     .collect(Collectors.joining(",")));
             managed.setAttribute("foreignColumn", mapping.mappedProperties.stream()
                     .map(p -> p.columnName)
