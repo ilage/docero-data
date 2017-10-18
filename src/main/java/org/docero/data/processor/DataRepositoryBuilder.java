@@ -81,10 +81,11 @@ class DataRepositoryBuilder {
         defaultGetMethod = methods.stream().filter(m ->
                 "get".equals(m.methodName) &&
                         m.parameters.size() == (versionalType == null ? 1 : 2) &&
-                        m.parameters.get(0).type == idClass)
+                        rootBuilder.environment.getTypeUtils().isSameType(m.parameters.get(0).type, idClass))
                 .findAny().orElse(null);
         defaultDeleteMethod = methods.stream().filter(m ->
-                "delete".equals(m.methodName) && m.parameters.size() == 1 && m.parameters.get(0).type == idClass)
+                "delete".equals(m.methodName) && m.parameters.size() == 1 &&
+                        rootBuilder.environment.getTypeUtils().isSameType(m.parameters.get(0).type, idClass))
                 .findAny().orElse(null);
         hasInsert = methods.stream().anyMatch(m -> "insert".equals(m.methodName));
         hasUpdate = methods.stream().anyMatch(m -> "update".equals(m.methodName));
@@ -225,7 +226,13 @@ class DataRepositoryBuilder {
             cf.startBlock("public @interface " + annotName + " {");
 
             cf.startBlock("/**");
-            cf.println("Load mapped entities in single select, default DDataFetchType.COLLECTIONS_ARE_LAZY");
+            cf.println("Load mapped entities in single select<br>");
+            cf.println("DDataFetchType.NO - truncate any association and collection attributes from loads " +
+                    "(like a eagerTrunkLevel=0 with truncateMapped=true)<br>");
+            cf.println("DDataFetchType.LAZY - do lazy loads <br>");
+            cf.println("DDataFetchType.EAGER - do eager loads up to eagerTrunkLevel<br>");
+            cf.println("DDataFetchType.COLLECTIONS_ARE_LAZY - do eager load for associations and lazy for collections<br>");
+            cf.println("default DDataFetchType.COLLECTIONS_ARE_LAZY<br>");
             cf.println("@return load type of mapped entities");
             cf.endBlock("*/");
             cf.println("DDataFetchType value() default DDataFetchType.COLLECTIONS_ARE_LAZY;");
@@ -250,14 +257,21 @@ class DataRepositoryBuilder {
             cf.println(forInterfaceName + "_[] ignore() default " + forInterfaceName + "_.NONE_;");
 
             cf.startBlock("/**");
-            cf.println("Truncate EAGER loaded beans associations and collections attributes<br>");
-            cf.println("0 - deny all associations and collections attributes in eager loaded beans<br>");
+            cf.println("Level for EAGER loaded beans associations and collections attributes<br>");
+            cf.println("0 - load all lazy<br>");
             cf.println("1 - provide eager load of associations and collections attributes in first level of eager loaded beans, " +
-                    "and deny all for 2-nd level<br>");
-            cf.println("default -1 - lazy load of associations and collections attributes in eager loaded beans");
+                    "and lazy for 2-nd level<br>");
+            cf.println("default 1");
             cf.println("@return eager loads truncation");
             cf.endBlock("*/");
             cf.println("int eagerTrunkLevel() default -1;");
+
+            cf.startBlock("/**");
+            cf.println("Truncate LAZY loaded beans associations and collections attributes<br>");
+            cf.println("default false");
+            cf.println("@return do truncation for mapped beans from eagerTrunkLevel");
+            cf.endBlock("*/");
+            cf.println("boolean truncateLazy() default false;");
 
             cf.endBlock("}");
         }

@@ -112,7 +112,21 @@ class DDataMethodBuilder {
                 repositoryBuilder.defaultGetMethod == this ? "" : "_" + methodIndex) + "\"");
 
         if (parameters.size() > 0) {
-            if (parameters.size() == 1 && parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
+            DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
+            if (bean.isKeyComposite && parameters.size() == 1 && (
+                    repositoryBuilder.defaultGetMethod == this || repositoryBuilder.defaultDeleteMethod == this
+            )) {
+                cf.startBlock(", ");
+                cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
+                for (DataBeanPropertyBuilder property : bean.properties.values())
+                    if (property.isId) {
+                        cf.println("this.put(\"" + property.name + "\", " + parameters.get(0).name + ".get" +
+                                Character.toUpperCase(property.name.charAt(0)) +
+                                property.name.substring(1) + "());");
+                    }
+                cf.endBlock("}}");
+                cf.endBlock(");");
+            } else if (parameters.size() == 1 && parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
                 cf.println(", " + parameters.get(0).name + ");");
             } else {
                 cf.startBlock(", ");

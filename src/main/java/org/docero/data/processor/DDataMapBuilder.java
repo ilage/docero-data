@@ -157,14 +157,16 @@ class DDataMapBuilder {
                         (m.returnType == null && returnType == null) ||
                                 (m.returnType != null && m.returnType.toString().equals(returnType.toString()))
                 ) &&
-                        m.parameters.size() == methodElement.getParameters().size() &&
+                        m.parameters.size() == methodElement.getParameters().size()/* &&
                         m.parameters.stream()
                                 .map(p -> environment.getTypeUtils().erasure(p.type).toString())
+                                .map(p -> p.lastIndexOf('.') > 0 ? p.substring(p.lastIndexOf('.')) : p)
                                 .collect(Collectors.joining("|")).equals(
                                 methodElement.getParameters().stream()
                                         .map(p -> environment.getTypeUtils().erasure(p.asType()).toString())
+                                        .map(p -> p.lastIndexOf('.') > 0 ? p.substring(p.lastIndexOf('.')) : p)
                                         .collect(Collectors.joining("|"))
-                        )
+                        )*/
         ).findAny();
 
         if (methodOpt.isPresent()) {
@@ -191,7 +193,8 @@ class DDataMapBuilder {
             CopyOnWriteArrayList<MappedTable> mappedTables = new CopyOnWriteArrayList<>(bean.properties.values().stream()
                     .map(p -> {
                         DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
-                        return b == null ? null : new MappedTable(0, index.incrementAndGet(), p, b, fetchOptions);
+                        return b == null ? null :
+                                new MappedTable(0, index.incrementAndGet(), p, b, fetchOptions, filters);
                     })
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList()));
@@ -203,7 +206,7 @@ class DDataMapBuilder {
                 case SELECT:
                 case GET:
                     if (fetchOptions.resultMap.length() == 0 && !method.returnSimpleType)
-                        buildResultMap(mapperRoot, method.repositoryBuilder, methodName, fetchOptions, mappedTables);
+                        buildResultMap(mapperRoot, method.repositoryBuilder, methodName, fetchOptions, mappedTables, filters);
 
                     org.w3c.dom.Element select = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("select"));
@@ -240,8 +243,9 @@ class DDataMapBuilder {
                     delete.setAttribute("parameterType", "HashMap");
                     buildSql(repository, method, bean, fetchOptions, mappedTables, delete, filters, order, false);
             }
-        } else throw new Exception("not found info about method '" + methodElement.getSimpleName() +
-                " of " + repository.repositoryInterface);
+        } else
+            throw new Exception("not found info about method '" + methodElement.getSimpleName() +
+                    " of " + repository.repositoryInterface);
     }
 
     private void buildSql(
@@ -382,7 +386,7 @@ class DDataMapBuilder {
                         } else
                             addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, order, true);
                     } else {
-                        addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
+                        addJoins(mappedTables, sql);
                         StringBuilder ssql;
                         if (defaultGet || method == repository.defaultGetMethod) {
                             buildSelect4DefaultGet(domElement, sql);
@@ -434,14 +438,12 @@ class DDataMapBuilder {
                         StringBuilder ssql = new StringBuilder();
                         addFiltersToSql(domElement, ssql, bean, method, mappedTables, filters, order, false);
                         ssql.append("\n) AS t0\n");
-                        addJoins(mappedTables.stream()
-                                .filter(MappedTable::useInFieldsList)
-                                .collect(Collectors.toList()), ssql);
+                        addJoins(mappedTables, ssql);
                         domElement.appendChild(doc.createTextNode(ssql.toString()));
                     } else if (filters != null && filters.size() > 0) {
                         addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, order, true);
                     } else {
-                        addJoins(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()), sql);
+                        addJoins(mappedTables, sql);
                         domElement.appendChild(doc.createTextNode(sql.toString()));
                         if (order != null)
                             addOrder(order, mappedTables.stream()
@@ -634,7 +636,7 @@ class DDataMapBuilder {
             elt.appendChild(ex.element);
             where.add(elt);
         });
-        if (addJoins) addJoins(joins, sql);
+        if (addJoins) addJoins(mappedTables, sql);
 
         if (method.methodType == DDataMethodBuilder.MType.SELECT) {
             domElement.appendChild(doc.createTextNode(sql.toString()));
@@ -696,10 +698,11 @@ class DDataMapBuilder {
 
     private void addJoins(Collection<MappedTable> joins, StringBuilder sql) {
         joins.stream()
-                .filter(t -> t.useInFieldsList)
+                .filter(t -> t.useInFieldsList || t.useInFilters)
                 .sorted(Comparator.comparingInt(t -> t.tableIndex))
                 .forEach(join -> {
-                    Mapping joinMap = builder.mappings.get(join.property.dataBean.interfaceType.toString() + "." + join.property.name);
+                    Mapping joinMap = builder.mappings.get(
+                            join.property.dataBean.interfaceType.toString() + "." + join.property.name);
                     sql.append("LEFT JOIN ")
                             .append(join.mappedBean.getTableRef())
                             .append(" AS t").append(join.tableIndex)
@@ -793,7 +796,9 @@ class DDataMapBuilder {
             org.w3c.dom.Element mapperRoot,
             DataRepositoryBuilder repository, String methodName,
             FetchOptions fetchOptions,
-            CopyOnWriteArrayList<MappedTable> mappedTables) {
+            CopyOnWriteArrayList<MappedTable> mappedTables,
+            ArrayList<FilterOption> filters
+    ) {
         Document doc = mapperRoot.getOwnerDocument();
         org.w3c.dom.Element map = (org.w3c.dom.Element)
                 mapperRoot.appendChild(doc.createElement("resultMap"));
@@ -808,12 +813,16 @@ class DDataMapBuilder {
                 .filter(b -> fetchOptions.filter4ResultMap(b.property))
                 .filter(b -> !b.property.isCollectionOrMap())
                 .forEach(b ->
-                        addManagedBeanToResultMap(map, b, fetchOptions, repository, mappedTables, fetchOptions.eagerTrunkLevel));
+                        addManagedBeanToResultMap(map, b,
+                                fetchOptions, repository, mappedTables,
+                                fetchOptions.eagerTrunkLevel, filters));
         mappedTables.stream()
                 .filter(b -> fetchOptions.filter4ResultMap(b.property))
                 .filter(b -> b.property.isCollectionOrMap())
                 .forEach(b ->
-                        addManagedBeanToResultMap(map, b, fetchOptions, repository, mappedTables, fetchOptions.eagerTrunkLevel));
+                        addManagedBeanToResultMap(map, b,
+                                fetchOptions, repository, mappedTables,
+                                fetchOptions.eagerTrunkLevel, filters));
     }
 
     private void addPropertiesToResultMap(
@@ -848,7 +857,8 @@ class DDataMapBuilder {
             FetchOptions fetchOptions,
             DataRepositoryBuilder repository,
             List<MappedTable> mappedTables,
-            int trunkLevel
+            int trunkLevel,
+            List<FilterOption> filters
     ) {
         Document doc = map.getOwnerDocument();
         org.w3c.dom.Element managed = (org.w3c.dom.Element) map.appendChild(doc.createElement(
@@ -867,47 +877,54 @@ class DDataMapBuilder {
             lazy = fetchOptions.fetchType == DDataFetchType.LAZY;
         }
 
-        if (mapping != null && (lazy || trunkLevel == -2)) {
-            managed.setAttribute("column", mapping.properties.stream()
-                    .map(p -> (mappedTable.mappedFromTableIndex == 0 ? "" :
+        if (mapping != null && (lazy || trunkLevel < 1)) {
+            if (!fetchOptions.truncateLazy) {
+                if (mapping.properties.size() == 1) {
+                    managed.setAttribute("column", (mappedTable.mappedFromTableIndex == 0 ? "" :
                             "t" + mappedTable.mappedFromTableIndex + "_") +
-                            p.columnName)
-                    .collect(Collectors.joining(",")));
-            managed.setAttribute("foreignColumn", mapping.mappedProperties.stream()
-                    .map(p -> p.columnName)
-                    .collect(Collectors.joining(",")));
+                            mapping.properties.get(0).columnName);
+                    managed.setAttribute("foreignColumn", mapping.mappedProperties.get(0).columnName);
+                } else {
+                    managed.setAttribute("column", "{" + mapping.properties.stream()
+                            .map(p -> p.columnName + "=" + (mappedTable.mappedFromTableIndex == 0 ? "" :
+                                    "t" + mappedTable.mappedFromTableIndex + "_") +
+                                    p.columnName)
+                            .collect(Collectors.joining(",")) +
+                            "}");
+                    managed.setAttribute("foreignColumn", mapping.mappedProperties.stream()
+                            .map(p -> p.columnName + "=" + p.columnName)
+                            .collect(Collectors.joining(",")));
+                }
+                managed.setAttribute("fetchType", "lazy");
 
-            managed.setAttribute("fetchType", "lazy");
+                DataBeanBuilder mappedBean = mapping.mappedProperties.get(0).dataBean;
+                String lazyLoadSelectId = "lazy_load_" + mappedBean.name +
+                        "_" + mapping.mappedProperties.get(0).columnName;
+                managed.setAttribute("select", lazyLoadSelectId);
+                if (!repository.lazyLoads.containsKey(lazyLoadSelectId)) {
+                    DataRepositoryBuilder beanRep =
+                            builder.repositoriesByBean.get(mappedBean.interfaceType.toString());
+                    org.w3c.dom.Element ll = doc.createElement("select");
+                    ll.setAttribute("id", lazyLoadSelectId);
+                    ll.setAttribute("resultMap", repository == beanRep ?
+                            "get_ResultMap" : beanRep.mappingClassName + ".get_ResultMap");
+                    org.w3c.dom.Element il = (org.w3c.dom.Element)
+                            ll.appendChild(doc.createElement("include"));
+                    il.setAttribute("refid", repository == beanRep ?
+                            "get_select" : beanRep.mappingClassName + ".get_select");
+                    ll.appendChild(doc.createTextNode("\nWHERE " +
+                            mapping.stream().map(m -> {
+                                TypeMirror propType = m.manyToOne ?
+                                        m.properties.get(0).type : m.mappedProperties.get(0).type;
+                                return "t0." +
+                                        m.mappedProperties.get(0).getColumnRef() + " = " +
+                                        "#{" + m.properties.get(0).columnName +
+                                        jdbcTypeFor(propType, environment) + "}";
+                            }).collect(Collectors.joining(" AND ")) +
+                            "\n"));
 
-            DataBeanBuilder mappedBean = mapping.mappedProperties.get(0).dataBean;
-            String lazyLoadSelectId = "lazy_load_" + mappedBean.name +
-                    "_" + mapping.mappedProperties.get(0).columnName;
-            managed.setAttribute("select", lazyLoadSelectId);
-            if (!repository.lazyLoads.containsKey(lazyLoadSelectId)) {
-                DataRepositoryBuilder beanRep =
-                        builder.repositoriesByBean.get(mappedBean.interfaceType.toString());
-                org.w3c.dom.Element ll = doc.createElement("select");
-                ll.setAttribute("id", lazyLoadSelectId);
-                ll.setAttribute("resultMap", repository == beanRep ?
-                        "get_ResultMap" : beanRep.mappingClassName + ".get_ResultMap");
-                org.w3c.dom.Element il = (org.w3c.dom.Element)
-                        ll.appendChild(doc.createElement("include"));
-                il.setAttribute("refid", repository == beanRep ?
-                        "get_select" : beanRep.mappingClassName + ".get_select");
-                ll.appendChild(doc.createTextNode("\nWHERE " +
-                        mapping.stream().map(m -> {
-                            TypeMirror propType = m.manyToOne ?
-                                    m.properties.get(0).type : mapping.mappedProperties.get(0).type;
-                            return "t0." +
-                                    m.mappedProperties.get(0).getColumnRef() + " = " +
-                                    "#{" + m.properties.get(0).columnName +
-                                    ", javaType=" + (propType.getKind().isPrimitive() ?
-                                    environment.getTypeUtils().boxedClass((PrimitiveType) propType) : propType) +
-                                    jdbcTypeFor(propType, environment) + "}";
-                        }).collect(Collectors.joining(" AND ")) +
-                        "\n"));
-
-                repository.lazyLoads.put(lazyLoadSelectId, ll);
+                    repository.lazyLoads.put(lazyLoadSelectId, ll);
+                }
             }
         } else {
             addPropertiesToResultMap(managed, "t" + mappedTable.tableIndex + "_",
@@ -922,27 +939,36 @@ class DDataMapBuilder {
                         .filter(DataBeanPropertyBuilder::isSimple)
                         .forEach(mappedBean ->
                                 addManaged2BeanToResultMap(managed, mappedTable, mappedBean,
-                                        fetchOptions, repository, mappedTables, trunkLevel)
+                                        fetchOptions, repository, mappedTables, trunkLevel - 1, filters)
                         );
                 mappedBeans.stream()
                         .filter(DataBeanPropertyBuilder::isCollectionOrMap)
                         .forEach(mappedBean ->
                                 addManaged2BeanToResultMap(managed, mappedTable, mappedBean,
-                                        fetchOptions, repository, mappedTables, trunkLevel)
+                                        fetchOptions, repository, mappedTables, trunkLevel - 1, filters)
                         );
             }
         }
     }
 
-    private void addManaged2BeanToResultMap(org.w3c.dom.Element managed, MappedTable mappedTable, DataBeanPropertyBuilder mappedBean, FetchOptions fetchOptions, DataRepositoryBuilder repository, List<MappedTable> mappedTables, int trunkLevel) {
+    private void addManaged2BeanToResultMap(
+            org.w3c.dom.Element managed,
+            MappedTable mappedTable,
+            DataBeanPropertyBuilder mappedBean,
+            FetchOptions fetchOptions,
+            DataRepositoryBuilder repository,
+            List<MappedTable> mappedTables,
+            int trunkLevel,
+            List<FilterOption> filters
+    ) {
         DataBeanBuilder mapped2Bean = builder.beansByInterface.get(mappedBean.mappedType.toString());
         if (mapped2Bean != null) {
             MappedTable mapped2Table = new MappedTable(mappedTable.tableIndex, mappedTables.size() + 1,
-                    mappedBean, mapped2Bean, fetchOptions);
+                    mappedBean, mapped2Bean, fetchOptions, filters);
             mappedTables.add(mapped2Table);
 
             addManagedBeanToResultMap(managed, mapped2Table, fetchOptions, repository, mappedTables,
-                    trunkLevel == -1 ? -2 : trunkLevel - 1);
+                    trunkLevel == -1 ? -2 : trunkLevel - 1, filters);
         }
     }
 
@@ -988,14 +1014,14 @@ class DDataMapBuilder {
         CopyOnWriteArrayList<MappedTable> mappedTables = new CopyOnWriteArrayList<>(bean.properties.values().stream()
                 .map(p -> {
                     DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
-                    return b == null ? null : new MappedTable(0, index.incrementAndGet(), p, b, fetchOptions);
+                    return b == null ? null : new MappedTable(0, index.incrementAndGet(), p, b, fetchOptions, null);
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList()));
 
         Document doc = mapperRoot.getOwnerDocument();
 
-        buildResultMap(mapperRoot, repository, "get", fetchOptions, mappedTables);
+        buildResultMap(mapperRoot, repository, "get", fetchOptions, mappedTables, null);
 
         org.w3c.dom.Element select = (org.w3c.dom.Element)
                 mapperRoot.appendChild(doc.createElement("select"));
@@ -1083,6 +1109,7 @@ class DDataMapBuilder {
         final String resultMap;
         final List<DataBeanPropertyBuilder> ignore;
         final int eagerTrunkLevel;
+        final boolean truncateLazy;
 
         FetchOptions(DataRepositoryBuilder repository, AnnotationMirror fetchMirror) {
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName.toString());
@@ -1134,7 +1161,13 @@ class DDataMapBuilder {
                     .filter(k -> "eagerTrunkLevel".equals(k.getSimpleName().toString()))
                     .findAny()
                     .map(k -> Integer.parseInt(fetchProps.get(k).getValue().toString()))
-                    .orElse(-1);
+                    .orElse(1);
+
+            truncateLazy = fetchProps.keySet().stream()
+                    .filter(k -> "truncateLazy".equals(k.getSimpleName().toString()))
+                    .findAny()
+                    .map(k -> Boolean.parseBoolean(fetchProps.get(k).getValue().toString()))
+                    .orElse(false);
         }
 
         FetchOptions(int trunkLevel) {
@@ -1143,6 +1176,7 @@ class DDataMapBuilder {
             resultMap = "";
             ignore = Collections.emptyList();
             eagerTrunkLevel = trunkLevel;
+            truncateLazy = false;
         }
 
         boolean filterIgnored(DataBeanPropertyBuilder property) {
@@ -1176,17 +1210,31 @@ class DDataMapBuilder {
         final DataBeanPropertyBuilder property;
         final DataBeanBuilder mappedBean;
         final boolean useInFieldsList;
+        final boolean useInFilters;
 
-        MappedTable(int fromTableIndex, int tableIndex, DataBeanPropertyBuilder p, DataBeanBuilder b, FetchOptions fetchOptions) {
+        MappedTable(int fromTableIndex, int tableIndex,
+                    DataBeanPropertyBuilder p,
+                    DataBeanBuilder b,
+                    FetchOptions fetchOptions,
+                    List<FilterOption> filters
+        ) {
             this.tableIndex = tableIndex;
             this.mappedFromTableIndex = fromTableIndex;
             this.property = p;
             this.mappedBean = b;
             this.useInFieldsList = fetchOptions.filter4FieldsList(p);
+            this.useInFilters = fromTableIndex < 2 && filters != null && filters.stream()
+                    .anyMatch(f -> f.property != null && f.property.name.equals(p.name) &&
+                            f.property.dataBean.getImplementationName().equals(p.dataBean.getImplementationName())
+                    );
         }
 
         boolean useInFieldsList() {
             return useInFieldsList;
+        }
+
+        boolean useInFieldsListOrFilters() {
+            return useInFilters;
         }
     }
 
