@@ -501,42 +501,47 @@ class DDataMapBuilder {
                 int tIdx = table.map(mb -> mb.tableIndex).orElse(0);
                 MappedTable currentJoin = table.orElse(null);
 
+                String filterParameter = "#{" + filter.parameter + ", javaType=" + (filter.variableType.getKind().isPrimitive() ?
+                        environment.getTypeUtils().boxedClass((PrimitiveType) filter.variableType) :
+                        filter.variableType
+                ) + jdbcTypeFor(filter.variableType, environment) + "}";
+
                 switch (filter.option) {
                     case EQUALS:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " = #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " = " + filterParameter + "\n"));
                         break;
                     case NOT_EQUALS:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " != #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " != " + filterParameter + "\n"));
                         break;
                     case LOWER_THAN:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " < #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " < " + filterParameter + "\n"));
                         break;
                     case NO_LOWER_THAN:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " >= #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " >= " + filterParameter + "\n"));
                         break;
                     case GREATER_THAN:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " > #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " > " + filterParameter + "\n"));
                         break;
                     case NO_GREATER_THAN:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " <= #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " <= " + filterParameter + "\n"));
                         break;
                     case IS_NULL:
                         e = doc.createElement("if");
@@ -568,7 +573,10 @@ class DDataMapBuilder {
                                 "AND t" + tIdx + "." + filter.property.getColumnRef() + " IN (");
                         e_in.setAttribute("close", ")");
                         e_in.setAttribute("separator", ",");
-                        e_in.appendChild(doc.createTextNode("#{item}"));
+                        TypeMirror itemType = environment.getTypeUtils()
+                                .erasure(((DeclaredType) filter.variableType).getTypeArguments().get(0));
+                        e_in.appendChild(doc.createTextNode("#{item" + ", javaType=" +
+                                itemType + jdbcTypeFor(itemType, environment) + "}"));
                         break;
                     case LIKE:
                     case LIKE_HAS:
@@ -579,13 +587,13 @@ class DDataMapBuilder {
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " LIKE #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " LIKE " + filterParameter + "\n"));
                         break;
                     case ILIKE:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " ILIKE #{" + filter.parameter + "}\n"));
+                                filter.property.getColumnRef() + " ILIKE " + filterParameter + "\n"));
                     default:
                         e = null;
                 }
@@ -649,15 +657,25 @@ class DDataMapBuilder {
                     .collect(Collectors.toList()), domElement);
 
         filters.stream().filter(f -> f.option == DDataFilterOption.LIMIT).findAny().ifPresent(limit -> {
+            String limitParameter = "#{" + limit.parameter + ", javaType=" + (limit.variableType.getKind().isPrimitive() ?
+                    environment.getTypeUtils().boxedClass((PrimitiveType) limit.variableType) :
+                    limit.variableType
+            ) + jdbcTypeFor(limit.variableType, environment) + "}";
+
             org.w3c.dom.Element limitElt = (org.w3c.dom.Element)
                     domElement.appendChild(doc.createElement("if"));
             limitElt.setAttribute("test", limit.parameter + " != null");
-            limitElt.appendChild(doc.createTextNode("LIMIT #{" + limit.parameter + "}\n"));
+            limitElt.appendChild(doc.createTextNode("LIMIT " + limitParameter + "\n"));
             filters.stream().filter(f -> f.option == DDataFilterOption.START).findAny().ifPresent(offset -> {
+                String offsetParameter = "#{" + offset.parameter + ", javaType=" + (offset.variableType.getKind().isPrimitive() ?
+                        environment.getTypeUtils().boxedClass((PrimitiveType) offset.variableType) :
+                        offset.variableType
+                ) + jdbcTypeFor(offset.variableType, environment) + "}";
+
                 org.w3c.dom.Element offsetElt = (org.w3c.dom.Element)
                         limitElt.appendChild(doc.createElement("if"));
                 offsetElt.setAttribute("test", offset.parameter + " != null && " + offset.parameter + " != 0");
-                offsetElt.appendChild(doc.createTextNode("OFFSET #{" + offset.parameter + "}\n"));
+                offsetElt.appendChild(doc.createTextNode("OFFSET " + offsetParameter + "\n"));
             });
         });
     }
@@ -717,6 +735,13 @@ class DDataMapBuilder {
 
     private String jdbcTypeFor(TypeMirror type, ProcessingEnvironment environment) {
         String s = type.toString();
+
+        if (java.time.LocalDate.class.getCanonicalName().equals(s)
+                ) return ", jdbcType=DATE";
+
+        if (java.time.LocalTime.class.getCanonicalName().equals(s)
+                ) return ", jdbcType=TIME";
+
         if (//not work environment.getTypeUtils().isSubtype(type, temporalType) ||
                 environment.getTypeUtils().directSupertypes(type).stream()
                         .anyMatch(c -> c.toString().equals(temporalType.toString())) ||
@@ -726,17 +751,30 @@ class DDataMapBuilder {
         if (String.class.getCanonicalName().equals(s))
             return ", jdbcType=VARCHAR";
 
+        if ("short".equals(s) ||
+                java.lang.Short.class.getCanonicalName().equals(s)
+                ) return ", jdbcType=SMALLINT";
+
         if ("int".equals(s) ||
-                "long".equals(s) ||
-                "double".equals(s) ||
-                "short".equals(s) ||
-                java.lang.Integer.class.getCanonicalName().equals(s) ||
-                java.lang.Long.class.getCanonicalName().equals(s) ||
-                java.lang.Double.class.getCanonicalName().equals(s) ||
-                java.lang.Short.class.getCanonicalName().equals(s) ||
-                java.math.BigInteger.class.getCanonicalName().equals(s) ||
+                java.lang.Integer.class.getCanonicalName().equals(s)
+                ) return ", jdbcType=INTEGER";
+
+        if ("long".equals(s) ||
+                java.lang.Long.class.getCanonicalName().equals(s)
+                ) return ", jdbcType=BIGINT";
+
+        if ("float".equals(s) ||
+                java.lang.Float.class.getCanonicalName().equals(s)
+                ) return ", jdbcType=REAL";
+
+        if ("double".equals(s) ||
+                java.lang.Double.class.getCanonicalName().equals(s)
+                ) return ", jdbcType=DOUBLE";
+
+        if (java.math.BigInteger.class.getCanonicalName().equals(s) ||
                 java.math.BigDecimal.class.getCanonicalName().equals(s)
                 ) return ", jdbcType=NUMERIC";
+
         return "";
     }
 
@@ -744,6 +782,7 @@ class DDataMapBuilder {
         String r = mappedTable.mappedBean.properties.values().stream()
                 .filter(fetchOptions::filter4FieldsList)
                 .filter(this::notManagedBean)
+                .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                 .map(p -> "  t" + mappedTable.tableIndex + "." + p.getColumnRef() +
                         " AS t" + mappedTable.tableIndex + "_" + p.columnName)
                 .collect(Collectors.joining(",\n"));
@@ -821,7 +860,8 @@ class DDataMapBuilder {
         Mapping mapping = builder.mappings.get(mappedTable.property.dataBean.interfaceType + "." + mappedTable.property.name);
         boolean lazy;
         if (mappedTable.property.isCollectionOrMap()) {
-            managed.setAttribute("ofType", mappedTable.property.dataBean.getImplementationName());
+            DataBeanBuilder mappedBean = this.builder.beansByInterface.get(mappedTable.property.mappedType.toString());
+            managed.setAttribute("ofType", mappedBean.getImplementationName());
             lazy = fetchOptions.fetchType != DDataFetchType.EAGER;
         } else {
             lazy = fetchOptions.fetchType == DDataFetchType.LAZY;
@@ -970,6 +1010,7 @@ class DDataMapBuilder {
         final DataBeanPropertyBuilder property;
         final String parameter;
         final DataBeanPropertyBuilder mappedBy;
+        final TypeMirror variableType;
 
         FilterOption(DataRepositoryBuilder repository, VariableElement variableElement) {
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName.toString());
@@ -978,6 +1019,7 @@ class DDataMapBuilder {
                     .findAny();
 
             parameter = variableElement.getSimpleName().toString();
+            variableType = variableElement.asType();
 
             if (filterOpt.isPresent()) {
                 AnnotationMirror filterMirror = filterOpt.get();
