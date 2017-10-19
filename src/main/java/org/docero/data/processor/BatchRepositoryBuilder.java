@@ -5,6 +5,7 @@ import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.*;
 
+@SuppressWarnings("WeakerAccess")
 class BatchRepositoryBuilder {
     final List<TypeMirror> beans;
     final TypeMirror repositoryInterface;
@@ -33,29 +34,16 @@ class BatchRepositoryBuilder {
     }
 
     void createSpringBean(JavaClassWriter cf) throws IOException {
-        HashMap<TypeMirror, BeanData> supported = new HashMap<>();
-        for (TypeMirror bean : beans) {
-            DataBeanBuilder beanBuilder = dataBuilder.beansByInterface.get(bean.toString());
-            DataRepositoryBuilder beanRepository = dataBuilder.repositoriesByBean.get(bean.toString());
-            supported.put(bean, new BeanData(beanBuilder, beanRepository));
-        }
-
         String daoInterfaceName = repositoryInterface.toString();
         int offset = daoInterfaceName.lastIndexOf('.') + 1;
         String methodName = Character.toLowerCase(daoInterfaceName.charAt(offset)) +
                 daoInterfaceName.substring(offset + 1);
         cf.println("@org.springframework.context.annotation.Bean");
         cf.startBlock("public " + daoInterfaceName + " " + methodName + "(");
-        /*for (BeanData d : supported.values()) {
-            cf.println(d.repository.repositoryInterface + " " + d.repositoryVariable + ",");
-        }*/
         cf.println("org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory");
         cf.endBlock(")");
         cf.startBlock("{");
         cf.startBlock("return new " + implClassName + "(");
-        /*for (BeanData d : supported.values()) {
-            cf.println(d.repositoryVariable + ",");
-        }*/
         cf.println("sqlSessionFactory");
         cf.endBlock(");");
         cf.endBlock("}");
@@ -113,16 +101,10 @@ class BatchRepositoryBuilder {
                 }
                 cf.println("");
                 cf.startBlock("public " + implClassName.substring(simpNameDel + 1) + "(");
-                /*for (BeanData d : supported.values()) {
-                    cf.println(d.repository.repositoryInterface + " " + d.repositoryVariable + ",");
-                }*/
                 cf.println("SqlSessionFactory sqlSessionFactory");
                 cf.endBlock(")");
                 cf.startBlock("{");
                 cf.println("this.setSqlSessionFactory(sqlSessionFactory);");
-                /*for (BeanData d : supported.values()) {
-                    cf.println("this." + d.repositoryVariable + " = " + d.repositoryVariable + ";");
-                }*/
                 for (BeanData d : supported.values()) {
                     cf.println("this." + d.repositoryVariable + " = org.docero.data.DData.getRepository(" + d.bean.interfaceType + ".class);");
                     cf.println("((org.mybatis.spring.support.SqlSessionDaoSupport)" + d.repositoryVariable +
