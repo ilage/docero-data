@@ -13,4 +13,9 @@ public @interface DDataRep {
      * @return
      */
     String value() default "";
+    /**
+     * Array of classes for multi-bean repository (like a DDataBatchOpsRepository)
+     * @return
+     */
+    Class[] beans() default {};
 }

@@ -125,6 +125,9 @@ class DDataMapBuilder {
                     cf.println("return (" + repository.repositoryInterface + ") r;");
                     cf.endBlock("}");
                 }
+                for (BatchRepositoryBuilder repository : builder.batchRepositories) {
+                    repository.createSpringBean(cf);
+                }
                 cf.println("");
                 cf.println("@org.springframework.context.annotation.Bean");
                 cf.startBlock("public org.docero.data.DDataResources dDataResources(org.springframework.context.ApplicationContext context) {");

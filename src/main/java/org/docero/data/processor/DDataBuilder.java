@@ -15,6 +15,7 @@ class DDataBuilder {
     final ProcessingEnvironment environment;
     final HashMap<String, DataBeanBuilder> beansByInterface = new HashMap<>();
     final ArrayList<DataRepositoryBuilder> repositories = new ArrayList<>();
+    final ArrayList<BatchRepositoryBuilder> batchRepositories = new ArrayList<>();
     final HashMap<String, DataRepositoryBuilder> repositoriesByBean = new HashMap<>();
     final HashSet<String> packages = new HashSet<>();
     final boolean spring;
@@ -36,13 +37,20 @@ class DDataBuilder {
         beansByInterface.put(value.interfaceType.toString(), value);
     }
 
-    void checkRepository(Element repositoryElement, TypeMirror versionalType) {
+    void checkRepository(TypeElement repositoryElement, TypeMirror versionalType) {
         String typeName = repositoryElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-        DataRepositoryBuilder builder =
-                new DataRepositoryBuilder(this, (TypeElement) repositoryElement);
-        repositoriesByBean.put(builder.forInterfaceName(), builder);
-        repositories.add(builder);
+        if (repositoryElement.getInterfaces().stream()
+                .anyMatch(i -> i.toString().contains("org.docero.data.DDataBatchOpsRepository"))) {
+            BatchRepositoryBuilder builder =
+                    new BatchRepositoryBuilder(this, repositoryElement);
+            batchRepositories.add(builder);
+        } else {
+            DataRepositoryBuilder builder =
+                    new DataRepositoryBuilder(this, repositoryElement);
+            repositoriesByBean.put(builder.forInterfaceName(), builder);
+            repositories.add(builder);
+        }
     }
 
     void generateAnnotationsAndEnums() throws IOException {
@@ -67,6 +75,10 @@ class DDataBuilder {
                 repositoriesByBean.put(bean.interfaceType.toString(), r);
                 repositories.add(r);
             }
+        }
+
+        for (BatchRepositoryBuilder batchRepository : batchRepositories) {
+            batchRepository.generate();
         }
 
         try (JavaClassWriter cf = new JavaClassWriter(environment, "org.docero.data.DData")) {
