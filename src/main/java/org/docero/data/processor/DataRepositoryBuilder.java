@@ -264,7 +264,7 @@ class DataRepositoryBuilder {
             cf.println("default 1");
             cf.println("@return eager loads truncation");
             cf.endBlock("*/");
-            cf.println("int eagerTrunkLevel() default -1;");
+            cf.println("int eagerTrunkLevel() default 1;");
 
             cf.startBlock("/**");
             cf.println("Truncate LAZY loaded beans associations and collections attributes<br>");
