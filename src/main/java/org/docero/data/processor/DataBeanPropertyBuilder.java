@@ -29,6 +29,8 @@ class DataBeanPropertyBuilder {
     final GenerationType generatedStrategy;
     final String generatedValue;
     final boolean generatedBefore;
+    final String readerSql;
+    final String writerSql;
 
     DataBeanPropertyBuilder(
             DataBeanBuilder bean, DDataProperty ddProperty, ExecutableElement method,
@@ -70,6 +72,8 @@ class DataBeanPropertyBuilder {
         length = ddProperty == null ? 0 : ddProperty.length();
         if (ddProperty != null && ddProperty.value().length() > 0) {
             columnName = ddProperty.value();
+            readerSql = ddProperty.reader().length() == 0 ? null : ddProperty.reader();
+            writerSql = ddProperty.writer().length() == 0 ? null : ddProperty.writer();
             isId = ddProperty.id();
         } else {
             StringBuilder nameBuilder = new StringBuilder();
@@ -81,6 +85,8 @@ class DataBeanPropertyBuilder {
                 else nameBuilder.append(c);
             columnName = nameBuilder.toString();
             isId = ddProperty != null && ddProperty.id();
+            readerSql = null;
+            writerSql = null;
         }
         TypeMirror ltypeErasure = environment.getTypeUtils().erasure(this.type);
         isCollection = environment.getTypeUtils().isSubtype(ltypeErasure, collectionType);
@@ -182,11 +188,25 @@ class DataBeanPropertyBuilder {
         return columnName == null ? null : "\"" + columnName + "\"";
     }
 
+    String getColumnReader(int tableIndex) {
+        return readerSql == null ?
+                "t" + tableIndex + ".\"" + columnName + "\"" :
+                readerSql.replace("?", "t" + tableIndex + ".\"" + columnName + "\"");
+    }
+
+    String getColumnWriter(String parameterName) {
+        return writerSql == null ? parameterName : writerSql.replace("?", parameterName);
+    }
+
     boolean notId() {
         return !isId;
     }
 
-    boolean isGenerated() { return generatedStrategy!=null; }
+    boolean isGenerated() {
+        return generatedStrategy != null;
+    }
 
-    boolean notGenerated() { return generatedStrategy==null; }
+    boolean notGenerated() {
+        return generatedStrategy == null;
+    }
 }

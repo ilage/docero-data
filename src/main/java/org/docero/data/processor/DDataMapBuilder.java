@@ -290,7 +290,7 @@ class DDataMapBuilder {
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                             .filter(this::notManagedBean)
                             .filter(fetchOptions::filterIgnored)
-                            .map(p -> "  t0." + p.getColumnRef() + " AS " + p.getColumnRef())
+                            .map(p -> "  " + p.getColumnReader(0) + " AS " + p.getColumnRef())
                             .collect(Collectors.joining(",\n")));
                     if (fetchOptions.fetchType != DDataFetchType.NO)
                         mappedTables.stream().filter(MappedTable::useInFieldsList).forEach(t ->
@@ -383,7 +383,8 @@ class DDataMapBuilder {
                             domElement.appendChild(doc.createTextNode("\nWHERE " +
                                     filters.stream()
                                             .filter(f -> f.property != null)
-                                            .map(f -> f.property.getColumnRef() + " = " + buildSqlParameter(bean, f.property))
+                                            .map(f -> f.property.getColumnRef() + " = " +
+                                                    buildSqlParameter(bean, f.property))
                                             .collect(Collectors.joining(" AND ")) +
                                     "\n"));
                         } else
@@ -506,10 +507,10 @@ class DDataMapBuilder {
                 int tIdx = table.map(mb -> mb.tableIndex).orElse(0);
                 MappedTable currentJoin = table.orElse(null);
 
-                String filterParameter = "#{" + filter.parameter + ", javaType=" + (filter.variableType.getKind().isPrimitive() ?
+                String filterParameter = filter.property.getColumnWriter("#{" + filter.parameter + ", javaType=" + (filter.variableType.getKind().isPrimitive() ?
                         environment.getTypeUtils().boxedClass((PrimitiveType) filter.variableType) :
                         filter.variableType
-                ) + jdbcTypeFor(filter.variableType, environment) + "}";
+                ) + jdbcTypeFor(filter.variableType, environment) + "}");
 
                 switch (filter.option) {
                     case EQUALS:
@@ -557,7 +558,7 @@ class DDataMapBuilder {
 
                         org.w3c.dom.Element e_w = (org.w3c.dom.Element)
                                 e_c.appendChild(doc.createElement("when"));
-                        e_w.setAttribute("test", filter.parameter + " == TRUE");
+                        e_w.setAttribute("test", filter.parameter);
                         e_w.appendChild(doc.createTextNode("AND t" + tIdx + "." +
                                 filter.property.getColumnRef() + " IS NULL\n"));
 
@@ -729,14 +730,14 @@ class DDataMapBuilder {
         Mapping mapping = builder.mappings.get(dataBean.interfaceType.toString() + "." + beanProperty.name);
         if (mapping != null) {
             TypeMirror mappedType = mapping.mappedProperties.get(0).type;
-            return "#{" + beanProperty.name + "_foreignKey, javaType=" + (mappedType.getKind().isPrimitive() ?
+            return beanProperty.getColumnWriter("#{" + beanProperty.name + "_foreignKey, javaType=" + (mappedType.getKind().isPrimitive() ?
                     environment.getTypeUtils().boxedClass((PrimitiveType) mappedType) : mappedType
-            ) + jdbcTypeFor(mappedType, environment) + "}";
+            ) + jdbcTypeFor(mappedType, environment) + "}");
         } else
-            return "#{" + beanProperty.name + ", javaType=" + (beanProperty.type.getKind().isPrimitive() ?
+            return beanProperty.getColumnWriter("#{" + beanProperty.name + ", javaType=" + (beanProperty.type.getKind().isPrimitive() ?
                     environment.getTypeUtils().boxedClass((PrimitiveType) beanProperty.type) :
                     beanProperty.type
-            ) + jdbcTypeFor(beanProperty.type, environment) + "}";
+            ) + jdbcTypeFor(beanProperty.type, environment) + "}");
     }
 
     private String jdbcTypeFor(TypeMirror type, ProcessingEnvironment environment) {
@@ -789,7 +790,7 @@ class DDataMapBuilder {
                 .filter(fetchOptions::filter4FieldsList)
                 .filter(this::notManagedBean)
                 .filter(DataBeanPropertyBuilder::notCollectionOrMap)
-                .map(p -> "  t" + mappedTable.tableIndex + "." + p.getColumnRef() +
+                .map(p -> "  " + p.getColumnReader(mappedTable.tableIndex) +
                         " AS t" + mappedTable.tableIndex + "_" + p.columnName)
                 .collect(Collectors.joining(",\n"));
         if (r.length() > 0) sql.append(",\n").append(r);
@@ -921,8 +922,9 @@ class DDataMapBuilder {
                                         m.properties.get(0).type : m.mappedProperties.get(0).type;
                                 return "t0." +
                                         m.mappedProperties.get(0).getColumnRef() + " = " +
-                                        "#{" + m.properties.get(0).columnName +
-                                        jdbcTypeFor(propType, environment) + "}";
+                                        m.mappedProperties.get(0).getColumnWriter(
+                                                "#{" + m.properties.get(0).columnName +
+                                                        jdbcTypeFor(propType, environment) + "}");
                             }).collect(Collectors.joining(" AND ")) +
                             "\n"));
 

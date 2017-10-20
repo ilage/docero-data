@@ -44,4 +44,16 @@ public @interface DDataProperty {
      * @return
      */
     int length() default 0;
+
+    /**
+     * Sql statement used to read value, char '?' replaced by field name
+     * @return sql
+     */
+    String reader() default "";
+
+    /**
+     * Sql statement used to write value, char '?' replaced by field name
+     * @return sql
+     */
+    String writer() default "";
 }
