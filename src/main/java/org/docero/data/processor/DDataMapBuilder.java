@@ -642,7 +642,7 @@ class DDataMapBuilder {
         });
         if (addJoins) addJoins(mappedTables, sql);
 
-        if (method.methodType == DDataMethodBuilder.MType.SELECT) {
+        if (method.methodType == DDataMethodBuilder.MType.SELECT || method.methodType == DDataMethodBuilder.MType.GET) {
             domElement.appendChild(doc.createTextNode(sql.toString()));
             if (where.size() > 0) {
                 org.w3c.dom.Element whereElt = doc.createElement("trim");
