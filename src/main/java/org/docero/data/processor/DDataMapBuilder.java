@@ -194,6 +194,7 @@ class DDataMapBuilder {
 
             AtomicInteger index = new AtomicInteger();
             CopyOnWriteArrayList<MappedTable> mappedTables = new CopyOnWriteArrayList<>(bean.properties.values().stream()
+                    .filter(DataBeanPropertyBuilder::notIgnored)
                     .map(p -> {
                         DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
                         return b == null ? null :
@@ -287,6 +288,7 @@ class DDataMapBuilder {
                 case GET:
                     sql.append("\nSELECT\n");
                     sql.append(bean.properties.values().stream()
+                            .filter(DataBeanPropertyBuilder::notIgnored)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                             .filter(this::notManagedBean)
                             .filter(fetchOptions::filterIgnored)
@@ -343,6 +345,7 @@ class DDataMapBuilder {
                             });
                     sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
                     sql.append(bean.properties.values().stream()
+                            .filter(DataBeanPropertyBuilder::notIgnored)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                             .filter(this::notManagedBean)
                             .map(DataBeanPropertyBuilder::getColumnRef)
@@ -350,6 +353,7 @@ class DDataMapBuilder {
                     sql.append(")\n");
                     sql.append("VALUES (\n");
                     sql.append(bean.properties.values().stream()
+                            .filter(DataBeanPropertyBuilder::notIgnored)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                             .filter(this::notManagedBean)
                             .map(p -> buildSqlParameter(bean, p))
@@ -359,6 +363,7 @@ class DDataMapBuilder {
                 case UPDATE:
                     sql.append("\nUPDATE ").append(bean.getTableRef()).append(" AS t0 SET\n");
                     sql.append(bean.properties.values().stream()
+                            .filter(DataBeanPropertyBuilder::notIgnored)
                             .filter(DataBeanPropertyBuilder::notId)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                             .filter(this::notManagedBean)
@@ -400,6 +405,7 @@ class DDataMapBuilder {
                         ssql.append("WHERE ");
                         if (repository.versionalType == null) {
                             ssql.append(bean.properties.values().stream()
+                                    .filter(DataBeanPropertyBuilder::notIgnored)
                                     .filter(p -> p.isId)
                                     .map(p -> "t0." + p.getColumnRef() + " = " + buildSqlParameter(bean, p))
                                     .collect(Collectors.joining(" AND ")))
@@ -787,6 +793,7 @@ class DDataMapBuilder {
 
     private void addManagedBeanToFrom(StringBuilder sql, MappedTable mappedTable, FetchOptions fetchOptions) {
         String r = mappedTable.mappedBean.properties.values().stream()
+                .filter(DataBeanPropertyBuilder::notIgnored)
                 .filter(fetchOptions::filter4FieldsList)
                 .filter(this::notManagedBean)
                 .filter(DataBeanPropertyBuilder::notCollectionOrMap)
@@ -835,6 +842,7 @@ class DDataMapBuilder {
             FetchOptions fetchOptions) {
         Document doc = element.getOwnerDocument();
         properties.stream()
+                .filter(DataBeanPropertyBuilder::notIgnored)
                 .filter(p -> p.isId)
                 .forEach(p -> {
                     org.w3c.dom.Element id = (org.w3c.dom.Element)
@@ -844,6 +852,7 @@ class DDataMapBuilder {
                 });
 
         properties.stream()
+                .filter(DataBeanPropertyBuilder::notIgnored)
                 .filter(p -> !(p.isId || p.isCollectionOrMap() || p.columnName == null))
                 .filter(fetchOptions::filterIgnored)
                 .filter(p -> !builder.beansByInterface.containsKey(p.type.toString()))
@@ -890,6 +899,8 @@ class DDataMapBuilder {
                     managed.setAttribute("foreignColumn", mapping.mappedProperties.get(0).columnName);
                 } else {
                     managed.setAttribute("column", "{" + mapping.properties.stream()
+                            .filter(DataBeanPropertyBuilder::notIgnored)
+                            .filter(DataBeanPropertyBuilder::notIgnored)
                             .map(p -> p.columnName + "=" + (mappedTable.mappedFromTableIndex == 0 ? "" :
                                     "t" + mappedTable.mappedFromTableIndex + "_") +
                                     p.columnName)
@@ -936,6 +947,7 @@ class DDataMapBuilder {
                     mappedTable.mappedBean.properties.values(), fetchOptions);
             if (trunkLevel != 0) {
                 List<DataBeanPropertyBuilder> mappedBeans = mappedTable.mappedBean.properties.values().stream()
+                        .filter(DataBeanPropertyBuilder::notIgnored)
                         .filter(p -> !p.isId)
                         .filter(fetchOptions::filter4ResultMap)
                         .collect(Collectors.toList());
@@ -1017,6 +1029,7 @@ class DDataMapBuilder {
         DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
         AtomicInteger index = new AtomicInteger();
         CopyOnWriteArrayList<MappedTable> mappedTables = new CopyOnWriteArrayList<>(bean.properties.values().stream()
+                .filter(DataBeanPropertyBuilder::notIgnored)
                 .map(p -> {
                     DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
                     return b == null ? null : new MappedTable(0, index.incrementAndGet(), p, b, fetchOptions, null);

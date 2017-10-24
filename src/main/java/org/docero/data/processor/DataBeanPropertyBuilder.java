@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.HashMap;
 
 class DataBeanPropertyBuilder {
+    final boolean ignored;
     final String name;
     final String enumName;
     final TypeMirror type;
@@ -38,6 +39,7 @@ class DataBeanPropertyBuilder {
             TypeMirror collectionType, TypeMirror mapType, TypeMirror voidType
     ) {
         this.dataBean = bean;
+        this.ignored = ddProperty!=null && ddProperty.Trancient();
         GeneratedValue genVal = method.getAnnotation(GeneratedValue.class);
         if (genVal != null) {
             this.generatedStrategy = genVal.strategy();
@@ -208,5 +210,9 @@ class DataBeanPropertyBuilder {
 
     boolean notGenerated() {
         return generatedStrategy == null;
+    }
+
+    boolean notIgnored() {
+        return !ignored;
     }
 }

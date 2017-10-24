@@ -15,6 +15,12 @@ public @interface DDataProperty {
     String value() default "";
 
     /**
+     * Property must be ignored in entity mapping
+     * @return
+     */
+    boolean Trancient() default false;
+
+    /**
      * Is id column, bean can contains no one or number of id properties,
      * default false.
      * @return
