@@ -78,10 +78,20 @@ class DataBeanBuilder {
                 versionedBeanType)) {
             if (interfaceType.toString().startsWith("org.docero.data.DDataVersionalBean"))
                 versionalType = ((DeclaredType) interfaceType).getTypeArguments().get(0);
-            else
-                versionalType = rootBuilder.environment.getTypeUtils().directSupertypes(interfaceType).stream()
+            else {
+                List<? extends TypeMirror> directSupertypes = rootBuilder.environment.getTypeUtils().directSupertypes(interfaceType);
+                TypeMirror vt = directSupertypes.stream()
                         .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
-                        .findAny().map(t -> ((DeclaredType) t).getTypeArguments().get(0)).orElse(null);
+                        .findAny()
+                        .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
+                        .orElse(null);
+                versionalType = vt != null ? vt : directSupertypes.stream()
+                        .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
+                        .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
+                        .findAny()
+                        .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
+                        .orElse(null);
+            }
         } else
             versionalType = null;
 
