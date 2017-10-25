@@ -108,7 +108,7 @@ public class DDataProcessor extends AbstractProcessor {
     }
 
     private void buildMappingFor(TypeElement beanElement, DataBeanBuilder bean) {
-        for (Element element : beanElement.getEnclosedElements()) {
+        for (Element element : builder.environment.getElementUtils().getAllMembers(beanElement)) {
             if (element.getKind() == ElementKind.METHOD) {
                 ExecutableElement method = (ExecutableElement) element;
                 String mappingKey = beanElement.asType().toString() + "." +

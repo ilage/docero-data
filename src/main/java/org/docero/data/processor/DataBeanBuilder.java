@@ -61,7 +61,8 @@ class DataBeanBuilder {
                     !elt.getModifiers().contains(Modifier.STATIC)
                     ) {
                 DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
-                if (ddProperty != null) {
+                if (ddProperty != null || ((ExecutableElement)elt).getAnnotationMirrors().stream()
+                        .anyMatch(a->a.getAnnotationType().toString().endsWith("_Map_"))) {
                     DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this, ddProperty,
                             (ExecutableElement) elt, builder.environment, collectionType, mapType, voidType);
                     if (!properties.containsKey(beanBuilder.enumName) && beanBuilder.type != voidType)
