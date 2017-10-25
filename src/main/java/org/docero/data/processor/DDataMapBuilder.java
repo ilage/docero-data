@@ -287,6 +287,18 @@ class DDataMapBuilder {
                     limitedSelect = filters.stream().anyMatch(f -> f.option == DDataFilterOption.LIMIT);
                 case GET:
                     sql.append("\nSELECT\n");
+                    if (bean.versionalType != null) {
+                        bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().ifPresent(p -> {
+                            sql.append("  ");
+                            if (environment.getTypeUtils().directSupertypes(p.type).stream()
+                                    .anyMatch(c -> c.toString().equals(temporalType.toString())) ||
+                                    environment.getTypeUtils().isSubtype(p.type, oldDateType))
+                                sql.append("CAST(").append(buildSqlParameter(bean, p)).append(" AS TIMESTAMP)");
+                            else
+                                sql.append(buildSqlParameter(bean, p));
+                            sql.append(" AS dDataBeanActualAt_,\n");
+                        });
+                    }
                     sql.append(bean.properties.values().stream()
                             .filter(DataBeanPropertyBuilder::notIgnored)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
@@ -892,24 +904,23 @@ class DDataMapBuilder {
 
         if (mapping != null && (lazy || trunkLevel < 1)) {
             if (!fetchOptions.truncateLazy) {
-                if (mapping.properties.size() == 1) {
+                /*if (mapping.properties.size() == 1) {
                     managed.setAttribute("column", (mappedTable.mappedFromTableIndex == 0 ? "" :
                             "t" + mappedTable.mappedFromTableIndex + "_") +
                             mapping.properties.get(0).columnName);
                     managed.setAttribute("foreignColumn", mapping.mappedProperties.get(0).columnName);
-                } else {
-                    managed.setAttribute("column", "{" + mapping.properties.stream()
-                            .filter(DataBeanPropertyBuilder::notIgnored)
-                            .filter(DataBeanPropertyBuilder::notIgnored)
-                            .map(p -> p.columnName + "=" + (mappedTable.mappedFromTableIndex == 0 ? "" :
-                                    "t" + mappedTable.mappedFromTableIndex + "_") +
-                                    p.columnName)
-                            .collect(Collectors.joining(",")) +
-                            "}");
-                    managed.setAttribute("foreignColumn", mapping.mappedProperties.stream()
+                } else {*/
+                managed.setAttribute("column", "{" + mapping.properties.stream()
+                        .filter(DataBeanPropertyBuilder::notIgnored)
+                        .map(p -> p.columnName + "=" + (mappedTable.mappedFromTableIndex == 0 ? "" :
+                                "t" + mappedTable.mappedFromTableIndex + "_") +
+                                p.columnName)
+                        .collect(Collectors.joining(",")) +
+                        "}");
+                    /*managed.setAttribute("foreignColumn", mapping.mappedProperties.stream()
                             .map(p -> p.columnName + "=" + p.columnName)
-                            .collect(Collectors.joining(",")));
-                }
+                            .collect(Collectors.joining(",")));*/
+                //}
                 managed.setAttribute("fetchType", "lazy");
 
                 DataBeanBuilder mappedBean = mapping.mappedProperties.get(0).dataBean;

@@ -176,7 +176,12 @@ class DataBeanBuilder {
                         cf.println("" + actProperty.name + " = dt;");
                         cf.endBlock("}");
                     }
-
+                    cf.println("");
+                    cf.println("private " + versionalType + " dDataBeanActualAt_;");
+                    cf.println("");
+                    cf.println("public " + versionalType + " getDDataBeanActualAt_() {return dDataBeanActualAt_;}");
+                    cf.println("");
+                    cf.println("public void setDDataBeanActualAt_(" + versionalType + " value) {dDataBeanActualAt_=value;}");
                 }
             } else {
                 cf.startBlock("public " + keyType + " getDDataBeanKey_() {");
