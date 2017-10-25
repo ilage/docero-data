@@ -86,12 +86,20 @@ class DataBeanBuilder {
                         .findAny()
                         .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
                         .orElse(null);
-                versionalType = vt != null ? vt : directSupertypes.stream()
+                vt = vt != null ? vt : directSupertypes.stream()
                         .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
                         .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
                         .findAny()
                         .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
                         .orElse(null);
+                vt = vt != null ? vt : directSupertypes.stream()
+                        .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
+                        .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
+                        .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
+                        .findAny()
+                        .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
+                        .orElse(null);
+                versionalType = vt;
             }
         } else
             versionalType = null;
