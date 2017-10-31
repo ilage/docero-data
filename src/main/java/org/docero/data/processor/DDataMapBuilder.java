@@ -27,15 +27,11 @@ import java.util.stream.Collectors;
 class DDataMapBuilder {
     private final DDataBuilder builder;
     private final ProcessingEnvironment environment;
-    private final TypeMirror temporalType;
-    private final TypeMirror oldDateType;
     private final HashSet<String> userMappingFiles = new HashSet<>();
 
     DDataMapBuilder(DDataBuilder builder, ProcessingEnvironment environment) {
         this.builder = builder;
         this.environment = environment;
-        temporalType = environment.getElementUtils().getTypeElement("java.time.temporal.Temporal").asType();
-        oldDateType = environment.getElementUtils().getTypeElement("java.util.Date").asType();
     }
 
     boolean build(HashMap<String, TypeElement> pkgClasses) throws Exception {
@@ -274,7 +270,7 @@ class DDataMapBuilder {
                         parameter.type;
                 sqlSelect = sqlSelect.replaceAll(":" + parameter.name,
                         "#{" + parameter.name + ", javaType=" + pType +
-                                jdbcTypeFor(pType, environment) +
+                                jdbcTypeParameterFor(pType) +
                                 "}");
             }
             sql.append(sqlSelect).append("\n");
@@ -291,8 +287,8 @@ class DDataMapBuilder {
                         bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().ifPresent(p -> {
                             sql.append("  ");
                             if (environment.getTypeUtils().directSupertypes(p.type).stream()
-                                    .anyMatch(c -> c.toString().equals(temporalType.toString())) ||
-                                    environment.getTypeUtils().isSubtype(p.type, oldDateType))
+                                    .anyMatch(c -> c.toString().equals(builder.temporalType.toString())) ||
+                                    environment.getTypeUtils().isSubtype(p.type, builder.oldDateType))
                                 sql.append("CAST(").append(buildSqlParameter(bean, p)).append(" AS TIMESTAMP)");
                             else
                                 sql.append(buildSqlParameter(bean, p));
@@ -528,7 +524,7 @@ class DDataMapBuilder {
                 String filterParameter = filter.property.getColumnWriter("#{" + filter.parameter + ", javaType=" + (filter.variableType.getKind().isPrimitive() ?
                         environment.getTypeUtils().boxedClass((PrimitiveType) filter.variableType) :
                         filter.variableType
-                ) + jdbcTypeFor(filter.variableType, environment) + "}");
+                ) + jdbcTypeParameterFor(filter.variableType) + "}");
 
                 switch (filter.option) {
                     case EQUALS:
@@ -600,7 +596,7 @@ class DDataMapBuilder {
                         TypeMirror itemType = environment.getTypeUtils()
                                 .erasure(((DeclaredType) filter.variableType).getTypeArguments().get(0));
                         e_in.appendChild(doc.createTextNode("#{item" + ", javaType=" +
-                                itemType + jdbcTypeFor(itemType, environment) + "}"));
+                                itemType + jdbcTypeParameterFor(itemType) + "}"));
                         break;
                     case LIKE:
                     case LIKE_HAS:
@@ -684,7 +680,7 @@ class DDataMapBuilder {
             String limitParameter = "#{" + limit.parameter + ", javaType=" + (limit.variableType.getKind().isPrimitive() ?
                     environment.getTypeUtils().boxedClass((PrimitiveType) limit.variableType) :
                     limit.variableType
-            ) + jdbcTypeFor(limit.variableType, environment) + "}";
+            ) + jdbcTypeParameterFor(limit.variableType) + "}";
 
             org.w3c.dom.Element limitElt = (org.w3c.dom.Element)
                     domElement.appendChild(doc.createElement("if"));
@@ -694,7 +690,7 @@ class DDataMapBuilder {
                 String offsetParameter = "#{" + offset.parameter + ", javaType=" + (offset.variableType.getKind().isPrimitive() ?
                         environment.getTypeUtils().boxedClass((PrimitiveType) offset.variableType) :
                         offset.variableType
-                ) + jdbcTypeFor(offset.variableType, environment) + "}";
+                ) + jdbcTypeParameterFor(offset.variableType) + "}";
 
                 org.w3c.dom.Element offsetElt = (org.w3c.dom.Element)
                         limitElt.appendChild(doc.createElement("if"));
@@ -750,57 +746,17 @@ class DDataMapBuilder {
             TypeMirror mappedType = mapping.mappedProperties.get(0).type;
             return beanProperty.getColumnWriter("#{" + beanProperty.name + "_foreignKey, javaType=" + (mappedType.getKind().isPrimitive() ?
                     environment.getTypeUtils().boxedClass((PrimitiveType) mappedType) : mappedType
-            ) + jdbcTypeFor(mappedType, environment) + "}");
+            ) + jdbcTypeParameterFor(mappedType) + "}");
         } else
             return beanProperty.getColumnWriter("#{" + beanProperty.name + ", javaType=" + (beanProperty.type.getKind().isPrimitive() ?
                     environment.getTypeUtils().boxedClass((PrimitiveType) beanProperty.type) :
                     beanProperty.type
-            ) + jdbcTypeFor(beanProperty.type, environment) + "}");
+            ) + jdbcTypeParameterFor(beanProperty.type) + "}");
     }
 
-    private String jdbcTypeFor(TypeMirror type, ProcessingEnvironment environment) {
-        String s = type.toString();
-
-        if (java.time.LocalDate.class.getCanonicalName().equals(s)
-                ) return ", jdbcType=DATE";
-
-        if (java.time.LocalTime.class.getCanonicalName().equals(s)
-                ) return ", jdbcType=TIME";
-
-        if (//not work environment.getTypeUtils().isSubtype(type, temporalType) ||
-                environment.getTypeUtils().directSupertypes(type).stream()
-                        .anyMatch(c -> c.toString().equals(temporalType.toString())) ||
-                        environment.getTypeUtils().isSubtype(type, oldDateType)
-                ) return ", jdbcType=TIMESTAMP";
-
-        if (String.class.getCanonicalName().equals(s))
-            return ", jdbcType=VARCHAR";
-
-        if ("short".equals(s) ||
-                java.lang.Short.class.getCanonicalName().equals(s)
-                ) return ", jdbcType=SMALLINT";
-
-        if ("int".equals(s) ||
-                java.lang.Integer.class.getCanonicalName().equals(s)
-                ) return ", jdbcType=INTEGER";
-
-        if ("long".equals(s) ||
-                java.lang.Long.class.getCanonicalName().equals(s)
-                ) return ", jdbcType=BIGINT";
-
-        if ("float".equals(s) ||
-                java.lang.Float.class.getCanonicalName().equals(s)
-                ) return ", jdbcType=REAL";
-
-        if ("double".equals(s) ||
-                java.lang.Double.class.getCanonicalName().equals(s)
-                ) return ", jdbcType=DOUBLE";
-
-        if (java.math.BigInteger.class.getCanonicalName().equals(s) ||
-                java.math.BigDecimal.class.getCanonicalName().equals(s)
-                ) return ", jdbcType=NUMERIC";
-
-        return "";
+    private String jdbcTypeParameterFor(TypeMirror type) {
+        String s = builder.jdbcTypeFor(type);
+        return s.length()==0 ? s : ", jdbcType="+s;
     }
 
     private void addManagedBeanToFrom(StringBuilder sql, MappedTable mappedTable, FetchOptions fetchOptions) {
@@ -946,7 +902,7 @@ class DDataMapBuilder {
                                         m.mappedProperties.get(0).getColumnRef() + " = " +
                                         m.mappedProperties.get(0).getColumnWriter(
                                                 "#{" + m.properties.get(0).columnName +
-                                                        jdbcTypeFor(propType, environment) + "}");
+                                                        jdbcTypeParameterFor(propType) + "}");
                             }).collect(Collectors.joining(" AND ")) +
                             "\n"));
 

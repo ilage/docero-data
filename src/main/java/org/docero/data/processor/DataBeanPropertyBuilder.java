@@ -30,6 +30,7 @@ class DataBeanPropertyBuilder {
     final GenerationType generatedStrategy;
     final String generatedValue;
     final boolean generatedBefore;
+    final String jdbcType;
     final String readerSql;
     final String writerSql;
 
@@ -39,7 +40,7 @@ class DataBeanPropertyBuilder {
             TypeMirror collectionType, TypeMirror mapType, TypeMirror voidType
     ) {
         this.dataBean = bean;
-        this.ignored = ddProperty!=null && ddProperty.Trancient();
+        this.ignored = ddProperty != null && ddProperty.Trancient();
         GeneratedValue genVal = method.getAnnotation(GeneratedValue.class);
         if (genVal != null) {
             this.generatedStrategy = genVal.strategy();
@@ -68,6 +69,7 @@ class DataBeanPropertyBuilder {
             name = sn;
             this.type = method.getReturnType();
         }
+        jdbcType = dataBean.rootBuilder.jdbcTypeFor(this.type);
         nullable = ddProperty == null || ddProperty.nullable();
         isVersionFrom = ddProperty != null && ddProperty.versionFrom();
         isVersionTo = ddProperty != null && ddProperty.versionTo();
@@ -162,7 +164,32 @@ class DataBeanPropertyBuilder {
             cf.println(this.enumName + "(\"" +
                     this.columnName + "\",\"" +
                     this.name + "\"," +
-                    dataBean.interfaceType + ".class),");
+                    (this.type.getKind().isPrimitive() ?
+                            environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
+                            environment.getTypeUtils().erasure(this.type)
+                    ) + ".class,\"" + this.jdbcType + "\"),");
+        }
+    }
+
+    void buildEnumElementWithBeans(JavaClassWriter cf, HashMap<String, DataBeanBuilder> beansByInterface, ProcessingEnvironment environment) throws IOException {
+        TypeMirror typeErasure = environment.getTypeUtils().erasure(isCollection ?
+                ((DeclaredType) type).getTypeArguments().get(0) : type);
+        DataBeanBuilder manType = beansByInterface.get(typeErasure.toString());
+        if (manType == null) {
+            cf.println("/** Value of column " + this.columnName + "*/");
+            cf.println(this.enumName + "(\"" +
+                    this.columnName + "\",\"" +
+                    this.name + "\"," +
+                    (this.type.getKind().isPrimitive() ?
+                            environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
+                            environment.getTypeUtils().erasure(this.type)
+                    ) + ".class,\"" + this.jdbcType + "\"),");
+        } else {
+            cf.println("/** Value of column " + this.columnName + "*/");
+            cf.println(this.enumName + "(\"" +
+                    this.columnName + "\",\"" +
+                    this.name + "\"," +
+                    manType.interfaceType + "_WB_.class,\"" + (this.isSimple() ? "" : "ARRAY") + "\"),");
         }
     }
 

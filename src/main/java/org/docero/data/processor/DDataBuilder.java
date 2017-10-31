@@ -20,6 +20,8 @@ class DDataBuilder {
     final HashSet<String> packages = new HashSet<>();
     final boolean spring;
     final HashMap<String, Mapping> mappings = new HashMap<>();
+    final TypeMirror temporalType;
+    final TypeMirror oldDateType;
 
     DDataBuilder(ProcessingEnvironment environment) {
         this.environment = environment;
@@ -28,6 +30,8 @@ class DDataBuilder {
         TypeElement dS = environment.getElementUtils()
                 .getTypeElement("org.springframework.dao.support.DaoSupport");
         spring = dS != null && sqlSDS != null && sqlSDS.getKind() == ElementKind.CLASS;
+        temporalType = environment.getElementUtils().getTypeElement("java.time.temporal.Temporal").asType();
+        oldDateType = environment.getElementUtils().getTypeElement("java.util.Date").asType();
     }
 
     void checkInterface(Element beanElement, TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType) {
@@ -169,5 +173,55 @@ class DDataBuilder {
 
                 cf.endBlock("}");
             }
+    }
+
+
+    String jdbcTypeFor(TypeMirror type) {
+        String s = type.toString();
+
+        if (java.time.LocalDate.class.getCanonicalName().equals(s)
+                ) return "DATE";
+
+        if (java.time.LocalTime.class.getCanonicalName().equals(s)
+                ) return "TIME";
+
+        if (//not work environment.getTypeUtils().isSubtype(type, temporalType) ||
+                environment.getTypeUtils().directSupertypes(type).stream()
+                        .anyMatch(c -> c.toString().equals(temporalType.toString())) ||
+                        environment.getTypeUtils().isSubtype(type, oldDateType)
+                ) return "TIMESTAMP";
+
+        if (String.class.getCanonicalName().equals(s))
+            return "VARCHAR";
+
+        if ("boolean".equals(s) ||
+                java.lang.Boolean.class.getCanonicalName().equals(s)
+                ) return "BOOLEAN";
+
+        if ("short".equals(s) ||
+                java.lang.Short.class.getCanonicalName().equals(s)
+                ) return "SMALLINT";
+
+        if ("int".equals(s) ||
+                java.lang.Integer.class.getCanonicalName().equals(s)
+                ) return "INTEGER";
+
+        if ("long".equals(s) ||
+                java.lang.Long.class.getCanonicalName().equals(s)
+                ) return "BIGINT";
+
+        if ("float".equals(s) ||
+                java.lang.Float.class.getCanonicalName().equals(s)
+                ) return "REAL";
+
+        if ("double".equals(s) ||
+                java.lang.Double.class.getCanonicalName().equals(s)
+                ) return "DOUBLE";
+
+        if (java.math.BigInteger.class.getCanonicalName().equals(s) ||
+                java.math.BigDecimal.class.getCanonicalName().equals(s)
+                ) return "NUMERIC";
+
+        return "";
     }
 }
