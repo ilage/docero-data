@@ -106,9 +106,10 @@ class BatchRepositoryBuilder {
                 cf.startBlock("{");
                 cf.println("this.setSqlSessionFactory(sqlSessionFactory);");
                 for (BeanData d : supported.values()) {
-                    cf.println("this." + d.repositoryVariable + " = org.docero.data.DData.getRepository(" + d.bean.interfaceType + ".class);");
+                    cf.println("this." + d.repositoryVariable + " = new " + d.repository.daoClassName + "();");
                     cf.println("((org.mybatis.spring.support.SqlSessionDaoSupport)" + d.repositoryVariable +
                             ").setSqlSessionTemplate((SqlSessionTemplate)this.getSqlSession());");
+
                 }
                 cf.endBlock("}");
 

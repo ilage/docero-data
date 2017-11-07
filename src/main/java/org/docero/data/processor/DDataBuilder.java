@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.stream.Collectors;
 
 class DDataBuilder {
     final ProcessingEnvironment environment;
@@ -84,7 +83,9 @@ class DDataBuilder {
         for (BatchRepositoryBuilder batchRepository : batchRepositories) {
             batchRepository.generate();
         }
-
+        /*
+            class DData - static methods for accessing library classes
+        */
         try (JavaClassWriter cf = new JavaClassWriter(environment, "org.docero.data.DData")) {
             cf.println("package org.docero.data;");
             cf.startBlock("/*");
@@ -92,7 +93,7 @@ class DDataBuilder {
             cf.endBlock("*/");
             cf.startBlock("public class DData {");
 
-            cf.startBlock("public static <T extends java.io.Serializable,C extends java.io.Serializable> " +
+            cf.startBlock("static <T extends java.io.Serializable,C extends java.io.Serializable> " +
                     "DDataRepository<T,C> getRepository(Class<T> repositoryClass) {");
             for (String repositoryFor : repositoriesByBean.keySet()) {
                 DataRepositoryBuilder repository = repositoriesByBean.get(repositoryFor);
@@ -102,16 +103,6 @@ class DDataBuilder {
             }
             cf.println("return null;");
             cf.endBlock("}");
-
-            /*cf.println("");
-            cf.startBlock("public static final Class<?>[] implementations = " +
-                    "new Class<?>[] {");
-            cf.println(
-                    repositoriesByBean.values().stream()
-                            .map(r -> r.beanImplementation + ".class")
-                            .collect(Collectors.joining(",\n\t\t"))
-            );
-            cf.endBlock("};");*/
 
             cf.println("");
             cf.startBlock("public static final java.util.Map<Class<?>,Class<?>> implementations = " +

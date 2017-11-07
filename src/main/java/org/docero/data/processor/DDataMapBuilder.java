@@ -116,11 +116,14 @@ class DDataMapBuilder {
                             repository.forInterfaceName, repository.idClass);
 
                     cf.println(getType + " r = DData.getRepository(" + repository.forInterfaceName + ".class);");
-                    cf.println("if (r != null)\n                " +
+                    cf.startBlock("if (r != null) {");
+                    cf.println(
                             "((org.mybatis.spring.support.SqlSessionDaoSupport) r).setSqlSessionFactory(sqlSessionFactory);");
+                    cf.endBlock("}");
                     cf.println("return (" + repository.repositoryInterface + ") r;");
                     cf.endBlock("}");
                 }
+
                 for (BatchRepositoryBuilder repository : builder.batchRepositories) {
                     repository.createSpringBean(cf);
                 }
