@@ -1,6 +1,7 @@
 package org.docero.data.processor;
 
 import org.docero.data.DDataProperty;
+import org.docero.data.DictionaryType;
 import org.docero.data.GeneratedValue;
 import org.docero.data.GenerationType;
 
@@ -122,6 +123,21 @@ class DataBeanPropertyBuilder {
                 Character.toUpperCase(name.charAt(0)) +
                 name.substring(1) + "() {"
         );
+        DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
+        if (mappedBean != null && !isCollectionOrMap() && mappedBean.dictionary != DictionaryType.NO) {
+            Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
+            if (mapping != null) {
+                DataBeanPropertyBuilder mProp = mapping.properties.get(0);
+                String getter = "this.get" +
+                        Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1) + "()";
+                if (mProp.type.getKind().isPrimitive())
+                    cf.startBlock("if(dictionariesService!=null && " + name + " == null && " + getter + " != 0) {");
+                else
+                    cf.startBlock("if(dictionariesService!=null && " + name + " == null && " + getter + " != null) {");
+                cf.println(name + " = dictionariesService.get(" + mappedType + ".class," + getter + ");");
+                cf.endBlock("}");
+            }
+        }
         cf.println("return " + name + ";");
         cf.endBlock("}");
     }

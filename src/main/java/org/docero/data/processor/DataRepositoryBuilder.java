@@ -165,6 +165,22 @@ class DataRepositoryBuilder {
             }
 
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
+            if (bean.dictionary != DictionaryType.NO) {
+                cf.println("");
+                if (spring) {
+                    cf.println("@org.springframework.cache.annotation.CachePut(cacheNames=\"" +
+                            bean.cacheMap + "\", key = \"#bean.dDataBeanKey_\")");
+                    cf.println("private <T extends " + forInterfaceName + "> void put_(T bean) {}");
+                    //} else {
+                    //TODO without Spring
+                }
+            }
+            if (bean.dictionary == DictionaryType.SMALL) {
+                cf.println("");
+                cf.startBlock("private void putList_(java.util.List<" + bean.keyType + "> bean) {");
+                cf.endBlock("}");
+            }
+
             HashMap<TypeMirror, String> dictionaries = new HashMap<>();
             for (DataBeanPropertyBuilder prop : bean.properties.values()) {
                 DataBeanBuilder mappedBean = rootBuilder.beansByInterface.get(prop.mappedType.toString());
@@ -432,11 +448,10 @@ class DataRepositoryBuilder {
             cf.startBlock("public " + forInterfaceName + " get(" +
                     idClass + " id) {");
             if (bean.dictionary != DictionaryType.NO && !rootBuilder.useSpringCache) {
-                cf.println(forInterfaceName+" ret = resolveDictionaries(getSqlSession().selectOne(\"" +
+                cf.println(forInterfaceName + " ret = resolveDictionaries(getSqlSession().selectOne(\"" +
                         mappingClassName + ".get\", id));");
                 cf.println("return ret;");
-            }
-            else cf.println("return resolveDictionaries(getSqlSession().selectOne(\"" +
+            } else cf.println("return resolveDictionaries(getSqlSession().selectOne(\"" +
                     mappingClassName + ".get\", id));");
             cf.endBlock("}");
         } else {

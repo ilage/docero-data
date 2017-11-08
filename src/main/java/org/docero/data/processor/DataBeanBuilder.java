@@ -64,8 +64,8 @@ class DataBeanBuilder {
                     !elt.getModifiers().contains(Modifier.STATIC)
                     ) {
                 DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
-                if (ddProperty != null || ((ExecutableElement)elt).getAnnotationMirrors().stream()
-                        .anyMatch(a->a.getAnnotationType().toString().endsWith("_Map_"))) {
+                if (ddProperty != null || ((ExecutableElement) elt).getAnnotationMirrors().stream()
+                        .anyMatch(a -> a.getAnnotationType().toString().endsWith("_Map_"))) {
                     DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this, ddProperty,
                             (ExecutableElement) elt, builder.environment, collectionType, mapType, voidType);
                     if (!properties.containsKey(beanBuilder.enumName) && beanBuilder.type != voidType)
@@ -80,30 +80,26 @@ class DataBeanBuilder {
         if (rootBuilder.environment.getTypeUtils().isSubtype(
                 rootBuilder.environment.getTypeUtils().erasure(interfaceType),
                 versionedBeanType)) {
-            if (interfaceType.toString().startsWith("org.docero.data.DDataVersionalBean"))
-                versionalType = ((DeclaredType) interfaceType).getTypeArguments().get(0);
-            else {
-                List<? extends TypeMirror> directSupertypes = rootBuilder.environment.getTypeUtils().directSupertypes(interfaceType);
-                TypeMirror vt = directSupertypes.stream()
-                        .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
-                        .findAny()
-                        .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
-                        .orElse(null);
-                vt = vt != null ? vt : directSupertypes.stream()
-                        .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
-                        .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
-                        .findAny()
-                        .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
-                        .orElse(null);
-                vt = vt != null ? vt : directSupertypes.stream()
-                        .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
-                        .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
-                        .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
-                        .findAny()
-                        .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
-                        .orElse(null);
-                versionalType = vt;
-            }
+            List<? extends TypeMirror> directSupertypes = rootBuilder.environment.getTypeUtils().directSupertypes(interfaceType);
+            TypeMirror vt = directSupertypes.stream()
+                    .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
+                    .findAny()
+                    .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
+                    .orElse(null);
+            vt = vt != null ? vt : directSupertypes.stream()
+                    .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
+                    .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
+                    .findAny()
+                    .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
+                    .orElse(null);
+            vt = vt != null ? vt : directSupertypes.stream()
+                    .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
+                    .flatMap(dst -> rootBuilder.environment.getTypeUtils().directSupertypes(dst).stream())
+                    .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
+                    .findAny()
+                    .map(t -> ((DeclaredType) t).getTypeArguments().get(0))
+                    .orElse(null);
+            versionalType = vt;
         } else
             versionalType = null;
 
@@ -209,6 +205,13 @@ class DataBeanBuilder {
                 property.buildGetter(cf);
                 property.buildSetter(cf);
             }
+
+            cf.println("");
+            cf.println("private org.docero.data.utils.DDataDictionariesService dictionariesService;");
+            cf.println("private void setDictionariesService_(" +
+                    "org.docero.data.utils.DDataDictionariesService dictionariesService) { " +
+                    "this.dictionariesService = dictionariesService;" +
+                    " }");
 
             cf.println("");
             cf.startBlock("public int hashCode() {");
@@ -473,5 +476,9 @@ class DataBeanBuilder {
         else if ("java.sql.Timestamp".equals(versionalType.toString()))
             return "new java.sql.Timestamp(System.currentTimeMillis())";
         return null;
+    }
+
+    boolean isDictionary() {
+        return dictionary != DictionaryType.NO;
     }
 }

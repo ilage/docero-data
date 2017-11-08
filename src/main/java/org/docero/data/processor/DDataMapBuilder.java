@@ -96,7 +96,6 @@ class DDataMapBuilder {
             transformer.transform(source, result);
         }
 
-        HashMap<TypeMirror, DataRepositoryBuilder> dictionaries = new HashMap<>();
         if (builder.spring) {
             try (JavaClassWriter cf = new JavaClassWriter(environment, "org.docero.data.DDataConfiguration")) {
                 cf.println("package org.docero.data;");
@@ -107,35 +106,19 @@ class DDataMapBuilder {
                 cf.println("@org.springframework.context.annotation.Configuration");
                 cf.startBlock("public class DDataConfiguration {");
 
-                HashMap<String, Set<DataRepositoryBuilder>> wait4Inject = new HashMap<>();
+                cf.println("");
+                cf.println("@org.springframework.context.annotation.Bean");
+                cf.startBlock("public org.docero.data.utils.DDataDictionariesService dDataDictionariesService() {");
+                cf.println("return new org.docero.data.utils.DDataDictionariesService();");
+                cf.endBlock("}");
+
                 for (DataRepositoryBuilder repository : builder.repositories) {
                     DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
-                    Set<DataRepositoryBuilder> usedRepositories = new HashSet<>();
-                    for (DataBeanPropertyBuilder prop : bean.properties.values())
-                        if (dictionaries.containsKey(prop.mappedType)) {
-                            usedRepositories.add(dictionaries.get(prop.mappedType));
-                        } else {
-                            DataBeanBuilder mappedBean = builder.beansByInterface.get(prop.mappedType.toString());
-                            if (mappedBean != null && mappedBean.dictionary != DictionaryType.NO) {
-                                if (wait4Inject.containsKey(prop.mappedType.toString()))
-                                    wait4Inject.get(prop.mappedType.toString()).add(repository);
-                                else
-                                    wait4Inject.put(prop.mappedType.toString(), new HashSet<DataRepositoryBuilder>() {{
-                                        this.add(repository);
-                                    }});
-                            }
-                        }
-                    List<DataRepositoryBuilder> injectRepositories = new ArrayList<>();
-                    injectRepositories.addAll(usedRepositories);
-                    if (wait4Inject.containsKey(repository.forInterfaceName()))
-                        injectRepositories.addAll(wait4Inject.get(repository.forInterfaceName()));
 
                     cf.println("@org.springframework.context.annotation.Bean");
                     cf.startBlock("public " + repository.repositoryInterface + " " + repository.repositoryVariableName +
-                            "(org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory" +
-                            (injectRepositories.size() > 0 ? ", " + injectRepositories.stream()
-                                    .map(r -> r.repositoryInterface + " " + r.repositoryVariableName)
-                                    .collect(Collectors.joining(", ")) : "") +
+                            "(org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory, " +
+                            "org.docero.data.utils.DDataDictionariesService dDataDictionariesService" +
                             ") {");
                     DeclaredType getType = environment.getTypeUtils().getDeclaredType(
                             environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
@@ -145,19 +128,14 @@ class DDataMapBuilder {
                     cf.startBlock("if (r != null) {");
                     cf.println(
                             "((org.mybatis.spring.support.SqlSessionDaoSupport) r).setSqlSessionFactory(sqlSessionFactory);");
-                    if (wait4Inject.containsKey(repository.forInterfaceName())) {
-                        for (DataRepositoryBuilder r : wait4Inject.get(repository.forInterfaceName()))
-                            cf.println("((" + r.mappingClassName +
-                                    "_Dao_)" + r.repositoryVariableName + ").set(r);");
-                        wait4Inject.remove(repository.forInterfaceName());
-                    }
-                    for (DataRepositoryBuilder r : usedRepositories)
-                        cf.println("((" + repository.mappingClassName +
-                                "_Dao_)r).set(" + r.repositoryVariableName + ");");
                     cf.endBlock("}");
 
-                    if (bean.dictionary != DictionaryType.NO) dictionaries.put(bean.interfaceType, repository);
-
+                    if (bean.dictionary != DictionaryType.NO) {
+                        cf.println("dDataDictionariesService.dictionary(" +
+                                repository.forInterfaceName() + ".class, r);");
+                        cf.println("dDataDictionariesService.dictionary(" +
+                                repository.beanImplementation + ".class, r);");
+                    }
                     cf.println("return (" + repository.repositoryInterface + ") r;");
                     cf.endBlock("}");
                 }

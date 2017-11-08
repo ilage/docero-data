@@ -1,5 +1,7 @@
 package org.docero.data.processor;
 
+import org.docero.data.DictionaryType;
+
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -9,6 +11,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.stream.Collectors;
 
 class DDataBuilder {
     final ProcessingEnvironment environment;
@@ -116,6 +119,14 @@ class DDataBuilder {
                         beansByInterface.get(interfaceName).getImplementationName() + ".class);");
             }
             cf.endBlock("}};");
+
+            cf.println("");
+            cf.startBlock("public static final String[] cacheNames = new String[] {");
+            cf.println(beansByInterface.values().stream()
+                    .filter(DataBeanBuilder::isDictionary)
+                    .map(b -> "\""+b.cacheMap+"\"")
+                    .collect(Collectors.joining(",\n\t")));
+            cf.endBlock("};");
 
             if (environment.getElementUtils().getTypeElement("com.fasterxml.jackson.databind.JsonDeserializer") != null) {
                 cf.println("");
