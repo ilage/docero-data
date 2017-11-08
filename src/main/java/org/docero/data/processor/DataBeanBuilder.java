@@ -28,6 +28,7 @@ class DataBeanBuilder {
     final boolean isKeyComposite;
     final TypeMirror versionalType;
     final String inversionalKey;
+    final String cacheMap;
 
     DataBeanBuilder(
             Element beanElement, DDataBuilder builder,
@@ -41,6 +42,8 @@ class DataBeanBuilder {
         grown = (ddBean.growth());
         dictionary = (ddBean.dictionary());
         interfaceType = (beanElement.asType());
+        StringBuilder sb = new StringBuilder();
+        cacheMap = new StringBuilder(interfaceType.toString()).reverse().toString();
         TypeMirror voidType = builder.environment.getElementUtils().getTypeElement("java.lang.Void").asType();
 
         for (Element elt : beanElement.getEnclosedElements())

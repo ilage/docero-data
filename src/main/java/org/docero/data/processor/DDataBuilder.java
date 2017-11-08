@@ -21,6 +21,7 @@ class DDataBuilder {
     final HashMap<String, Mapping> mappings = new HashMap<>();
     final TypeMirror temporalType;
     final TypeMirror oldDateType;
+    final boolean useSpringCache;
 
     DDataBuilder(ProcessingEnvironment environment) {
         this.environment = environment;
@@ -31,6 +32,8 @@ class DDataBuilder {
         spring = dS != null && sqlSDS != null && sqlSDS.getKind() == ElementKind.CLASS;
         temporalType = environment.getElementUtils().getTypeElement("java.time.temporal.Temporal").asType();
         oldDateType = environment.getElementUtils().getTypeElement("java.util.Date").asType();
+        useSpringCache = environment.getElementUtils().getTypeElement(
+                "org.springframework.cache.annotation.Cacheable") != null;
     }
 
     void checkInterface(Element beanElement, TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType) {

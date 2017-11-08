@@ -1,5 +1,7 @@
 package org.docero.data.processor;
 
+import org.docero.data.DictionaryType;
+
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
 import javax.lang.model.element.VariableElement;
@@ -7,6 +9,7 @@ import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -78,6 +81,16 @@ class DDataMethodBuilder {
                 "throws " + throwTypes.stream().map(TypeMirror::toString).collect(Collectors.joining(", ")) :
                 "";
         cf.println("");
+        DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
+
+        if (bean.dictionary != DictionaryType.NO && repositoryBuilder.rootBuilder.useSpringCache) {
+            if(repositoryBuilder.defaultGetMethod==this)
+                cf.println("@org.springframework.cache.annotation.Cacheable(cacheNames=\"" + bean.cacheMap +
+                        "\")");
+            else if(repositoryBuilder.defaultDeleteMethod==this)
+                cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap +
+                    "\")");
+        }
         cf.startBlock("public " + (returnType == null ? "void" : returnType) + " " + methodName + "(");
         int i = 0;
         for (DDataMethodParameter parameter : parameters) {
@@ -87,16 +100,31 @@ class DDataMethodBuilder {
         }
         cf.println(")" + throwsPart + " {");
 
+        String callEnd;
         if (returnType != null) {
-            cf.print("return getSqlSession().");
-            if (returnType.toString().contains("java.util.List")) {
-                cf.print("selectList");
-            } else if (returnType.toString().contains("java.util.Map")) {
-                cf.print("selectMap");
+            if (this.returnSimpleType) {
+                callEnd = ");";
+                cf.print("return getSqlSession().");
+                if (returnType.toString().contains("java.util.List")) {
+                    cf.print("selectList");
+                } else if (returnType.toString().contains("java.util.Map")) {
+                    cf.print("selectMap");
+                } else {
+                    cf.print("selectOne");
+                }
             } else {
-                cf.print("selectOne");
+                callEnd = "));";
+                cf.print("return ");
+                if (returnType.toString().contains("java.util.List")) {
+                    cf.print("resolveDictionariesL(getSqlSession().selectList");
+                } else if (returnType.toString().contains("java.util.Map")) {
+                    cf.print("resolveDictionariesM(getSqlSession().selectMap");
+                } else {
+                    cf.print("resolveDictionaries(getSqlSession().selectOne");
+                }
             }
         } else {
+            callEnd = ");";
             switch (methodType) {
                 case INSERT:
                     cf.print("insert");
@@ -112,7 +140,6 @@ class DDataMethodBuilder {
                 repositoryBuilder.defaultGetMethod == this ? "" : "_" + methodIndex) + "\"");
 
         if (parameters.size() > 0) {
-            DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
             if (bean.isKeyComposite && parameters.size() == 1 && (
                     repositoryBuilder.defaultGetMethod == this || repositoryBuilder.defaultDeleteMethod == this
             )) {
@@ -125,9 +152,9 @@ class DDataMethodBuilder {
                                 property.name.substring(1) + "());");
                     }
                 cf.endBlock("}}");
-                cf.endBlock(");");
+                cf.endBlock(callEnd);
             } else if (parameters.size() == 1 && parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
-                cf.println(", " + parameters.get(0).name + ");");
+                cf.println(", " + parameters.get(0).name + callEnd);
             } else {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
@@ -135,10 +162,10 @@ class DDataMethodBuilder {
                     cf.println("this.put(\"" + parameter.name + "\", " + parameter.name + ");");
                 }
                 cf.endBlock("}}");
-                cf.endBlock(");");
+                cf.endBlock(callEnd);
             }
         } else {
-            cf.println(");");
+            cf.println(callEnd);
         }
 
         cf.endBlock("}");

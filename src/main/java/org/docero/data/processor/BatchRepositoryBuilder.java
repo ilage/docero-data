@@ -52,14 +52,10 @@ class BatchRepositoryBuilder {
     private class BeanData {
         final DataBeanBuilder bean;
         final DataRepositoryBuilder repository;
-        final String repositoryVariable;
 
         private BeanData(DataBeanBuilder bean, DataRepositoryBuilder repository) {
             this.bean = bean;
             this.repository = repository;
-            String str = repository.mappingClassName.substring(repository.mappingClassName.lastIndexOf('.') + 1);
-            repositoryVariable = Character.toLowerCase(str.charAt(0)) + str.substring(1) +
-                    (repository.isCreatedByInterface ? "Repository" : "");
         }
     }
 
@@ -97,7 +93,7 @@ class BatchRepositoryBuilder {
                 for (BeanData d : supported.values()) {
                     cf.println("private final org.docero.data.DDataRepository<" +
                             d.bean.interfaceType + "," +
-                            d.bean.keyType + "> " + d.repositoryVariable + ";");
+                            d.bean.keyType + "> " + d.repository.repositoryVariableName + ";");
                 }
                 cf.println("");
                 cf.startBlock("public " + implClassName.substring(simpNameDel + 1) + "(");
@@ -106,8 +102,8 @@ class BatchRepositoryBuilder {
                 cf.startBlock("{");
                 cf.println("this.setSqlSessionFactory(sqlSessionFactory);");
                 for (BeanData d : supported.values()) {
-                    cf.println("this." + d.repositoryVariable + " = new " + d.repository.daoClassName + "();");
-                    cf.println("((org.mybatis.spring.support.SqlSessionDaoSupport)" + d.repositoryVariable +
+                    cf.println("this." + d.repository.repositoryVariableName + " = new " + d.repository.daoClassName + "();");
+                    cf.println("((org.mybatis.spring.support.SqlSessionDaoSupport)" + d.repository.repositoryVariableName +
                             ").setSqlSessionTemplate((SqlSessionTemplate)this.getSqlSession());");
 
                 }
@@ -139,7 +135,7 @@ class BatchRepositoryBuilder {
             cf.println("if(clazz == null || id == null) return null;");
             for (BeanData d : supported.values()) {
                 cf.println("if (clazz == " + d.bean.interfaceType + ".class) " +
-                        "return (T) " + d.repositoryVariable + ".get((" + d.bean.keyType + ")id);");
+                        "return (T) " + d.repository.repositoryVariableName + ".get((" + d.bean.keyType + ")id);");
             }
             cf.println("throw new IllegalArgumentException(\"unknown class for repository: \"+clazz.getCanonicalName());");
             cf.endBlock("}");
@@ -154,7 +150,7 @@ class BatchRepositoryBuilder {
             cf.println("if(bean == null) return;");
             for (BeanData d : supported.values()) {
                 cf.println("else if (bean instanceof " + d.bean.interfaceType + ") " +
-                        "" + d.repositoryVariable + ".insert((" + d.bean.interfaceType + ")bean);");
+                        "" + d.repository.repositoryVariableName + ".insert((" + d.bean.interfaceType + ")bean);");
             }
             cf.println("else throw new IllegalArgumentException(\"unknown class for repository: \"+bean.getClass().getCanonicalName());");
             cf.endBlock("}");
@@ -164,7 +160,7 @@ class BatchRepositoryBuilder {
             cf.println("if(bean == null) return;");
             for (BeanData d : supported.values()) {
                 cf.println("else if (bean instanceof " + d.bean.interfaceType + ") " +
-                        "" + d.repositoryVariable + ".update((" + d.bean.interfaceType + ")bean);");
+                        "" + d.repository.repositoryVariableName + ".update((" + d.bean.interfaceType + ")bean);");
             }
             cf.println("else throw new IllegalArgumentException(\"unknown class for repository: \"+bean.getClass().getCanonicalName());");
             cf.endBlock("}");

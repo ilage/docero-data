@@ -2,6 +2,7 @@ package org.docero.data.processor;
 
 import org.docero.data.DDataFetchType;
 import org.docero.data.DDataFilterOption;
+import org.docero.data.DictionaryType;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentType;
 
@@ -95,7 +96,8 @@ class DDataMapBuilder {
             transformer.transform(source, result);
         }
 
-        if (builder.spring)
+        HashMap<TypeMirror, DataRepositoryBuilder> dictionaries = new HashMap<>();
+        if (builder.spring) {
             try (JavaClassWriter cf = new JavaClassWriter(environment, "org.docero.data.DDataConfiguration")) {
                 cf.println("package org.docero.data;");
                 for (String pkg : builder.packages) cf.println("import " + pkg + ".*;");
@@ -104,13 +106,37 @@ class DDataMapBuilder {
                 cf.endBlock("*/");
                 cf.println("@org.springframework.context.annotation.Configuration");
                 cf.startBlock("public class DDataConfiguration {");
+
+                HashMap<String, Set<DataRepositoryBuilder>> wait4Inject = new HashMap<>();
                 for (DataRepositoryBuilder repository : builder.repositories) {
-                    int offset = repository.daoClassName.lastIndexOf('.') + 1;
-                    String methodName = Character.toLowerCase(repository.daoClassName.charAt(offset)) +
-                            repository.daoClassName.substring(offset + 1);
+                    DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
+                    Set<DataRepositoryBuilder> usedRepositories = new HashSet<>();
+                    for (DataBeanPropertyBuilder prop : bean.properties.values())
+                        if (dictionaries.containsKey(prop.mappedType)) {
+                            usedRepositories.add(dictionaries.get(prop.mappedType));
+                        } else {
+                            DataBeanBuilder mappedBean = builder.beansByInterface.get(prop.mappedType.toString());
+                            if (mappedBean != null && mappedBean.dictionary != DictionaryType.NO) {
+                                if (wait4Inject.containsKey(prop.mappedType.toString()))
+                                    wait4Inject.get(prop.mappedType.toString()).add(repository);
+                                else
+                                    wait4Inject.put(prop.mappedType.toString(), new HashSet<DataRepositoryBuilder>() {{
+                                        this.add(repository);
+                                    }});
+                            }
+                        }
+                    List<DataRepositoryBuilder> injectRepositories = new ArrayList<>();
+                    injectRepositories.addAll(usedRepositories);
+                    if (wait4Inject.containsKey(repository.forInterfaceName()))
+                        injectRepositories.addAll(wait4Inject.get(repository.forInterfaceName()));
+
                     cf.println("@org.springframework.context.annotation.Bean");
-                    cf.startBlock("public " + repository.repositoryInterface + " " + methodName +
-                            "(org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory) {");
+                    cf.startBlock("public " + repository.repositoryInterface + " " + repository.repositoryVariableName +
+                            "(org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory" +
+                            (injectRepositories.size() > 0 ? ", " + injectRepositories.stream()
+                                    .map(r -> r.repositoryInterface + " " + r.repositoryVariableName)
+                                    .collect(Collectors.joining(", ")) : "") +
+                            ") {");
                     DeclaredType getType = environment.getTypeUtils().getDeclaredType(
                             environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
                             repository.forInterfaceName, repository.idClass);
@@ -119,7 +145,19 @@ class DDataMapBuilder {
                     cf.startBlock("if (r != null) {");
                     cf.println(
                             "((org.mybatis.spring.support.SqlSessionDaoSupport) r).setSqlSessionFactory(sqlSessionFactory);");
+                    if (wait4Inject.containsKey(repository.forInterfaceName())) {
+                        for (DataRepositoryBuilder r : wait4Inject.get(repository.forInterfaceName()))
+                            cf.println("((" + r.mappingClassName +
+                                    "_Dao_)" + r.repositoryVariableName + ").set(r);");
+                        wait4Inject.remove(repository.forInterfaceName());
+                    }
+                    for (DataRepositoryBuilder r : usedRepositories)
+                        cf.println("((" + repository.mappingClassName +
+                                "_Dao_)r).set(" + r.repositoryVariableName + ");");
                     cf.endBlock("}");
+
+                    if (bean.dictionary != DictionaryType.NO) dictionaries.put(bean.interfaceType, repository);
+
                     cf.println("return (" + repository.repositoryInterface + ") r;");
                     cf.endBlock("}");
                 }
@@ -144,6 +182,7 @@ class DDataMapBuilder {
                 cf.endBlock("}");
                 cf.endBlock("}");
             }
+        }
 
         return true;
     }
@@ -306,8 +345,10 @@ class DDataMapBuilder {
                             .map(p -> "  " + p.getColumnReader(0) + " AS " + p.getColumnRef())
                             .collect(Collectors.joining(",\n")));
                     if (fetchOptions.fetchType != DDataFetchType.NO)
-                        mappedTables.stream().filter(MappedTable::useInFieldsList).forEach(t ->
-                                addManagedBeanToFrom(sql, t, fetchOptions));
+                        mappedTables.stream()
+                                .filter(MappedTable::notSingleDictionaryValue)
+                                .filter(MappedTable::useInFieldsList)
+                                .forEach(t -> addManagedBeanToFrom(sql, t, fetchOptions));
                     if (!limitedSelect) sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
                     break;
                 case INSERT:
@@ -341,17 +382,19 @@ class DDataMapBuilder {
                                 sk.setAttribute("keyProperty", prop.columnName);
                                 sk.setAttribute("resultType", prop.type.toString());
                                 sk.setAttribute("statementType", "PREPARED");
-                                switch (prop.generatedStrategy) {
-                                    case SEQUENCE:
-                                        sk.setAttribute("order", "BEFORE");
-                                        sk.appendChild(doc.createTextNode("SELECT nextval('" +
-                                                prop.generatedValue + "');"));
-                                        break;
-                                    case SELECT:
-                                        sk.setAttribute("order", prop.generatedBefore ? "BEFORE" : "AFTER");
-                                        sk.appendChild(doc.createTextNode(prop.generatedValue));
-                                        break;
-                                    default:
+                                if (prop.generatedStrategy != null) {
+                                    switch (prop.generatedStrategy) {
+                                        case SEQUENCE:
+                                            sk.setAttribute("order", "BEFORE");
+                                            sk.appendChild(doc.createTextNode("SELECT nextval('" +
+                                                    prop.generatedValue + "');"));
+                                            break;
+                                        case SELECT:
+                                            sk.setAttribute("order", prop.generatedBefore ? "BEFORE" : "AFTER");
+                                            sk.appendChild(doc.createTextNode(prop.generatedValue));
+                                            break;
+                                        default:
+                                    }
                                 }
                             });
                     sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
@@ -468,7 +511,7 @@ class DDataMapBuilder {
                         domElement.appendChild(doc.createTextNode(sql.toString()));
                         if (order != null)
                             addOrder(order, mappedTables.stream()
-                                    .filter(MappedTable::useInFieldsList)
+                                    .filter(MappedTable::useInFieldsListOrFilters)
                                     .collect(Collectors.toList()), domElement);
                     }
             }
@@ -507,20 +550,20 @@ class DDataMapBuilder {
 
         List<org.w3c.dom.Element> where = new ArrayList<>();
 
-        HashSet<MappedTable> joins = new HashSet<>();
-        joins.addAll(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()));
+        //HashSet<MappedTable> joins = new HashSet<>();
+        //joins.addAll(mappedTables.stream().filter(MappedTable::useInFieldsList).collect(Collectors.toList()));
 
         HashMap<String, IfExists> whereExists = new HashMap<>();
         org.w3c.dom.Element e;
         for (FilterOption filter : filters)
-            if (filter.option != null && filter.property != null) {
+            if (filter.option != null && filter.property != null && filter.mappedBy != null) {
                 Optional<MappedTable> table = mappedTables.stream()
                         .filter(mb -> mb.mappedFromTableIndex <= 1 || filter.property.dataBean != bean)
                         .filter(mb -> mb.property.dataBean == filter.mappedBy.dataBean)
                         //.filter(mb -> mb.mappedByProperty.equals(filter.mappedBy.name))
                         .filter(mb -> mb.property.name.equals(filter.mappedBy.name)
                         ).findAny();
-                table.ifPresent(joins::add);
+                //table.ifPresent(joins::add);
                 int tIdx = table.map(mb -> mb.tableIndex).orElse(0);
                 MappedTable currentJoin = table.orElse(null);
 
@@ -719,7 +762,7 @@ class DDataMapBuilder {
 
     private void addJoins(Collection<MappedTable> joins, StringBuilder sql) {
         joins.stream()
-                .filter(t -> t.useInFieldsList || t.useInFilters)
+                .filter(MappedTable::useInFieldsListOrFilters)
                 .sorted(Comparator.comparingInt(t -> t.tableIndex))
                 .forEach(join -> {
                     Mapping joinMap = builder.mappings.get(
@@ -759,7 +802,7 @@ class DDataMapBuilder {
 
     private String jdbcTypeParameterFor(TypeMirror type) {
         String s = builder.jdbcTypeFor(type);
-        return s.length()==0 ? s : ", jdbcType="+s;
+        return s.length() == 0 ? s : ", jdbcType=" + s;
     }
 
     private void addManagedBeanToFrom(StringBuilder sql, MappedTable mappedTable, FetchOptions fetchOptions) {
@@ -792,6 +835,7 @@ class DDataMapBuilder {
         addPropertiesToResultMap(map, "", bean.properties.values(), fetchOptions);
 
         mappedTables.stream()
+                .filter(MappedTable::notSingleDictionaryValue)
                 .filter(b -> fetchOptions.filter4ResultMap(b.property))
                 .filter(b -> !b.property.isCollectionOrMap())
                 .forEach(b ->
@@ -824,7 +868,7 @@ class DDataMapBuilder {
 
         properties.stream()
                 .filter(DataBeanPropertyBuilder::notIgnored)
-                .filter(p -> !(p.isId || p.isCollectionOrMap() || p.columnName == null))
+                .filter(p -> !(p.isId || p.isCollectionOrMap()))
                 .filter(fetchOptions::filterIgnored)
                 .filter(p -> !builder.beansByInterface.containsKey(p.type.toString()))
                 .forEach(p -> {
@@ -952,10 +996,12 @@ class DDataMapBuilder {
         if (mapped2Bean != null) {
             MappedTable mapped2Table = new MappedTable(mappedTable.tableIndex, mappedTables.size() + 1,
                     mappedBean, mapped2Bean, fetchOptions, filters);
-            mappedTables.add(mapped2Table);
+            if (mapped2Table.notSingleDictionaryValue()) {
+                mappedTables.add(mapped2Table);
 
-            addManagedBeanToResultMap(managed, mapped2Table, fetchOptions, repository, mappedTables,
-                    trunkLevel == -1 ? -2 : trunkLevel - 1, filters);
+                addManagedBeanToResultMap(managed, mapped2Table, fetchOptions, repository, mappedTables,
+                        trunkLevel == -1 ? -2 : trunkLevel - 1, filters);
+            }
         }
     }
 
@@ -1197,6 +1243,7 @@ class DDataMapBuilder {
         final int mappedFromTableIndex;
         final DataBeanPropertyBuilder property;
         final DataBeanBuilder mappedBean;
+        final boolean singleDictionaryValue;
         final boolean useInFieldsList;
         final boolean useInFilters;
 
@@ -1210,7 +1257,8 @@ class DDataMapBuilder {
             this.mappedFromTableIndex = fromTableIndex;
             this.property = p;
             this.mappedBean = b;
-            this.useInFieldsList = fetchOptions.filter4FieldsList(p);
+            this.singleDictionaryValue = b.dictionary != DictionaryType.NO && !p.isCollectionOrMap();
+            this.useInFieldsList = !singleDictionaryValue && fetchOptions.filter4FieldsList(p);
             this.useInFilters = fromTableIndex < 2 && filters != null && filters.stream()
                     .anyMatch(f -> f.property != null && f.property.name.equals(p.name) &&
                             f.property.dataBean.getImplementationName().equals(p.dataBean.getImplementationName())
@@ -1222,7 +1270,11 @@ class DDataMapBuilder {
         }
 
         boolean useInFieldsListOrFilters() {
-            return useInFilters;
+            return useInFilters || useInFieldsList;
+        }
+
+        boolean notSingleDictionaryValue() {
+            return !singleDictionaryValue;
         }
     }
 
