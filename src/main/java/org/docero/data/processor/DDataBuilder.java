@@ -124,9 +124,21 @@ class DDataBuilder {
             cf.startBlock("public static final String[] cacheNames = new String[] {");
             cf.println(beansByInterface.values().stream()
                     .filter(DataBeanBuilder::isDictionary)
-                    .map(b -> "\""+b.cacheMap+"\"")
+                    .map(b -> "\"" + b.cacheMap + "\"")
                     .collect(Collectors.joining(",\n\t")));
             cf.endBlock("};");
+
+            cf.println("");
+            cf.println("private static org.docero.data.DDataDictionariesService ds = " +
+                    "new org.docero.data.DDataDictionariesService();");
+            cf.println("");
+            cf.startBlock("public static <T extends java.io.Serializable, C extends java.io.Serializable> void registerAsDictionary(DDataRepository<T, C> repository, Class<? extends T>... types) {");
+            cf.println("for(Class<? extends T> type : types) ds.register(type, repository);");
+            cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("public static org.docero.data.utils.DDataObjectFactory getObjectFactory() {");
+            cf.println("return new org.docero.data.utils.DDataObjectFactory(ds);");
+            cf.endBlock("}");
 
             if (environment.getElementUtils().getTypeElement("com.fasterxml.jackson.databind.JsonDeserializer") != null) {
                 cf.println("");

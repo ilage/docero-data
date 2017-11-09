@@ -1,6 +1,7 @@
 package org.docero.data.utils;
 
 import org.apache.ibatis.reflection.factory.ObjectFactory;
+import org.docero.data.DDataDictionariesService;
 
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;

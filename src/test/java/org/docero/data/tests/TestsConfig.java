@@ -1,8 +1,6 @@
 package org.docero.data.tests;
 
 import org.apache.ibatis.transaction.TransactionFactory;
-import org.docero.data.utils.DDataDictionariesService;
-import org.docero.data.utils.DDataObjectFactory;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.transaction.SpringManagedTransactionFactory;
 import org.springframework.cache.CacheManager;
@@ -60,14 +58,13 @@ public class TestsConfig {
     public SqlSessionFactoryBean sqlSessionFactoryBean(
             DataSource dataSource,
             DDataResources dDataResources,
-            DDataDictionariesService dictionariesService,
             TransactionFactory transactionManager
     ) throws IOException {
         SqlSessionFactoryBean bean = new SqlSessionFactoryBean();
         bean.setDataSource(dataSource);
         bean.setMapperLocations(dDataResources.asArray());
         bean.setTransactionFactory(transactionManager);
-        bean.setObjectFactory(new DDataObjectFactory(dictionariesService));
+        bean.setObjectFactory(DData.getObjectFactory());
         return bean;
     }
 }

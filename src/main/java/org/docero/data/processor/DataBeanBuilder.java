@@ -207,9 +207,9 @@ class DataBeanBuilder {
             }
 
             cf.println("");
-            cf.println("private org.docero.data.utils.DDataDictionariesService dictionariesService;");
+            cf.println("private org.docero.data.DDataDictionariesService dictionariesService;");
             cf.println("private void setDictionariesService_(" +
-                    "org.docero.data.utils.DDataDictionariesService dictionariesService) { " +
+                    "org.docero.data.DDataDictionariesService dictionariesService) { " +
                     "this.dictionariesService = dictionariesService;" +
                     " }");
 

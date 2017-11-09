@@ -106,19 +106,12 @@ class DDataMapBuilder {
                 cf.println("@org.springframework.context.annotation.Configuration");
                 cf.startBlock("public class DDataConfiguration {");
 
-                cf.println("");
-                cf.println("@org.springframework.context.annotation.Bean");
-                cf.startBlock("public org.docero.data.utils.DDataDictionariesService dDataDictionariesService() {");
-                cf.println("return new org.docero.data.utils.DDataDictionariesService();");
-                cf.endBlock("}");
-
                 for (DataRepositoryBuilder repository : builder.repositories) {
                     DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
 
                     cf.println("@org.springframework.context.annotation.Bean");
                     cf.startBlock("public " + repository.repositoryInterface + " " + repository.repositoryVariableName +
-                            "(org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory, " +
-                            "org.docero.data.utils.DDataDictionariesService dDataDictionariesService" +
+                            "(org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory" +
                             ") {");
                     DeclaredType getType = environment.getTypeUtils().getDeclaredType(
                             environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
@@ -130,12 +123,6 @@ class DDataMapBuilder {
                             "((org.mybatis.spring.support.SqlSessionDaoSupport) r).setSqlSessionFactory(sqlSessionFactory);");
                     cf.endBlock("}");
 
-                    if (bean.dictionary != DictionaryType.NO) {
-                        cf.println("dDataDictionariesService.dictionary(" +
-                                repository.forInterfaceName() + ".class, r);");
-                        cf.println("dDataDictionariesService.dictionary(" +
-                                repository.beanImplementation + ".class, r);");
-                    }
                     cf.println("return (" + repository.repositoryInterface + ") r;");
                     cf.endBlock("}");
                 }
@@ -158,6 +145,29 @@ class DDataMapBuilder {
                 }
                 cf.println("return r;");
                 cf.endBlock("}");
+
+                cf.println("");
+                cf.println("@org.springframework.context.annotation.Bean");
+                cf.startBlock("public org.docero.data.DData dData(");
+                for (DataBeanBuilder bean : builder.beansByInterface.values())
+                    if (bean.dictionary != DictionaryType.NO) {
+                        DataRepositoryBuilder r = builder.repositoriesByBean.get(bean.interfaceType.toString());
+                        cf.println(r.repositoryInterface + " " + r.repositoryVariableName + ",");
+                    }
+                cf.println("org.springframework.context.ApplicationContext context");
+                cf.endBlock(")");
+                cf.startBlock("{");
+                for (DataBeanBuilder bean : builder.beansByInterface.values())
+                    if (bean.dictionary != DictionaryType.NO) {
+                        DataRepositoryBuilder r = builder.repositoriesByBean.get(bean.interfaceType.toString());
+                        cf.println("org.docero.data.DData.registerAsDictionary(" +
+                                r.repositoryVariableName + ", " +
+                                bean.interfaceType + ".class, " +
+                                bean.getImplementationName() + ".class);");
+                    }
+                cf.println("return new org.docero.data.DData();");
+                cf.endBlock("}");
+
                 cf.endBlock("}");
             }
         }

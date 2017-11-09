@@ -303,6 +303,6 @@ public class DDataTest {
         assertNotNull(inr);
         int inrId = inr.getId();
 
-        assertNotNull(iInnerRepository.get(inrId));
+        for (int i = 0; i < 10000; i++) assertNotNull(iInnerRepository.get(inrId));
     }
 }

@@ -1,18 +1,20 @@
-package org.docero.data.utils;
-
-import org.docero.data.DDataRepository;
+package org.docero.data;
 
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class DDataDictionariesService {
-    private final HashMap<Class, DDataRepository> dictionaries = new HashMap<>();
+    private final ConcurrentHashMap<Class, DDataRepository> dictionaries =
+            new ConcurrentHashMap<>();
+
+    DDataDictionariesService() {
+    }
 
     /**
      * Create bean by dictionary with mapped type
@@ -30,17 +32,18 @@ public class DDataDictionariesService {
     /**
      * Add dictionary repository to list
      *
-     * @param type - class of bean interface or implementation
+     * @param type       - class of bean interface or implementation
      * @param repository - dictionary repository
      */
-    public <T extends Serializable, C extends Serializable> void dictionary(Class<? extends T> type, DDataRepository<T, C> repository) {
+    <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRepository<T, C> repository) {
         dictionaries.put(type, repository);
     }
 
     /**
      * Get bean by dictionary repository
+     *
      * @param type - class of bean
-     * @param key - bean id
+     * @param key  - bean id
      * @return bean of specified type with specified id
      */
     public <T extends Serializable, C extends Serializable> T get(Class<T> type, C key) {
@@ -67,7 +70,7 @@ public class DDataDictionariesService {
                 mput.invoke(d, bean);
             }
             Method m = bean.getClass().getDeclaredMethod("setDictionariesService_", DDataDictionariesService.class);
-            if(m!=null) {
+            if (m != null) {
                 m.setAccessible(true);
                 m.invoke(bean, this);
             }
