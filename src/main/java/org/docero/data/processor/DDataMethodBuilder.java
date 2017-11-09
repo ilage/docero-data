@@ -84,12 +84,12 @@ class DDataMethodBuilder {
         DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
 
         if (bean.dictionary != DictionaryType.NO && repositoryBuilder.rootBuilder.useSpringCache) {
-            if(repositoryBuilder.defaultGetMethod==this)
+            if (repositoryBuilder.defaultGetMethod == this)
                 cf.println("@org.springframework.cache.annotation.Cacheable(cacheNames=\"" + bean.cacheMap +
                         "\")");
-            else if(repositoryBuilder.defaultDeleteMethod==this)
+            else if (repositoryBuilder.defaultDeleteMethod == this)
                 cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap +
-                    "\")");
+                        "\")");
         }
         cf.startBlock("public " + (returnType == null ? "void" : returnType) + " " + methodName + "(");
         int i = 0;
@@ -100,31 +100,16 @@ class DDataMethodBuilder {
         }
         cf.println(")" + throwsPart + " {");
 
-        String callEnd;
         if (returnType != null) {
-            if (this.returnSimpleType) {
-                callEnd = ");";
-                cf.print("return getSqlSession().");
-                if (returnType.toString().contains("java.util.List")) {
-                    cf.print("selectList");
-                } else if (returnType.toString().contains("java.util.Map")) {
-                    cf.print("selectMap");
-                } else {
-                    cf.print("selectOne");
-                }
+            cf.print("return getSqlSession().");
+            if (returnType.toString().contains("java.util.List")) {
+                cf.print("selectList");
+            } else if (returnType.toString().contains("java.util.Map")) {
+                cf.print("selectMap");
             } else {
-                callEnd = "));";
-                cf.print("return ");
-                if (returnType.toString().contains("java.util.List")) {
-                    cf.print("resolveDictionariesL(getSqlSession().selectList");
-                } else if (returnType.toString().contains("java.util.Map")) {
-                    cf.print("resolveDictionariesM(getSqlSession().selectMap");
-                } else {
-                    cf.print("resolveDictionaries(getSqlSession().selectOne");
-                }
+                cf.print("selectOne");
             }
         } else {
-            callEnd = ");";
             switch (methodType) {
                 case INSERT:
                     cf.print("insert");
@@ -152,9 +137,9 @@ class DDataMethodBuilder {
                                 property.name.substring(1) + "());");
                     }
                 cf.endBlock("}}");
-                cf.endBlock(callEnd);
+                cf.endBlock(");");
             } else if (parameters.size() == 1 && parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
-                cf.println(", " + parameters.get(0).name + callEnd);
+                cf.println(", " + parameters.get(0).name + ");");
             } else {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
@@ -162,10 +147,10 @@ class DDataMethodBuilder {
                     cf.println("this.put(\"" + parameter.name + "\", " + parameter.name + ");");
                 }
                 cf.endBlock("}}");
-                cf.endBlock(callEnd);
+                cf.endBlock(");");
             }
         } else {
-            cf.println(callEnd);
+            cf.println(");");
         }
 
         cf.endBlock("}");
