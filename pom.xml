@@ -114,8 +114,8 @@
                 </configuration>
                 <executions>
                     <execution>
-                        <id>generate-test-sources</id>
-                        <phase>test-compile</phase>
+                        <id>default-testCompile</id>
+                        <phase>generate-test-sources</phase>
                         <goals>
                             <goal>testCompile</goal>
                         </goals>
@@ -129,20 +129,25 @@
             </plugin>
 
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
+                <artifactId>maven-resources-plugin</artifactId>
                 <version>3.0.0</version>
                 <executions>
                     <execution>
-                        <id>add-resource</id>
-                        <phase>generate-test-resources</phase>
+                        <id>default-testResources</id>
+                        <phase>process-test-resources</phase>
                         <goals>
-                            <goal>add-test-resource</goal>
+                            <goal>testResources</goal>
                         </goals>
                         <configuration>
                             <resources>
                                 <resource>
-                                    <directory>target/generated-test-sources/test-annotations</directory>
+                                    <directory>${basedir}/src/test/resources</directory>
+                                </resource>
+                                <resource>
+                                    <directory>${basedir}/target/generated-test-sources/test-annotations</directory>
+                                    <includes>
+                                        <include>**/*.xml</include>
+                                    </includes>
                                 </resource>
                             </resources>
                         </configuration>
