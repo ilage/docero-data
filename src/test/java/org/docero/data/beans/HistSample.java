@@ -1,4 +1,4 @@
-package org.docero.data.example;
+package org.docero.data.beans;
 
 import org.docero.data.DDataBean;
 import org.docero.data.DDataVersionalBean;

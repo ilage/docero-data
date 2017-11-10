@@ -1,7 +1,9 @@
-package org.docero.data.example;
+package org.docero.data.repositories;
 
 import org.docero.data.DDataRep;
 import org.docero.data.DDataVersionalRepository;
+import org.docero.data.beans.HistSample;
+import org.docero.data.beans.HistSample_;
 
 import java.time.LocalDateTime;
 import java.util.List;

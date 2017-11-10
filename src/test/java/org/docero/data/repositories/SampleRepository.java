@@ -1,6 +1,7 @@
-package org.docero.data.example;
+package org.docero.data.repositories;
 
 import org.docero.data.*;
+import org.docero.data.beans.*;
 
 import java.io.IOException;
 import java.util.HashSet;

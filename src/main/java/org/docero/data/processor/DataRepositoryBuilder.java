@@ -112,9 +112,7 @@ class DataRepositoryBuilder {
                         rootBuilder.environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalRepository"),
                         forInterfaceName, idClass, versionalType) :
                 rootBuilder.environment.getTypeUtils().getDeclaredType(
-                        rootBuilder.environment.getElementUtils().getTypeElement(bean.isDictionary() ?
-                                "org.docero.data.utils.DDataDictionary" :
-                                "org.docero.data.DDataRepository"),
+                        rootBuilder.environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
                         forInterfaceName, idClass);
         this.name = mappingClassName.substring(mappingClassName.lastIndexOf('.'));
         this.beanImplementation = bean.getImplementationName();
@@ -154,9 +152,12 @@ class DataRepositoryBuilder {
 
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
             cf.startBlock("public final class " +
-                    daoClassName.substring(simpNameDel + 1)
-                    + " extends org.docero.data.AbstractRepository<" + bean.interfaceType + "," + bean.inversionalKey + ">" +
-                    " implements " + repositoryInterface + " {"
+                    daoClassName.substring(simpNameDel + 1) +
+                    " extends org.docero.data.AbstractRepository<" + bean.interfaceType + "," + bean.inversionalKey + ">" +
+                    " implements " + repositoryInterface + (bean.isDictionary() ?
+                    ", org.docero.data.utils.DDataDictionary<" +
+                            bean.interfaceType + "," + bean.inversionalKey + ">" :
+                    "") + " {"
             );
 
             if (!spring) {

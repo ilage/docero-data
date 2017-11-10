@@ -27,7 +27,7 @@ public class TestsConfig {
     @Bean
     CacheManager cacheManager() {
         return new ConcurrentMapCacheManager(
-                new StringBuilder(org.docero.data.example.Inner.class.getCanonicalName()).reverse().toString()
+                new StringBuilder(org.docero.data.beans.Inner.class.getCanonicalName()).reverse().toString()
         );
     }
 

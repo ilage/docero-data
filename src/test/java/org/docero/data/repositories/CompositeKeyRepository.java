@@ -1,8 +1,9 @@
-package org.docero.data.example;
+package org.docero.data.repositories;
 
 import org.docero.data.DDataFetchType;
 import org.docero.data.DDataRep;
 import org.docero.data.DDataRepository;
+import org.docero.data.beans.*;
 
 import java.util.List;
 
