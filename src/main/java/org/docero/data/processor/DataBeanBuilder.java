@@ -155,6 +155,7 @@ class DataBeanBuilder {
                 cf.println("@com.fasterxml.jackson.annotation.JsonIgnoreProperties({\"handler\",\"ddataBeanKey_\"})");
             cf.startBlock("public class " +
                     className.substring(simpNameDel + 1)
+                    + " extends org.docero.data.AbstractBean"
                     + " implements " + interfaceType + " {");
 
             for (DataBeanPropertyBuilder property : properties.values()) {
@@ -205,13 +206,6 @@ class DataBeanBuilder {
                 property.buildGetter(cf);
                 property.buildSetter(cf);
             }
-
-            cf.println("");
-            cf.println("private org.docero.data.DDataDictionariesService dictionariesService;");
-            cf.println("private void setDictionariesService_(" +
-                    "org.docero.data.DDataDictionariesService dictionariesService) { " +
-                    "this.dictionariesService = dictionariesService;" +
-                    " }");
 
             cf.println("");
             cf.startBlock("public int hashCode() {");

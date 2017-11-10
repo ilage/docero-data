@@ -86,7 +86,7 @@ class DDataMethodBuilder {
         if (bean.dictionary != DictionaryType.NO && repositoryBuilder.rootBuilder.useSpringCache) {
             if (repositoryBuilder.defaultGetMethod == this)
                 cf.println("@org.springframework.cache.annotation.Cacheable(cacheNames=\"" + bean.cacheMap +
-                        "\")");
+                        "\", sync=true)");
             else if (repositoryBuilder.defaultDeleteMethod == this)
                 cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap +
                         "\")");

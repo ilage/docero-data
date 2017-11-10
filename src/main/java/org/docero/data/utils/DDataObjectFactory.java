@@ -36,13 +36,6 @@ public class DDataObjectFactory implements ObjectFactory {
             } catch (InstantiationException | IllegalAccessException e) {
                 bean = null;
             }
-        if (bean != null)
-            try {
-                Method m = bean.getClass().getDeclaredMethod("setDictionariesService_", DDataDictionariesService.class);
-                m.setAccessible(true);
-                m.invoke(bean, dictionariesService);
-            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException ignore) {
-            }
         return bean;
     }
 

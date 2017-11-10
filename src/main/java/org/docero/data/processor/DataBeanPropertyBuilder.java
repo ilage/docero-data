@@ -131,10 +131,10 @@ class DataBeanPropertyBuilder {
                 String getter = "this.get" +
                         Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1) + "()";
                 if (mProp.type.getKind().isPrimitive())
-                    cf.startBlock("if(dictionariesService!=null && " + name + " == null && " + getter + " != 0) {");
+                    cf.startBlock("if(" + name + " == null && " + getter + " != 0) {");
                 else
-                    cf.startBlock("if(dictionariesService!=null && " + name + " == null && " + getter + " != null) {");
-                cf.println(name + " = dictionariesService.get(" + mappedType + ".class," + getter + ");");
+                    cf.startBlock("if(" + name + " == null && " + getter + " != null) {");
+                cf.println(name + " = cached(" + mappedType + ".class," + getter + ");");
                 cf.endBlock("}");
             }
         }

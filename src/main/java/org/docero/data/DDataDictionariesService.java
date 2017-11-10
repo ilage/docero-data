@@ -69,11 +69,6 @@ public class DDataDictionariesService {
                 mput.setAccessible(true);
                 mput.invoke(d, bean);
             }
-            Method m = bean.getClass().getDeclaredMethod("setDictionariesService_", DDataDictionariesService.class);
-            if (m != null) {
-                m.setAccessible(true);
-                m.invoke(bean, this);
-            }
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException ignore) {
         }
         return bean;

@@ -67,7 +67,8 @@ public class DDataProcessor extends AbstractProcessor {
 
                     Set<? extends Element> repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
                     for (Element repositoryElement : repositories)
-                        builder.checkRepository((TypeElement) repositoryElement, versionalRepositoryType);
+                        if (repositoryElement.getKind() == ElementKind.INTERFACE)
+                            builder.checkRepository((TypeElement) repositoryElement, versionalRepositoryType);
 
                     builder.generateAnnotationsAndEnums();
 
