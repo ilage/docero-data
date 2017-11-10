@@ -1,5 +1,7 @@
 package org.docero.data;
 
+import org.docero.data.utils.DDataDictionary;
+
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -10,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class DDataDictionariesService {
-    private final ConcurrentHashMap<Class, DDataRepository> dictionaries =
+    private final ConcurrentHashMap<Class, DDataDictionary> dictionaries =
             new ConcurrentHashMap<>();
 
     DDataDictionariesService() {
@@ -36,7 +38,7 @@ public class DDataDictionariesService {
      * @param repository - dictionary repository
      */
     <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRepository<T, C> repository) {
-        dictionaries.put(type, repository);
+        if (repository instanceof DDataDictionary) dictionaries.put(type, (DDataDictionary) repository);
     }
 
     /**
@@ -62,15 +64,8 @@ public class DDataDictionariesService {
     public <T extends Serializable> T put(T bean) {
         if (bean == null) return null;
         @SuppressWarnings("unchecked")
-        DDataRepository<T, ? extends Serializable> d = dictionaries.get(bean.getClass());
-        try {
-            Method mput = d.getClass().getDeclaredMethod("put_", bean.getClass());
-            if (mput != null) {
-                mput.setAccessible(true);
-                mput.invoke(d, bean);
-            }
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException ignore) {
-        }
+        DDataDictionary<T, ? extends Serializable> d = dictionaries.get(bean.getClass());
+        if (d != null) d.put_(bean);
         return bean;
     }
 
@@ -79,36 +74,31 @@ public class DDataDictionariesService {
      *
      * @param beans - collection of dictionary beans
      */
-    public <T extends Serializable> void put(Collection<T> beans) {
+    public <T extends Serializable, C extends Serializable> void put(Collection<T> beans) {
         if (beans != null && beans.size() > 0) {
             @SuppressWarnings("unchecked")
             Class<T> type = (Class<T>) beans.iterator().next().getClass();
             @SuppressWarnings("unchecked")
-            DDataRepository<T, ? extends Serializable> d = dictionaries.get(type);
-            if (d != null) try {
-                Method mput = d.getClass().getDeclaredMethod("put_", type);
-                if (mput != null) {
-                    mput.setAccessible(true);
-                    for (T bean : beans) mput.invoke(d, bean);
+            DDataDictionary<T, C> d = dictionaries.get(type);
+            if (d != null) {
+                for (T bean : beans) d.put_(bean);
+                try {
+                    @SuppressWarnings("JavaReflectionMemberAccess")
+                    Method mget = type.getDeclaredMethod("getDDataBeanKey_");
+                    List<C> keys = beans.stream()
+                            .map(bean -> {
+                                try {
+                                    //noinspection unchecked
+                                    return (C) mget.invoke(bean);
+                                } catch (IllegalAccessException | InvocationTargetException ignore) {
+                                    return null;
+                                }
+                            })
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toList());
+                    d.putList_(keys);
+                } catch (NoSuchMethodException ignore) {
                 }
-
-                Method mget = type.getDeclaredMethod("getDDataBeanKey_");
-                List<? extends Serializable> keys = beans.stream()
-                        .map(bean -> {
-                            try {
-                                return (Serializable) mget.invoke(bean);
-                            } catch (IllegalAccessException | InvocationTargetException ignore) {
-                                return null;
-                            }
-                        })
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toList());
-                mput = d.getClass().getDeclaredMethod("putList_", keys.getClass());
-                if (mput != null) {
-                    mput.setAccessible(true);
-                    mput.invoke(d, keys);
-                }
-            } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException ignore) {
             }
         }
     }

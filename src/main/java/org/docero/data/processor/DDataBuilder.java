@@ -91,6 +91,10 @@ class DDataBuilder {
             cf.startBlock("protected <T extends java.io.Serializable> void cache(T bean) {");
             cf.println("DData.cache(bean);");
             cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("protected <T extends java.io.Serializable> void cache(java.util.Collection<T> beans) {");
+            cf.println("DData.cache(beans);");
+            cf.endBlock("}");
             cf.endBlock("}");
         }
 
@@ -166,6 +170,10 @@ class DDataBuilder {
             cf.endBlock("}");
             cf.println("");
             cf.startBlock("static <T extends java.io.Serializable> void cache(T bean) {");
+            cf.println("dictionariesService.put(bean);");
+            cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("static <T extends java.io.Serializable> void cache(java.util.Collection<T> bean) {");
             cf.println("dictionariesService.put(bean);");
             cf.endBlock("}");
             cf.println("");

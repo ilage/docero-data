@@ -304,5 +304,12 @@ public class DDataTest {
         int inrId = inr.getId();
 
         for (int i = 0; i < 10000; i++) assertNotNull(iInnerRepository.get(inrId));
+
+        Inner ni = iInnerRepository.create();
+        ni.setId(1010);
+        ni.setText("new");
+        iInnerRepository.insert(ni);
+
+        assertNotNull(iInnerRepository.get(1010));
     }
 }

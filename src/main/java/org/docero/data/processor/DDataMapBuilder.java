@@ -52,12 +52,14 @@ class DDataMapBuilder {
             TypeElement repositoryElement = pkgClasses.get(repository.repositoryInterface.toString());
             String repositoryNamespace;
             FetchOptions defaultFetchOptions = new FetchOptions(-1);
+            DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
             if (repositoryElement == null) {
                 repositoryNamespace = repository.forInterfaceName();
                 createSimpleGet(mapperRoot, repository, defaultFetchOptions);
                 createSimpleInsert(mapperRoot, repository, defaultFetchOptions);
                 createSimpleUpdate(mapperRoot, repository, defaultFetchOptions);
                 createSimpleDelete(mapperRoot, repository, defaultFetchOptions);
+                if (bean.isDictionary()) createDictionaryList(mapperRoot, repository, defaultFetchOptions);
             } else {
                 repositoryNamespace = repository.repositoryInterface.toString();
 
@@ -66,6 +68,8 @@ class DDataMapBuilder {
                 if (!repository.hasUpdate) createSimpleUpdate(mapperRoot, repository, defaultFetchOptions);
                 if (repository.defaultDeleteMethod == null)
                     createSimpleDelete(mapperRoot, repository, defaultFetchOptions);
+                if (bean.isDictionary() && repository.defaultListMethod == null)
+                    createDictionaryList(mapperRoot, repository, defaultFetchOptions);
 
                 //System.out.println(repository.repositoryInterface + ":" + repositoryElement.getEnclosedElements());
                 for (Element methodElement : repositoryElement.getEnclosedElements())
@@ -107,10 +111,8 @@ class DDataMapBuilder {
                 cf.startBlock("public class DDataConfiguration {");
 
                 for (DataRepositoryBuilder repository : builder.repositories) {
-                    DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
-
                     cf.println("@org.springframework.context.annotation.Bean");
-                    cf.startBlock("public " + repository.repositoryInterface + " " + repository.repositoryVariableName +
+                    cf.startBlock("public " + repository.daoClassName + " " + repository.repositoryVariableName +
                             "(org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory" +
                             ") {");
                     DeclaredType getType = environment.getTypeUtils().getDeclaredType(
@@ -123,7 +125,7 @@ class DDataMapBuilder {
                             "((org.mybatis.spring.support.SqlSessionDaoSupport) r).setSqlSessionFactory(sqlSessionFactory);");
                     cf.endBlock("}");
 
-                    cf.println("return (" + repository.repositoryInterface + ") r;");
+                    cf.println("return (" + repository.daoClassName + ") r;");
                     cf.endBlock("}");
                 }
 
@@ -334,7 +336,7 @@ class DDataMapBuilder {
                             .collect(Collectors.joining(",\n")));
                     if (fetchOptions.fetchType != DDataFetchType.NO)
                         mappedTables.stream()
-                                .filter(MappedTable::notSingleDictionaryValue)
+                                .filter(MappedTable::notSingleSmallDictionaryValue)
                                 .filter(MappedTable::useInFieldsList)
                                 .forEach(t -> addManagedBeanToFrom(sql, t, fetchOptions));
                     if (!limitedSelect) sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
@@ -823,7 +825,7 @@ class DDataMapBuilder {
         addPropertiesToResultMap(map, "", bean.properties.values(), fetchOptions);
 
         mappedTables.stream()
-                .filter(MappedTable::notSingleDictionaryValue)
+                .filter(MappedTable::notSingleSmallDictionaryValue)
                 .filter(b -> fetchOptions.filter4ResultMap(b.property))
                 .filter(b -> !b.property.isCollectionOrMap())
                 .forEach(b ->
@@ -984,13 +986,25 @@ class DDataMapBuilder {
         if (mapped2Bean != null) {
             MappedTable mapped2Table = new MappedTable(mappedTable.tableIndex, mappedTables.size() + 1,
                     mappedBean, mapped2Bean, fetchOptions, filters);
-            if (mapped2Table.notSingleDictionaryValue()) {
+            if (mapped2Table.notSingleSmallDictionaryValue()) {
                 mappedTables.add(mapped2Table);
 
                 addManagedBeanToResultMap(managed, mapped2Table, fetchOptions, repository, mappedTables,
                         trunkLevel == -1 ? -2 : trunkLevel - 1, filters);
             }
         }
+    }
+
+    private void createDictionaryList(org.w3c.dom.Element mapperRoot, DataRepositoryBuilder repository, FetchOptions fetchOptions) {
+        DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
+        Document doc = mapperRoot.getOwnerDocument();
+        org.w3c.dom.Element select = (org.w3c.dom.Element)
+                mapperRoot.appendChild(doc.createElement("select"));
+        select.setAttribute("id", "dictionary");
+        select.setAttribute("resultMap", "get_ResultMap");
+        org.w3c.dom.Element include = (org.w3c.dom.Element)
+                select.appendChild(doc.createElement("include"));
+        include.setAttribute("refid", "get_select");
     }
 
     private void createSimpleDelete(org.w3c.dom.Element mapperRoot, DataRepositoryBuilder repository, FetchOptions fetchOptions) {
@@ -1231,7 +1245,7 @@ class DDataMapBuilder {
         final int mappedFromTableIndex;
         final DataBeanPropertyBuilder property;
         final DataBeanBuilder mappedBean;
-        final boolean singleDictionaryValue;
+        final boolean singleSmallDictionaryValue;
         final boolean useInFieldsList;
         final boolean useInFilters;
 
@@ -1245,8 +1259,8 @@ class DDataMapBuilder {
             this.mappedFromTableIndex = fromTableIndex;
             this.property = p;
             this.mappedBean = b;
-            this.singleDictionaryValue = b.dictionary != DictionaryType.NO && !p.isCollectionOrMap();
-            this.useInFieldsList = !singleDictionaryValue && fetchOptions.filter4FieldsList(p);
+            this.singleSmallDictionaryValue = b.dictionary == DictionaryType.SMALL && !p.isCollectionOrMap();
+            this.useInFieldsList = !singleSmallDictionaryValue && fetchOptions.filter4FieldsList(p);
             this.useInFilters = fromTableIndex < 2 && filters != null && filters.stream()
                     .anyMatch(f -> f.property != null && f.property.name.equals(p.name) &&
                             f.property.dataBean.getImplementationName().equals(p.dataBean.getImplementationName())
@@ -1261,8 +1275,8 @@ class DDataMapBuilder {
             return useInFilters || useInFieldsList;
         }
 
-        boolean notSingleDictionaryValue() {
-            return !singleDictionaryValue;
+        boolean notSingleSmallDictionaryValue() {
+            return !singleSmallDictionaryValue;
         }
     }
 
