@@ -59,7 +59,7 @@ class DDataMapBuilder {
                 createSimpleInsert(mapperRoot, repository, defaultFetchOptions);
                 createSimpleUpdate(mapperRoot, repository, defaultFetchOptions);
                 createSimpleDelete(mapperRoot, repository, defaultFetchOptions);
-                if (bean.isDictionary()) createDictionaryList(mapperRoot, repository, defaultFetchOptions);
+                if (bean.isDictionary()) createDictionaryList(mapperRoot, defaultFetchOptions);
             } else {
                 repositoryNamespace = repository.repositoryInterface.toString();
 
@@ -69,7 +69,7 @@ class DDataMapBuilder {
                 if (repository.defaultDeleteMethod == null)
                     createSimpleDelete(mapperRoot, repository, defaultFetchOptions);
                 if (bean.isDictionary() && repository.defaultListMethod == null)
-                    createDictionaryList(mapperRoot, repository, defaultFetchOptions);
+                    createDictionaryList(mapperRoot, defaultFetchOptions);
 
                 //System.out.println(repository.repositoryInterface + ":" + repositoryElement.getEnclosedElements());
                 for (Element methodElement : repositoryElement.getEnclosedElements())
@@ -236,6 +236,8 @@ class DDataMapBuilder {
                     method.methodName + "_" + method.methodIndex;
             switch (method.methodType) {
                 case SELECT:
+                    if (repository.defaultListMethod == method)
+                        createDictionaryList(mapperRoot, fetchOptions);
                 case GET:
                     if (fetchOptions.resultMap.length() == 0 && !method.returnSimpleType)
                         buildResultMap(mapperRoot, method.repositoryBuilder, methodName, fetchOptions, mappedTables, filters);
@@ -503,6 +505,11 @@ class DDataMapBuilder {
                             addOrder(order, mappedTables.stream()
                                     .filter(MappedTable::useInFieldsListOrFilters)
                                     .collect(Collectors.toList()), domElement);
+                        else if (!fetchOptions.order.isEmpty())
+                            domElement.appendChild(doc.createTextNode("\nORDER BY " +
+                                    fetchOptions.order.stream()
+                                            .map(o -> o.getColumnRef() + " ASC")
+                                            .collect(Collectors.joining(", "))));
                     }
             }
         }
@@ -995,8 +1002,7 @@ class DDataMapBuilder {
         }
     }
 
-    private void createDictionaryList(org.w3c.dom.Element mapperRoot, DataRepositoryBuilder repository, FetchOptions fetchOptions) {
-        DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
+    private void createDictionaryList(org.w3c.dom.Element mapperRoot, FetchOptions fetchOptions) {
         Document doc = mapperRoot.getOwnerDocument();
         org.w3c.dom.Element select = (org.w3c.dom.Element)
                 mapperRoot.appendChild(doc.createElement("select"));
@@ -1005,6 +1011,12 @@ class DDataMapBuilder {
         org.w3c.dom.Element include = (org.w3c.dom.Element)
                 select.appendChild(doc.createElement("include"));
         include.setAttribute("refid", "get_select");
+        if (!fetchOptions.order.isEmpty()) {
+            select.appendChild(doc.createTextNode("ORDER BY " +
+                    fetchOptions.order.stream()
+                            .map(o -> o.getColumnRef() + " ASC")
+                            .collect(Collectors.joining(", "))));
+        }
     }
 
     private void createSimpleDelete(org.w3c.dom.Element mapperRoot, DataRepositoryBuilder repository, FetchOptions fetchOptions) {
@@ -1146,6 +1158,7 @@ class DDataMapBuilder {
         final List<DataBeanPropertyBuilder> ignore;
         final int eagerTrunkLevel;
         final boolean truncateLazy;
+        final List<DataBeanPropertyBuilder> order;
 
         FetchOptions(DataRepositoryBuilder repository, AnnotationMirror fetchMirror) {
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName.toString());
@@ -1169,6 +1182,26 @@ class DDataMapBuilder {
             final List<Object> ignoreList = (ignoreObj != null && ignoreObj instanceof List) ?
                     (List) ignoreObj : Collections.emptyList();
             ignore = ignoreList.stream()
+                    .map(Object::toString)
+                    .map(s -> {
+                        int i = s.lastIndexOf('.');
+                        if (i > 0) return s.substring(i + 1);
+                        else return s;
+                    })
+                    .map(name -> bean.properties.values().stream()
+                            .filter(p -> p.enumName.equals(name))
+                            .findAny().orElse(null))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+            Object orderObj = fetchProps.keySet().stream()
+                    .filter(k -> "defaultOrder".equals(k.getSimpleName().toString()))
+                    .findAny()
+                    .map(k -> fetchProps.get(k).getValue())
+                    .orElse(null);
+            final List<Object> orderList = (orderObj != null && orderObj instanceof List) ?
+                    (List) orderObj : Collections.emptyList();
+            order = orderList.stream()
                     .map(Object::toString)
                     .map(s -> {
                         int i = s.lastIndexOf('.');
@@ -1213,6 +1246,7 @@ class DDataMapBuilder {
             ignore = Collections.emptyList();
             eagerTrunkLevel = trunkLevel;
             truncateLazy = false;
+            order = Collections.emptyList();
         }
 
         boolean filterIgnored(DataBeanPropertyBuilder property) {
