@@ -183,7 +183,7 @@ class DDataMapBuilder {
             DataRepositoryBuilder repository
     ) throws Exception {
         TypeMirror returnType = methodElement.getReturnType();
-        Optional<DDataMethodBuilder> methodOpt = repository.methods.stream().filter(m ->
+        DDataMethodBuilder method = repository.methods.stream().filter(m ->
                 m.methodName.equals(methodElement.getSimpleName().toString()) && (
                         (m.returnType == null && returnType == null) ||
                                 (m.returnType != null && m.returnType.toString().equals(returnType.toString()))
@@ -198,11 +198,14 @@ class DDataMapBuilder {
                                         .map(p -> p.lastIndexOf('.') > 0 ? p.substring(p.lastIndexOf('.')) : p)
                                         .collect(Collectors.joining("|"))
                         )*/
-        ).findAny();
+        ).findAny().orElse(null);
 
-        if (methodOpt.isPresent()) {
+        if (method == null)
+            throw new Exception("not found info about method '" + methodElement.getSimpleName() +
+                    " of " + repository.repositoryInterface);
+
+        if (method.selectId == null) {
             Document doc = mapperRoot.getOwnerDocument();
-            DDataMethodBuilder method = methodOpt.get();
             DataBeanBuilder bean = builder.beansByInterface.get(method.repositoryBuilder.forInterfaceName());
 
             FetchOptions fetchOptions = methodElement.getAnnotationMirrors().stream()
@@ -277,9 +280,7 @@ class DDataMapBuilder {
                     delete.setAttribute("parameterType", "HashMap");
                     buildSql(repository, method, bean, fetchOptions, mappedTables, delete, filters, order, false);
             }
-        } else
-            throw new Exception("not found info about method '" + methodElement.getSimpleName() +
-                    " of " + repository.repositoryInterface);
+        }
     }
 
     private void buildSql(

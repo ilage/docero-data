@@ -16,4 +16,7 @@
         <result column="id" property="id"/>
         <result column="cadastralblock" property="cadastralblock"/>
     </resultMap>
+    <select id="selectBuilding" parameterType="HashMap" resultMap="getBuilding">
+        {call ActualData(#{cadNum},#{varDate})}
+    </select>
 </mapper>

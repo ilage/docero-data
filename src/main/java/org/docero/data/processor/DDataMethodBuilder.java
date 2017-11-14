@@ -1,6 +1,7 @@
 package org.docero.data.processor;
 
 import org.docero.data.DictionaryType;
+import org.docero.data.SelectId;
 
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
@@ -22,6 +23,7 @@ class DDataMethodBuilder {
     final long methodIndex;
     final MType methodType;
     final boolean returnSimpleType;
+    final String selectId;
 
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement) {
         this.repositoryBuilder = repositoryBuilder;
@@ -48,6 +50,8 @@ class DDataMethodBuilder {
                     "java.lang.Long".equals(returnType.toString()) ||
                     "java.math.BigInteger".equals(returnType.toString());
         }
+        SelectId select = methodElement.getAnnotation(SelectId.class);
+        selectId = select != null ? select.value() : null;
     }
 
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, DDataMethodBuilder.MType methodType) {
@@ -74,6 +78,7 @@ class DDataMethodBuilder {
                 methodName = "delete";
                 parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
         }
+        selectId = null;
     }
 
     void build(JavaClassWriter cf) throws IOException {
@@ -121,7 +126,10 @@ class DDataMethodBuilder {
                     cf.print("delete");
             }
         }
-        cf.print("(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
+        if (selectId != null)
+            cf.print("(\"" + selectId + "\"");
+        else
+            cf.print("(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                 repositoryBuilder.defaultGetMethod == this ? "" : "_" + methodIndex) + "\"");
 
         if (parameters.size() > 0) {
