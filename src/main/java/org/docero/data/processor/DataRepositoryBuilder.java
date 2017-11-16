@@ -169,6 +169,10 @@ class DataRepositoryBuilder {
 
             if (bean.dictionary != DictionaryType.NO) {
                 cf.println("");
+                cf.startBlock("public org.docero.data.DictionaryType getDictionaryType() {");
+                cf.println("return org.docero.data.DictionaryType." + bean.dictionary + ";");
+                cf.endBlock("}");
+                cf.println("");
                 if (spring) cf.println("@org.springframework.cache.annotation.CachePut(cacheNames=\"" +
                         bean.cacheMap + "\", key = \"#bean.dDataBeanKey_\")");
                 cf.startBlock("public <T extends " + forInterfaceName + "> T put_(T bean) {");
@@ -186,6 +190,13 @@ class DataRepositoryBuilder {
             if (!hasInsert) buildMethodInsert(cf);
             if (!hasUpdate) buildMethodUpdate(cf);
             if (defaultDeleteMethod == null) buildMethodDelete(cf);
+            if (bean.dictionary != DictionaryType.NO && defaultListMethod == null) {
+                cf.println("");
+                cf.startBlock("public java.util.List<" + forInterfaceName + "> list() {");
+                cf.println("return getSqlSession().selectList(\"" +
+                        mappingClassName + ".dictionary\");");
+                cf.endBlock("}");
+            }
 
             for (DDataMethodBuilder method : methods) method.build(cf);
 
