@@ -184,7 +184,7 @@ class DataBeanPropertyBuilder {
                     (this.type.getKind().isPrimitive() ?
                             environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                             environment.getTypeUtils().erasure(this.type)
-                    ) + ".class,\"" + this.jdbcType + "\"),");
+                    ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection + "),");
         }
     }
 
@@ -200,13 +200,14 @@ class DataBeanPropertyBuilder {
                     (this.type.getKind().isPrimitive() ?
                             environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                             environment.getTypeUtils().erasure(this.type)
-                    ) + ".class,\"" + this.jdbcType + "\"),");
+                    ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection + "),");
         } else {
             cf.println("/** Value of column " + this.columnName + "*/");
             cf.println(this.enumName + "(\"" +
                     this.columnName + "\",\"" +
                     this.name + "\"," +
-                    manType.interfaceType + "_WB_.class,\"" + (this.isSimple() ? "" : "ARRAY") + "\"),");
+                    manType.interfaceType + "_WB_.class,\"" + (this.isSimple() ? "" : "ARRAY") +
+                    "\"," + manType.isDictionary() + ", true" + ", " + this.isCollection + "),");
         }
     }
 

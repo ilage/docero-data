@@ -364,21 +364,30 @@ class DataBeanBuilder {
             for (DataBeanPropertyBuilder property : properties.values())
                 property.buildEnumElement(cf, beansByInterface, environment);
 
-            cf.println("NONE_(null,null,null,null);");
+            cf.println("NONE_(null,null,null,null,false,false,false);");
             cf.println("private final String columnName;");
             cf.println("private final String propertyName;");
             cf.println("private final Class javaType;");
             cf.println("private final String jdbcType;");
-            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType) {");
+            cf.println("private final boolean dictionary;");
+            cf.println("private final boolean mapped;");
+            cf.println("private final boolean collection;");
+            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection) {");
             cf.println("this.columnName = columnName;");
             cf.println("this.propertyName = propertyName;");
             cf.println("this.javaType = javaType;");
             cf.println("this.jdbcType = jdbcType;");
+            cf.println("this.dictionary = dictionary;");
+            cf.println("this.mapped = mapped;");
+            cf.println("this.collection = collection;");
             cf.endBlock("}");
             cf.println("@Override public String getColumnName() {return columnName;}");
             cf.println("@Override public String getPropertyName() {return propertyName;}");
             cf.println("@Override public Class getJavaType() {return javaType;}");
             cf.println("@Override public String getJdbcType() {return jdbcType;}");
+            cf.println("@Override public boolean isDictionary() {return dictionary;}");
+            cf.println("@Override public boolean isMappedBean() {return mapped;}");
+            cf.println("@Override public boolean isCollection() {return collection;}");
 
             cf.endBlock("}");
         }
@@ -394,21 +403,30 @@ class DataBeanBuilder {
             for (DataBeanPropertyBuilder property : properties.values())
                 property.buildEnumElementWithBeans(cf, beansByInterface, environment);
 
-            cf.println("NONE_(null,null,null,null);");
+            cf.println("NONE_(null,null,null,null,false,false,false);");
             cf.println("private final String columnName;");
             cf.println("private final String propertyName;");
             cf.println("private final Class javaType;");
             cf.println("private final String jdbcType;");
-            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType) {");
+            cf.println("private final boolean dictionary;");
+            cf.println("private final boolean mapped;");
+            cf.println("private final boolean collection;");
+            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection) {");
             cf.println("this.columnName = columnName;");
             cf.println("this.propertyName = propertyName;");
             cf.println("this.javaType = javaType;");
             cf.println("this.jdbcType = jdbcType;");
+            cf.println("this.dictionary = dictionary;");
+            cf.println("this.mapped = mapped;");
+            cf.println("this.collection = collection;");
             cf.endBlock("}");
             cf.println("@Override public String getColumnName() {return columnName;}");
             cf.println("@Override public String getPropertyName() {return propertyName;}");
             cf.println("@Override public Class getJavaType() {return javaType;}");
             cf.println("@Override public String getJdbcType() {return jdbcType;}");
+            cf.println("@Override public boolean isDictionary() {return dictionary;}");
+            cf.println("@Override public boolean isMappedBean() {return mapped;}");
+            cf.println("@Override public boolean isCollection() {return collection;}");
 
             cf.endBlock("}");
         }
