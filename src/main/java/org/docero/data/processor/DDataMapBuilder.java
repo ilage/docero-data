@@ -280,7 +280,8 @@ class DDataMapBuilder {
                     delete.setAttribute("parameterType", "HashMap");
                     buildSql(repository, method, bean, fetchOptions, mappedTables, delete, filters, order, false);
             }
-        }
+        } else
+            userMappingFiles.add(method.selectId.substring(0, method.selectId.lastIndexOf('.')));
     }
 
     private void buildSql(
