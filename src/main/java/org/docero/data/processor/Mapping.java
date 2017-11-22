@@ -41,8 +41,13 @@ class Mapping {
                 //noinspection unchecked
                 ((List) map.get(executableElement).getValue()).stream()
                         .map(Object::toString)
-                        .forEach(mapValue -> mappedProperties.add(mappedField(mapKey,
-                                ((String) mapValue), bean, hasCollection)));
+                        .forEach(mapValue -> {
+                            DataBeanPropertyBuilder mfield = mappedField(mapKey,
+                                    ((String) mapValue), bean, hasCollection);
+                            if (mfield != null) mappedProperties.add(mfield);
+                            else System.out.println("WARNING: no mapping fileds for " +
+                                    bean.interfaceType + "." + mapKey + " is found");
+                        });
             }
         }
         manyToOne = hasCollection.get();

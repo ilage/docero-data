@@ -34,11 +34,11 @@ public interface HistSample extends DDataVersionalBean<LocalDateTime> {
     void setInnerId(int id);
 
     @DDataProperty
-    @CompositeKeySample_Map_(
-            value = {CompositeKeySample_.INNER_ID},
-            inner = {CompositeKeyInner_.ID}
+    @HistSample_Map_(
+            value = {HistSample_.INNER_ID},
+            inner = {HistInner_.ID}
     )
-    Inner getInner();
+    HistInner getInner();
 
-    void setInner(Inner bean);
+    void setInner(HistInner bean);
 }

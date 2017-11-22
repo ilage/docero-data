@@ -118,7 +118,8 @@ public class DDataProcessor extends AbstractProcessor {
                 for (AnnotationMirror annotationMirror : method.getAnnotationMirrors())
                     if (annotationMirror.getAnnotationType().toString().contains("_Map_")) {
                         mapping = new Mapping(annotationMirror, bean);
-                        builder.mappings.put(mappingKey, mapping);
+                        if(!mapping.mappedProperties.isEmpty())
+                            builder.mappings.put(mappingKey, mapping);
 
                         /*System.out.println(annotationMirror.getAnnotationType() + " tail:");
                         System.out.println(mappingKey + "\n   " +
@@ -138,7 +139,8 @@ public class DDataProcessor extends AbstractProcessor {
                         // надо ли это?
                         DataBeanPropertyBuilder property = propertyName4Method(bean, method);
                         mapping = new Mapping(property, mappedBean);
-                        builder.mappings.put(mappingKey, mapping);
+                        if(!mapping.mappedProperties.isEmpty())
+                            builder.mappings.put(mappingKey, mapping);
                     }
                 }
             }

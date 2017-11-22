@@ -153,21 +153,22 @@ class DataBeanPropertyBuilder {
         cf.println("this." + name + " = " + name + ";");
         if (notCollectionOrMap()) {
             Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
-            if (mapping != null) {
-                mapping.stream().forEach(m -> {
-                    try {
-                        DataBeanPropertyBuilder mProp = m.properties.get(0);
-                        String setter = "this.set" +
-                                Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1);
-                        String getter = name + ".get" +
-                                Character.toUpperCase(m.mappedProperties.get(0).name.charAt(0)) + m.mappedProperties.get(0).name.substring(1);
-                        cf.println(setter + "(" + name + " == null ? " +
-                                (mProp.type.getKind().isPrimitive() ? "0" : "null") +
-                                " : " + getter + "());");
-                    } catch (IOException ignore) {
-                    }
-                });
-            }
+            if (mapping != null) mapping.stream()
+                    .forEach(m -> {
+                        try {
+                            DataBeanPropertyBuilder mProp = m.properties.get(0);
+                            String setter = "this.set" +
+                                    Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1);
+                            String getter = name + ".get" +
+                                    Character.toUpperCase(m.mappedProperties.get(0).name.charAt(0)) +
+                                    m.mappedProperties.get(0).name.substring(1);
+                            cf.println((m.properties.get(0).isVersionFrom ? "//" : "") +
+                                    setter + "(" + name + " == null ? " +
+                                    (mProp.type.getKind().isPrimitive() ? "0" : "null") +
+                                    " : " + getter + "());");
+                        } catch (IOException ignore) {
+                        }
+                    });
         }
         cf.endBlock("}");
     }

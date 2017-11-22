@@ -3,6 +3,7 @@ package org.docero.data.tests;
 import org.docero.data.DDataConfiguration;
 import org.docero.data.DDataOrder;
 import org.docero.data.DDataRepository;
+import org.docero.data.DDataVersionalRepository;
 import org.docero.data.beans.*;
 import org.docero.data.repositories.CompositeKeyRepository;
 import org.docero.data.repositories.SampleRepository;
@@ -44,6 +45,8 @@ public class DDataTest {
     private CompositeKeyRepository iCKSampleRepository;
     @Autowired
     private VersionalSampleRepository iVSample;//DDataVersionalRepository<HistSample, Integer, LocalDateTime> iVSample;
+    @Autowired
+    private DDataVersionalRepository<HistInner, Integer, LocalDateTime> iVInner;
     @Autowired
     private SampleBatchOps sampleBatchOps;
 
@@ -138,6 +141,8 @@ public class DDataTest {
         setUp();
 
         assertNotNull(iVSample);
+        assertNotNull(iVInner);
+
         HistSample bean = iVSample.get(1);
         assertNotNull(bean);
         int count1 = iVSample.list(1).size();
@@ -158,6 +163,13 @@ public class DDataTest {
 
         List<HistSample> l = iVSample.list(1);
         assertEquals(count1 + 1, l.size());
+
+
+        bean = iVSample.get(2, LocalDateTime.of(2017,1,2,0,0,0));
+        assertNotNull(bean);
+        assertNotNull(bean.getInner());
+        assertEquals(bean.getInner().getDateFrom(),LocalDateTime.of(2017,1,2,0,0,0));
+
     }
 
 
