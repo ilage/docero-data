@@ -164,12 +164,16 @@ public class DDataTest {
         List<HistSample> l = iVSample.list(1);
         assertEquals(count1 + 1, l.size());
 
-
-        bean = iVSample.get(2, LocalDateTime.of(2017,1,2,0,0,0));
+        LocalDateTime dateModifyInnerRecord = LocalDateTime.of(2017, 1, 3, 0, 0, 0);
+        bean = iVSample.get(2, dateModifyInnerRecord.minusDays(1));
         assertNotNull(bean);
         assertNotNull(bean.getInner());
-        assertEquals(bean.getInner().getDateFrom(),LocalDateTime.of(2017,1,2,0,0,0));
+        assertNotEquals(bean.getInner().getDateFrom(), dateModifyInnerRecord);
 
+        bean = iVSample.get(2, dateModifyInnerRecord);
+        assertNotNull(bean);
+        assertNotNull(bean.getInner());
+        assertEquals(bean.getInner().getDateFrom(), dateModifyInnerRecord);
     }
 
 

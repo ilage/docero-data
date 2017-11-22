@@ -775,8 +775,40 @@ class DDataMapBuilder {
                                             + "." + m.properties.get(0).getColumnRef()
                                             + " = t" + join.tableIndex
                                             + "." + m.mappedProperties.get(0).getColumnRef()
-                            ).collect(Collectors.joining(" AND ")))
-                            .append(")\n");
+                            ).collect(Collectors.joining(" AND ")));
+                    DataBeanBuilder thisBean = joinMap.properties.get(0).dataBean;
+                    DataBeanBuilder leftBean = joinMap.mappedProperties.get(0).dataBean;
+                    if (leftBean.versionalType != null &&
+                            environment.getTypeUtils().isSameType(thisBean.versionalType, leftBean.versionalType)) {
+
+                        DataBeanPropertyBuilder thisVersionFrom =
+                                thisBean.properties.values().stream().filter(p -> p.isVersionFrom)
+                                        .findAny().orElse(null);
+                        DataBeanPropertyBuilder leftVersionFrom =
+                                leftBean.properties.values().stream().filter(p -> p.isVersionFrom)
+                                        .findAny().orElse(null);
+                        DataBeanPropertyBuilder leftVersionTo =
+                                leftBean.properties.values().stream().filter(p -> p.isVersionTo)
+                                        .findAny().orElse(null);
+
+                        if (thisVersionFrom != null && leftVersionFrom != null && leftVersionTo != null) {
+                            String parameter;
+                            if (environment.getTypeUtils().directSupertypes(thisVersionFrom.type).stream()
+                                    .anyMatch(c -> c.toString().equals(builder.temporalType.toString())) ||
+                                    environment.getTypeUtils().isSubtype(thisVersionFrom.type, builder.oldDateType))
+                                parameter = "CAST(" + buildSqlParameter(thisBean, thisVersionFrom) + " AS TIMESTAMP)";
+                            else
+                                parameter = buildSqlParameter(thisBean, thisVersionFrom);
+                            sql
+                                    .append("\n   AND t").append(join.tableIndex).append('.')
+                                    .append(leftVersionFrom.columnName).append(" <= ").append(parameter)
+                                    .append("\n   AND (t").append(join.tableIndex).append('.')
+                                    .append(leftVersionTo.columnName).append(" > ").append(parameter)
+                                    .append(" OR t").append(join.tableIndex).append('.')
+                                    .append(leftVersionTo.columnName).append(" IS NULL)");
+                        }
+                    }
+                    sql.append(")\n");
                 });
     }
 
@@ -906,26 +938,36 @@ class DDataMapBuilder {
 
         if (mapping != null && (lazy || trunkLevel < 1)) {
             if (!fetchOptions.truncateLazy) {
-                /*if (mapping.properties.size() == 1) {
-                    managed.setAttribute("column", (mappedTable.mappedFromTableIndex == 0 ? "" :
-                            "t" + mappedTable.mappedFromTableIndex + "_") +
-                            mapping.properties.get(0).columnName);
-                    managed.setAttribute("foreignColumn", mapping.mappedProperties.get(0).columnName);
-                } else {*/
-                managed.setAttribute("column", "{" + mapping.properties.stream()
+                DataBeanBuilder thisBean = mapping.properties.get(0).dataBean;
+                DataBeanBuilder mappedBean = mapping.mappedProperties.get(0).dataBean;
+                DataBeanPropertyBuilder thisVersionFrom =
+                        thisBean.properties.values().stream().filter(p -> p.isVersionFrom)
+                                .findAny().orElse(null);
+                DataBeanPropertyBuilder mappedVersionFrom =
+                        mappedBean.properties.values().stream().filter(p -> p.isVersionFrom)
+                                .findAny().orElse(null);
+                DataBeanPropertyBuilder mappedVersionTo =
+                        mappedBean.properties.values().stream().filter(p -> p.isVersionTo)
+                                .findAny().orElse(null);
+
+                StringBuilder columnsMapping = new StringBuilder();
+                columnsMapping.append(mapping.properties.stream()
                         .filter(DataBeanPropertyBuilder::notIgnored)
                         .map(p -> p.columnName + "=" + (mappedTable.mappedFromTableIndex == 0 ? "" :
                                 "t" + mappedTable.mappedFromTableIndex + "_") +
                                 p.columnName)
-                        .collect(Collectors.joining(",")) +
-                        "}");
-                    /*managed.setAttribute("foreignColumn", mapping.mappedProperties.stream()
-                            .map(p -> p.columnName + "=" + p.columnName)
-                            .collect(Collectors.joining(",")));*/
-                //}
+                        .collect(Collectors.joining(",")));
+                if (mappedBean.versionalType != null &&
+                        environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType)) {
+
+                    if (thisVersionFrom != null && mappedVersionFrom != null && mappedVersionTo != null) {
+                        columnsMapping.append(',').append(mappedVersionFrom.columnName).append("=").append("dDataBeanActualAt_");
+                    }
+                }
+                managed.setAttribute("column", "{" + columnsMapping + "}");
+
                 managed.setAttribute("fetchType", "lazy");
 
-                DataBeanBuilder mappedBean = mapping.mappedProperties.get(0).dataBean;
                 String lazyLoadSelectId = "lazy_load_" + mappedBean.name +
                         "_" + mapping.mappedProperties.get(0).columnName;
                 managed.setAttribute("select", lazyLoadSelectId);
@@ -940,18 +982,29 @@ class DDataMapBuilder {
                             ll.appendChild(doc.createElement("include"));
                     il.setAttribute("refid", repository == beanRep ?
                             "get_select" : beanRep.mappingClassName + ".get_select");
-                    ll.appendChild(doc.createTextNode("\nWHERE " +
-                            mapping.stream().map(m -> {
-                                TypeMirror propType = m.manyToOne ?
-                                        m.properties.get(0).type : m.mappedProperties.get(0).type;
-                                return "t0." +
-                                        m.mappedProperties.get(0).getColumnRef() + " = " +
-                                        m.mappedProperties.get(0).getColumnWriter(
-                                                "#{" + m.properties.get(0).columnName +
-                                                        jdbcTypeParameterFor(propType) + "}");
-                            }).collect(Collectors.joining(" AND ")) +
-                            "\n"));
+                    StringBuilder sql = new StringBuilder();
+                    sql.append("\nWHERE ").append(mapping.stream().map(m -> {
+                        TypeMirror propType = m.manyToOne ?
+                                m.properties.get(0).type : m.mappedProperties.get(0).type;
+                        return "t0." +
+                                m.mappedProperties.get(0).getColumnRef() + " = " +
+                                m.mappedProperties.get(0).getColumnWriter(
+                                        "#{" + m.properties.get(0).columnName +
+                                                jdbcTypeParameterFor(propType) + "}");
+                    }).collect(Collectors.joining(" AND "))).append("\n");
+                    if (mappedBean.versionalType != null &&
+                            environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType)) {
 
+                        if (thisVersionFrom != null && mappedVersionFrom != null && mappedVersionTo != null) {
+                            String parameter = "#{" + mappedVersionFrom.columnName + "}";
+                            sql.append("   AND t0.").append(mappedVersionFrom.columnName).append(" <= ").append(parameter)
+                                    .append("\n   AND (t0.")
+                                    .append(mappedVersionTo.columnName).append(" > ").append(parameter)
+                                    .append(" OR t0.")
+                                    .append(mappedVersionTo.columnName).append(" IS NULL)\n");
+                        }
+                    }
+                    ll.appendChild(doc.createTextNode(sql.toString()));
                     repository.lazyLoads.put(lazyLoadSelectId, ll);
                 }
             }
