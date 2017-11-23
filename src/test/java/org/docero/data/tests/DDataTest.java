@@ -6,6 +6,7 @@ import org.docero.data.DDataRepository;
 import org.docero.data.DDataVersionalRepository;
 import org.docero.data.beans.*;
 import org.docero.data.repositories.CompositeKeyRepository;
+import org.docero.data.repositories.MultiTypesRepository;
 import org.docero.data.repositories.SampleRepository;
 import org.docero.data.repositories.VersionalSampleRepository;
 import org.junit.Test;
@@ -26,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 
 import static org.junit.Assert.*;
+import static org.junit.Assert.assertNotNull;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(classes = {
@@ -49,6 +51,8 @@ public class DDataTest {
     private DDataVersionalRepository<HistInner, Integer, LocalDateTime> iVInner;
     @Autowired
     private SampleBatchOps sampleBatchOps;
+    @Autowired
+    private MultiTypesRepository multiTypesRepository;
 
     @SuppressWarnings("SqlNoDataSourceInspection")
     public void setUp() throws SQLException {
@@ -100,6 +104,17 @@ public class DDataTest {
                     "INSERT INTO ddata.\"h2\" (id, date_from, date_to, s) VALUES (11,'2017-01-02T00:00:00','2017-01-03T00:00:00','hi2');\n" +
                     "INSERT INTO ddata.\"h2\" (id, date_from, s) VALUES (11,'2017-01-03T00:00:00','hi2v1');\n" +
                     "" +
+                    "DROP TABLE IF EXISTS ddata.\"a1\";" +
+                    "CREATE TABLE ddata.a1 (\n" +
+                    "  id INT NOT NULL,\n" +
+                    "  elem_type INT NOT NULL DEFAULT 0,\n" +
+                    "  linked INT,\n" +
+                    "  CONSTRAINT a1_pk PRIMARY KEY (id)\n" +
+                    ");" +
+                    "INSERT INTO ddata.a1 (id) VALUES (1);\n" +
+                    "INSERT INTO ddata.a1 (id,elem_type,linked) VALUES (2,1,1001);\n" +
+                    "INSERT INTO ddata.a1 (id,elem_type,linked) VALUES (3,2,1);\n" +
+                    "" +
                     "DROP SEQUENCE ddata.sample_seq;\n" +
                     "\n" +
                     "CREATE SEQUENCE ddata.sample_seq\n" +
@@ -111,6 +126,24 @@ public class DDataTest {
                 st.execute();
             }
         }
+    }
+
+    @Test
+    @Transactional
+    @Commit
+    public void multiTypesTest() throws SQLException, IOException {
+        setUp();
+
+        assertNotNull(multiTypesRepository);
+        ItemAbstraction s = multiTypesRepository.get(3);
+        assertNotNull(s);
+        assertTrue(s instanceof ItemSample);
+        assertNotNull(((ItemSample)s).getSample());
+
+        ItemAbstraction i = multiTypesRepository.get(2);
+        assertNotNull(i);
+        assertTrue(i instanceof ItemInner);
+        assertNotNull(((ItemInner)i).getInner());
     }
 
     @Test

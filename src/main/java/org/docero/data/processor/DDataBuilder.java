@@ -60,10 +60,14 @@ class DDataBuilder {
         }
     }
 
-    void generateAnnotationsAndEnums() throws IOException {
-        for (DataBeanBuilder bean : beansByInterface.values()) {
+    void generateBeansAnnotations() throws IOException {
+        for (DataBeanBuilder bean : beansByInterface.values())
             bean.buildAnnotationsAndEnums(environment, beansByInterface);
-        }
+    }
+
+    void generateRepositoriesAnnotations() throws IOException {
+        for (DataRepositoryBuilder repository : repositories)
+            repository.buildAnnotations(environment, spring);
     }
 
     void generateImplementation() throws IOException {

@@ -31,6 +31,7 @@ public class DDataProcessor extends AbstractProcessor {
 
     private enum Stage {
         STEP1_ENUM_GEN,
+        STEP1p_REPOSITORIES_GEN,
         STEP2_BEANS_GEN,
         STEP3_MAPS_GEN,
         STEP_END
@@ -59,18 +60,20 @@ public class DDataProcessor extends AbstractProcessor {
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         try {
+            Set<? extends Element> repositories;
             switch (stage) {
                 case STEP1_ENUM_GEN:
                     Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
                     for (Element beanElement : entities)
                         builder.checkInterface(beanElement, collectionType, mapType, versionalBeanType);
 
-                    Set<? extends Element> repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
+                    builder.generateBeansAnnotations();
+
+                    repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
                     for (Element repositoryElement : repositories)
                         if (repositoryElement.getKind() == ElementKind.INTERFACE)
                             builder.checkRepository((TypeElement) repositoryElement, versionalRepositoryType);
-
-                    builder.generateAnnotationsAndEnums();
+                    builder.generateRepositoriesAnnotations();
 
                     stage = Stage.STEP2_BEANS_GEN;
                     break;
@@ -82,11 +85,14 @@ public class DDataProcessor extends AbstractProcessor {
 
                     builder.generateImplementation();
                     builder.generateDdata();
+
                     stage = Stage.STEP3_MAPS_GEN;
                     break;
                 case STEP3_MAPS_GEN:
                     if (new DDataMapBuilder(builder, this.processingEnv).build(listClasses()))
                         stage = Stage.STEP_END;
+                    break;
+                case STEP_END:
                     break;
                 default:
             }

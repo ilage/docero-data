@@ -10,12 +10,18 @@ import java.lang.annotation.Target;
 public @interface DDataRep {
     /**
      * class simple name for implementation
-     * @return
+     * @return name
      */
     String value() default "";
     /**
      * Array of classes for multi-bean repository (like a DDataBatchOpsRepository)
-     * @return
+     * @return array of repositories
      */
     Class[] beans() default {};
+    /**
+     * Array of DDataDiscriminator with pairs of values and bean-interfaces.<br>
+     * Used with @&lt;RepositoryInterface&gt;_Discriminator_ generic annotation, what defines column used for discriminator.
+     * @return array of discriminator mapping to discriminator value
+     */
+    DDataDiscriminator[] discriminator() default {};
 }

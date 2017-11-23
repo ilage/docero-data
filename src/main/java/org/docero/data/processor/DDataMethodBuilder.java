@@ -10,7 +10,6 @@ import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -54,7 +53,10 @@ class DDataMethodBuilder {
         selectId = select != null ? select.value() : null;
     }
 
-    DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, DDataMethodBuilder.MType methodType) {
+    DDataMethodBuilder(
+            DataRepositoryBuilder repositoryBuilder,
+            MType methodType
+    ) {
         this.repositoryBuilder = repositoryBuilder;
         returnType = repositoryBuilder.forInterfaceName;
         returnSimpleType = false;
