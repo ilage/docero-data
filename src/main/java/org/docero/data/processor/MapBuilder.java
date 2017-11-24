@@ -41,6 +41,12 @@ class MapBuilder extends MapElement {
         }
     }
 
+    @Override
+    String fromInterface() {
+        assert repository.forInterfaceName != null;
+        return repository.forInterfaceName.toString();
+    }
+
     private final HashMap<String, MapBuilder.DiscriminatorElement> discriminatorElements = new HashMap<>();
     private DataRepositoryDiscriminator discriminator;
 
@@ -123,6 +129,11 @@ class MapBuilder extends MapElement {
             );
             super.write(managed);
         }
+
+        @Override
+        String fromInterface() {
+            return mappedTable.property.dataBean.interfaceType.toString();
+        }
     }
 
     static class DiscriminatorElement extends MapElement {
@@ -153,6 +164,11 @@ class MapBuilder extends MapElement {
                     map.appendChild(map.getOwnerDocument().createElement("case"));
             dcase.setAttribute("value", discriminator.value);
             dcase.setAttribute("resultMap", resultMapId());
+        }
+
+        @Override
+        String fromInterface() {
+            return discriminator.beanInterface;
         }
 
         void writeMap(Node root) {

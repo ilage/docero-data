@@ -49,9 +49,12 @@ abstract class MapElement {
         attributes.put(id, value);
     }
 
-    final MapElement addTable(DDataMapBuilder.MappedTable table) {
-        MapElement discriminator = mapBuilder().getDiscriminatorElement(table.property.dataBean.interfaceType.toString());
-        MapElement map = new MapBuilder.MappedElement(table, mapBuilder());
+    final MapElement createTableElement(DDataMapBuilder.MappedTable table) {
+        return new MapBuilder.MappedElement(table, mapBuilder());
+    }
+
+    final MapElement addTable(MapElement map) {
+        MapElement discriminator = mapBuilder().getDiscriminatorElement(map.fromInterface());
         if (discriminator != null)
             discriminator.mappedElements.add(map);
         else {
@@ -59,6 +62,8 @@ abstract class MapElement {
         }
         return map;
     }
+
+    abstract String fromInterface();
 
     static class IdElement {
         final DataBeanPropertyBuilder property;

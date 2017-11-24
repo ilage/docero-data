@@ -958,7 +958,7 @@ class DDataMapBuilder {
             int trunkLevel,
             List<FilterOption> filters
     ) {
-        MapElement managed = map.addTable(mappedTable);
+        MapElement managed = map.createTableElement(mappedTable);
 
         Mapping mapping = builder.mappings.get(mappedTable.property.dataBean.interfaceType + "." + mappedTable.property.name);
         boolean lazy;
@@ -972,6 +972,8 @@ class DDataMapBuilder {
 
         if (mapping != null && (lazy || trunkLevel < 1)) {
             if (!fetchOptions.truncateLazy) {
+                map.addTable(managed);
+
                 DataBeanBuilder thisBean = mapping.properties.get(0).dataBean;
                 DataBeanBuilder mappedBean = mapping.mappedProperties.get(0).dataBean;
                 DataBeanPropertyBuilder thisVersionFrom =
@@ -1045,6 +1047,8 @@ class DDataMapBuilder {
                 }
             }
         } else {
+            map.addTable(managed);
+
             addPropertiesToResultMap(managed, "t" + mappedTable.tableIndex + "_",
                     mappedTable.mappedBean.properties.values(), fetchOptions, null);
             //TODO discriminator ?
