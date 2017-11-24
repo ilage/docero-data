@@ -35,14 +35,15 @@ class DataBeanBuilder {
             TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType
     ) {
         rootBuilder = builder;
+        interfaceType = (beanElement.asType());
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
         schema = (ddBean.schema());
-        table = (ddBean.table());
-        name = (ddBean.value());
+        table = ddBean.table().trim().length() == 0 ?
+                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.')+1)):
+                ddBean.table();
+        name = ddBean.value().trim().length()==0 ? table : ddBean.value().replace(' ','_');
         grown = (ddBean.growth());
         dictionary = (ddBean.dictionary());
-        interfaceType = (beanElement.asType());
-        StringBuilder sb = new StringBuilder();
         cacheMap = new StringBuilder(interfaceType.toString()).reverse().toString();
         TypeMirror voidType = builder.environment.getElementUtils().getTypeElement("java.lang.Void").asType();
 
@@ -127,6 +128,17 @@ class DataBeanBuilder {
                 inversionalKey = keyType;
             }
         }
+    }
+
+    static String propertyName2sqlName(String value) {
+        StringBuilder nameBuilder = new StringBuilder();
+        for (char c : value.toCharArray())
+            if (nameBuilder.length() == 0)
+                nameBuilder.append(Character.toLowerCase(c));
+            else if (Character.isUpperCase(c))
+                nameBuilder.append('_').append(Character.toLowerCase(c));
+            else nameBuilder.append(c);
+        return nameBuilder.toString();
     }
 
     String getImplementationName() {

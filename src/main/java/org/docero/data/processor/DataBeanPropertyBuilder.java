@@ -81,14 +81,7 @@ class DataBeanPropertyBuilder {
             writerSql = ddProperty.writer().length() == 0 ? null : ddProperty.writer();
             isId = ddProperty.id();
         } else {
-            StringBuilder nameBuilder = new StringBuilder();
-            for (char c : name.toCharArray())
-                if (nameBuilder.length() == 0)
-                    nameBuilder.append(Character.toLowerCase(c));
-                else if (Character.isUpperCase(c))
-                    nameBuilder.append('_').append(Character.toLowerCase(c));
-                else nameBuilder.append(c);
-            columnName = nameBuilder.toString();
+            columnName = DataBeanBuilder.propertyName2sqlName(name);
             isId = ddProperty != null && ddProperty.id();
             readerSql = null;
             writerSql = null;
