@@ -39,9 +39,11 @@ class DataBeanBuilder {
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
         schema = (ddBean.schema());
         table = ddBean.table().trim().length() == 0 ?
-                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.')+1)):
+                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.')+1)) :
                 ddBean.table();
-        name = ddBean.value().trim().length()==0 ? table : ddBean.value().replace(' ','_');
+        name = ddBean.value().trim().length()==0 ?
+                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.')+1)) :
+                ddBean.value().replace(' ','_');
         grown = (ddBean.growth());
         dictionary = (ddBean.dictionary());
         cacheMap = new StringBuilder(interfaceType.toString()).reverse().toString();

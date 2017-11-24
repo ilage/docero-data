@@ -1041,18 +1041,29 @@ class DDataMapBuilder {
                                         "#{" + m.properties.get(0).columnName +
                                                 jdbcTypeParameterFor(propType) + "}");
                     }).collect(Collectors.joining(" AND "))).append("\n");
-                    if (mappedBean.versionalType != null &&
-                            environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType)) {
 
+                    if (discriminator != null &&
+                            discriminator.property.dataBean.getTableRef().equals(mappedBean.getTableRef()))
+                        Arrays.stream(discriminator.beans)
+                                .filter(i -> i.beanInterface.equals(mappedBean.interfaceType.toString()))
+                                .findAny().ifPresent(i -> sql
+                                .append("   AND t0.\"")
+                                .append(discriminator.property.columnName)
+                                .append("\" = ")
+                                .append(builder.maskedValue(discriminator.property, i.value))
+                                .append("\n"));
+
+                    if (mappedBean.versionalType != null &&
+                            environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType))
                         if (thisVersionFrom != null && mappedVersionFrom != null && mappedVersionTo != null) {
                             String parameter = "#{" + mappedVersionFrom.columnName + "}";
-                            sql.append("   AND t0.").append(mappedVersionFrom.columnName).append(" <= ").append(parameter)
-                                    .append("\n   AND (t0.")
-                                    .append(mappedVersionTo.columnName).append(" > ").append(parameter)
-                                    .append(" OR t0.")
-                                    .append(mappedVersionTo.columnName).append(" IS NULL)\n");
+                            sql.append("   AND t0.\"").append(mappedVersionFrom.columnName).append("\" <= ").append(parameter)
+                                    .append("\n   AND (t0.\"")
+                                    .append(mappedVersionTo.columnName).append("\" > ").append(parameter)
+                                    .append(" OR t0.\"")
+                                    .append(mappedVersionTo.columnName).append("\" IS NULL)\n");
                         }
-                    }
+
                     ll.appendChild(doc.createTextNode(sql.toString()));
                     repository.lazyLoads.put(lazyLoadSelectId, ll);
                 }
@@ -1061,7 +1072,6 @@ class DDataMapBuilder {
             map.addTable(managed);
             addPropertiesToResultMap(managed, "t" + mappedTable.tableIndex + "_",
                     mappedTable.mappedBean.properties.values(), fetchOptions, null);
-            //TODO discriminator ?
             if (trunkLevel != 0) {
                 List<DataBeanPropertyBuilder> mappedBeans = mappedTable.mappedBean.properties.values().stream()
                         .filter(DataBeanPropertyBuilder::notIgnored)
@@ -1074,14 +1084,14 @@ class DDataMapBuilder {
                         .forEach(mappedBean ->
                                 addManaged2BeanToResultMap(doc, managed, mappedTable, mappedBean,
                                         fetchOptions, repository, mappedTables,
-                                        discrItem==null ? trunkLevel - 1 : trunkLevel, filters, discriminator)
+                                        discrItem == null ? trunkLevel - 1 : trunkLevel, filters, discriminator)
                         );
                 mappedBeans.stream()
                         .filter(DataBeanPropertyBuilder::isCollectionOrMap)
                         .forEach(mappedBean ->
                                 addManaged2BeanToResultMap(doc, managed, mappedTable, mappedBean,
                                         fetchOptions, repository, mappedTables,
-                                        discrItem==null ? trunkLevel - 1 : trunkLevel, filters, discriminator)
+                                        discrItem == null ? trunkLevel - 1 : trunkLevel, filters, discriminator)
                         );
             }
         }
