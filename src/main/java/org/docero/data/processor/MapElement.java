@@ -13,6 +13,8 @@ abstract class MapElement {
     final List<MapElement> mappedElements = new ArrayList<>();
     final HashMap<String, String> attributes = new HashMap<>();
 
+    boolean useVersionalProperty;
+
     abstract String id();
 
     abstract boolean isCollection();
@@ -31,6 +33,12 @@ abstract class MapElement {
             idElement.write(map);
         for (ResultElement resultElement : resultElements)
             resultElement.write(map);
+        if (useVersionalProperty && this == mapBuilder()) {
+            org.w3c.dom.Element id = (org.w3c.dom.Element)
+                    map.appendChild(map.getOwnerDocument().createElement("result"));
+            id.setAttribute("property", "dDataBeanActualAt_");
+            id.setAttribute("column", "dDataBeanActualAt_");
+        }
         for (MapElement association : mappedElements)
             if (association.notCollection()) association.write(map);
         for (MapElement collection : mappedElements)
@@ -64,6 +72,10 @@ abstract class MapElement {
     }
 
     abstract String fromInterface();
+
+    void addVersionalProperty() {
+        useVersionalProperty = true;
+    }
 
     static class IdElement {
         final DataBeanPropertyBuilder property;

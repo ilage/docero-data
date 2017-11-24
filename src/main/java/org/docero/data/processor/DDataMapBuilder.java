@@ -51,7 +51,7 @@ class DDataMapBuilder {
 
             TypeElement repositoryElement = pkgClasses.get(repository.repositoryInterface.toString());
             String repositoryNamespace;
-            FetchOptions defaultFetchOptions = new FetchOptions(-1);
+            FetchOptions defaultFetchOptions = new FetchOptions(1);
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
             if (repositoryElement == null) {
                 repositoryNamespace = repository.forInterfaceName();
@@ -221,7 +221,7 @@ class DDataMapBuilder {
             FetchOptions fetchOptions = methodElement.getAnnotationMirrors().stream()
                     .filter(a -> a.toString().indexOf("_DDataFetch_") > 0)
                     .findAny().map(f -> new FetchOptions(repository, f))
-                    .orElse(new FetchOptions(-1));
+                    .orElse(new FetchOptions(1));
 
             ArrayList<FilterOption> filters = new ArrayList<>();
             VariableElement order = null;
@@ -908,21 +908,24 @@ class DDataMapBuilder {
                 addPropertiesToResultMap(map, "", properties, fetchOptions, item);
             }
 
-        mappedTables.stream()
+        ArrayList<MappedTable> unmodifiableTables = new ArrayList<>(mappedTables);
+        unmodifiableTables.stream()
                 .filter(MappedTable::notSingleSmallDictionaryValue)
                 .filter(b -> fetchOptions.filter4ResultMap(b.property))
                 .filter(b -> !b.property.isCollectionOrMap())
                 .forEach(b ->
                         addManagedBeanToResultMap(doc, map, b,
                                 fetchOptions, repository, mappedTables,
-                                fetchOptions.eagerTrunkLevel, filters));
-        mappedTables.stream()
+                                fetchOptions.eagerTrunkLevel, filters,
+                                discriminator));
+        unmodifiableTables.stream()
                 .filter(b -> fetchOptions.filter4ResultMap(b.property))
                 .filter(b -> b.property.isCollectionOrMap())
                 .forEach(b ->
                         addManagedBeanToResultMap(doc, map, b,
                                 fetchOptions, repository, mappedTables,
-                                fetchOptions.eagerTrunkLevel, filters));
+                                fetchOptions.eagerTrunkLevel, filters,
+                                discriminator));
 
         map.write(mapperRoot);
     }
@@ -933,12 +936,14 @@ class DDataMapBuilder {
             FetchOptions fetchOptions,
             DataRepositoryDiscriminator.Item discriminator
     ) {
-        MapElement dmap = discriminator!=null ? map.getDiscriminatorElement(discriminator) : map;
+        MapElement dmap = discriminator != null ? map.getDiscriminatorElement(discriminator) : map;
 
         properties.stream()
                 .filter(DataBeanPropertyBuilder::notIgnored)
                 .filter(p -> p.isId)
                 .forEach(p -> dmap.addId(prefix, p));
+
+        if (properties.iterator().next().dataBean.versionalType != null) dmap.addVersionalProperty();
 
         properties.stream()
                 .filter(DataBeanPropertyBuilder::notIgnored)
@@ -956,11 +961,17 @@ class DDataMapBuilder {
             DataRepositoryBuilder repository,
             List<MappedTable> mappedTables,
             int trunkLevel,
-            List<FilterOption> filters
+            List<FilterOption> filters,
+            DataRepositoryDiscriminator discriminator
     ) {
         MapElement managed = map.createTableElement(mappedTable);
 
+        DataRepositoryDiscriminator.Item discrItem = discriminator == null ? null : Arrays.stream(discriminator.beans)
+                .filter(i -> i.beanInterface.equals(mappedTable.property.dataBean.interfaceType.toString()))
+                .findAny().orElse(null);
+
         Mapping mapping = builder.mappings.get(mappedTable.property.dataBean.interfaceType + "." + mappedTable.property.name);
+
         boolean lazy;
         if (mappedTable.property.isCollectionOrMap()) {
             DataBeanBuilder mappedBean = builder.beansByInterface.get(mappedTable.property.mappedType.toString());
@@ -1048,7 +1059,6 @@ class DDataMapBuilder {
             }
         } else {
             map.addTable(managed);
-
             addPropertiesToResultMap(managed, "t" + mappedTable.tableIndex + "_",
                     mappedTable.mappedBean.properties.values(), fetchOptions, null);
             //TODO discriminator ?
@@ -1063,13 +1073,15 @@ class DDataMapBuilder {
                         .filter(DataBeanPropertyBuilder::isSimple)
                         .forEach(mappedBean ->
                                 addManaged2BeanToResultMap(doc, managed, mappedTable, mappedBean,
-                                        fetchOptions, repository, mappedTables, trunkLevel - 1, filters)
+                                        fetchOptions, repository, mappedTables,
+                                        discrItem==null ? trunkLevel - 1 : trunkLevel, filters, discriminator)
                         );
                 mappedBeans.stream()
                         .filter(DataBeanPropertyBuilder::isCollectionOrMap)
                         .forEach(mappedBean ->
                                 addManaged2BeanToResultMap(doc, managed, mappedTable, mappedBean,
-                                        fetchOptions, repository, mappedTables, trunkLevel - 1, filters)
+                                        fetchOptions, repository, mappedTables,
+                                        discrItem==null ? trunkLevel - 1 : trunkLevel, filters, discriminator)
                         );
             }
         }
@@ -1084,7 +1096,8 @@ class DDataMapBuilder {
             DataRepositoryBuilder repository,
             List<MappedTable> mappedTables,
             int trunkLevel,
-            List<FilterOption> filters
+            List<FilterOption> filters,
+            DataRepositoryDiscriminator discriminator
     ) {
         DataBeanBuilder mapped2Bean = builder.beansByInterface.get(mappedBean.mappedType.toString());
         if (mapped2Bean != null) {
@@ -1094,7 +1107,7 @@ class DDataMapBuilder {
                 mappedTables.add(mapped2Table);
 
                 addManagedBeanToResultMap(doc, managed, mapped2Table, fetchOptions, repository, mappedTables,
-                        trunkLevel == -1 ? -2 : trunkLevel - 1, filters);
+                        trunkLevel, filters, discriminator);
             }
         }
     }
@@ -1174,7 +1187,7 @@ class DDataMapBuilder {
     ) {
         DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
         AtomicInteger index = new AtomicInteger();
-        ArrayList<MappedTable> mappedTables = new ArrayList<>(bean.properties.values().stream()
+        CopyOnWriteArrayList<MappedTable> mappedTables = new CopyOnWriteArrayList<>(bean.properties.values().stream()
                 .filter(DataBeanPropertyBuilder::notIgnored)
                 .map(p -> {
                     DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
