@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 class DDataMethodBuilder {
+    private static final String ROW_BOUNDS_CLASS = "org.apache.ibatis.session.RowBounds";
+
     final TypeMirror returnType;
     final String methodName;
     final ArrayList<DDataMethodParameter> parameters = new ArrayList<>();
@@ -132,7 +134,7 @@ class DDataMethodBuilder {
             cf.print("(\"" + selectId + "\"");
         else
             cf.print("(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
-                repositoryBuilder.defaultGetMethod == this ? "" : "_" + methodIndex) + "\"");
+                    repositoryBuilder.defaultGetMethod == this ? "" : "_" + methodIndex) + "\"");
 
         if (parameters.size() > 0) {
             if (bean.isKeyComposite && parameters.size() == 1 && (
@@ -147,9 +149,8 @@ class DDataMethodBuilder {
                                 property.name.substring(1) + "());");
                     }
                 cf.endBlock("}}");
-                cf.endBlock(");");
             } else if (parameters.size() == 1 && parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
-                cf.println(", " + parameters.get(0).name + ");");
+                cf.println(", " + parameters.get(0).name);
             } else {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
@@ -157,8 +158,16 @@ class DDataMethodBuilder {
                     cf.println("this.put(\"" + parameter.name + "\", " + parameter.name + ");");
                 }
                 cf.endBlock("}}");
-                cf.endBlock(");");
             }
+
+            if (returnType != null)
+                parameters.stream().filter(p -> ROW_BOUNDS_CLASS.equals(p.type.toString())).findAny().ifPresent(p -> {
+                    try {
+                        cf.println(", " + p.name);
+                    } catch (IOException ignore) {
+                    }
+                });
+            cf.endBlock(");");
         } else {
             cf.println(");");
         }
