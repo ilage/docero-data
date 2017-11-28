@@ -314,4 +314,10 @@ class DDataBuilder {
 
         return "";
     }
+
+    public void buildDataReferenceEnums() throws IOException {
+        for (DataBeanBuilder dataBeanBuilder : beansByInterface.values()) {
+            dataBeanBuilder.buildDataReferenceEnum(environment, beansByInterface, mappings);
+        }
+    }
 }

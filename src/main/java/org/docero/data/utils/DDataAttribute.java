@@ -1,5 +1,7 @@
 package org.docero.data.utils;
 
+import java.util.Map;
+
 public interface DDataAttribute {
     String getColumnName();
     String getPropertyName();
@@ -8,4 +10,6 @@ public interface DDataAttribute {
     boolean isDictionary();
     boolean isMappedBean();
     boolean isCollection();
+    String joinTable();
+    Map<String,String> joinMapping();
 }

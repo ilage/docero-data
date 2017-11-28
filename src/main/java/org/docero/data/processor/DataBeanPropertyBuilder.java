@@ -12,6 +12,7 @@ import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.stream.Collectors;
 
 class DataBeanPropertyBuilder {
     final boolean ignored;
@@ -149,15 +150,14 @@ class DataBeanPropertyBuilder {
             if (mapping != null) mapping.stream()
                     .forEach(m -> {
                         try {
-                            DataBeanPropertyBuilder mProp = m.properties.get(0);
                             String setter = "this.set" +
-                                    Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1);
+                                    Character.toUpperCase(m.property.name.charAt(0)) + m.property.name.substring(1);
                             String getter = name + ".get" +
-                                    Character.toUpperCase(m.mappedProperties.get(0).name.charAt(0)) +
-                                    m.mappedProperties.get(0).name.substring(1);
-                            cf.println((m.properties.get(0).isVersionFrom ? "//" : "") +
+                                    Character.toUpperCase(m.mappedProperty.name.charAt(0)) +
+                                    m.mappedProperty.name.substring(1);
+                            cf.println((m.property.isVersionFrom ? "//" : "") +
                                     setter + "(" + name + " == null ? " +
-                                    (mProp.type.getKind().isPrimitive() ? "0" : "null") +
+                                    (m.property.type.getKind().isPrimitive() ? "0" : "null") +
                                     " : " + getter + "());");
                         } catch (IOException ignore) {
                         }
@@ -182,7 +182,12 @@ class DataBeanPropertyBuilder {
         }
     }
 
-    void buildEnumElementWithBeans(JavaClassWriter cf, HashMap<String, DataBeanBuilder> beansByInterface, ProcessingEnvironment environment) throws IOException {
+    void buildEnumElementWithBeans(
+            JavaClassWriter cf,
+            HashMap<String, DataBeanBuilder> beansByInterface,
+            HashMap<String, Mapping> mappings,
+            ProcessingEnvironment environment
+    ) throws IOException {
         TypeMirror typeErasure = environment.getTypeUtils().erasure(isCollection ?
                 ((DeclaredType) type).getTypeArguments().get(0) : type);
         DataBeanBuilder manType = beansByInterface.get(typeErasure.toString());
@@ -194,14 +199,19 @@ class DataBeanPropertyBuilder {
                     (this.type.getKind().isPrimitive() ?
                             environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                             environment.getTypeUtils().erasure(this.type)
-                    ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection + "),");
+                    ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection + ", null, null),");
         } else {
             cf.println("/** Value of column " + this.columnName + "*/");
             cf.println(this.enumName + "(\"" +
                     this.columnName + "\",\"" +
                     this.name + "\"," +
                     manType.interfaceType + "_WB_.class,\"" + (this.isSimple() ? "" : "ARRAY") +
-                    "\"," + manType.isDictionary() + ", true" + ", " + this.isCollection + "),");
+                    "\"," + manType.isDictionary() + ", true" + ", " + this.isCollection +
+                    ",\"" + manType.getTableRef().replace("\"","\\\"") + "\", new java.util.HashMap<String, String>(){{" +
+                            mappings.get(dataBean.interfaceType.toString()+"."+this.name).stream()
+                            .map(m->"put(\""+m.property.columnName+"\",\""+m.mappedProperty.columnName+"\");")
+                            .collect(Collectors.joining(" ")) +
+                    "}}" + "),");
         }
     }
 

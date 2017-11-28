@@ -68,11 +68,23 @@ class Mapping {
         this.manyToOne = manyToOne;
     }
 
-    Stream<Mapping> stream() {
-        List<Mapping> l = new ArrayList<>();
+    class SingleFieldMapping {
+        final DataBeanPropertyBuilder property;
+        final DataBeanPropertyBuilder mappedProperty;
+        final boolean manyToOne;
+
+        SingleFieldMapping(DataBeanPropertyBuilder property, DataBeanPropertyBuilder mappedProperties, boolean manyToOne) {
+            this.property = property;
+            this.mappedProperty = mappedProperties;
+            this.manyToOne = manyToOne;
+        }
+    }
+
+    Stream<SingleFieldMapping> stream() {
+        List<SingleFieldMapping> l = new ArrayList<>();
         if (properties.size() > 0 && mappedProperties.size() > 0)
             for (int i = 0; i < Math.max(properties.size(), mappedProperties.size()); i++) {
-                l.add(new Mapping(
+                l.add(new SingleFieldMapping(
                         properties.get(i < properties.size() ? i : 0),
                         mappedProperties.get(i < mappedProperties.size() ? i : 0),
                         manyToOne

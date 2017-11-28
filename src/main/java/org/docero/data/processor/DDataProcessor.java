@@ -89,8 +89,10 @@ public class DDataProcessor extends AbstractProcessor {
                     stage = Stage.STEP3_MAPS_GEN;
                     break;
                 case STEP3_MAPS_GEN:
-                    if (new DDataMapBuilder(builder, this.processingEnv).build(listClasses()))
+                    if (new DDataMapBuilder(builder, this.processingEnv).build(listClasses())) {
+                        builder.buildDataReferenceEnums();
                         stage = Stage.STEP_END;
+                    }
                     break;
                 case STEP_END:
                     break;

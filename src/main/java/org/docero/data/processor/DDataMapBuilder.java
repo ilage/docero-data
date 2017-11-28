@@ -710,9 +710,9 @@ class DDataMapBuilder {
                             existsElt.appendChild(doc.createTextNode(
                                     joinMap.stream().map(m -> "\nt" +
                                             currentJoin.mappedFromTableIndex +
-                                            "." + m.properties.get(0).getColumnRef() +
+                                            "." + m.property.getColumnRef() +
                                             " = t" + currentJoin.tableIndex +
-                                            "." + m.mappedProperties.get(0).getColumnRef() + "\n")
+                                            "." + m.mappedProperty.getColumnRef() + "\n")
                                             .collect(Collectors.joining(" AND "))
                             ));
                             ifExists = new IfExists(existsElt, filter.parameter);
@@ -805,9 +805,9 @@ class DDataMapBuilder {
                             .append(" ON (")
                             .append(joinMap.stream().map(m ->
                                     "t" + join.mappedFromTableIndex
-                                            + "." + m.properties.get(0).getColumnRef()
+                                            + "." + m.property.getColumnRef()
                                             + " = t" + join.tableIndex
-                                            + "." + m.mappedProperties.get(0).getColumnRef()
+                                            + "." + m.mappedProperty.getColumnRef()
                             ).collect(Collectors.joining(" AND ")));
                     DataBeanBuilder thisBean = joinMap.properties.get(0).dataBean;
                     DataBeanBuilder leftBean = joinMap.mappedProperties.get(0).dataBean;
@@ -1034,11 +1034,11 @@ class DDataMapBuilder {
                     StringBuilder sql = new StringBuilder();
                     sql.append("\nWHERE ").append(mapping.stream().map(m -> {
                         TypeMirror propType = m.manyToOne ?
-                                m.properties.get(0).type : m.mappedProperties.get(0).type;
+                                m.property.type : m.mappedProperty.type;
                         return "t0." +
-                                m.mappedProperties.get(0).getColumnRef() + " = " +
-                                m.mappedProperties.get(0).getColumnWriter(
-                                        "#{" + m.properties.get(0).columnName +
+                                m.mappedProperty.getColumnRef() + " = " +
+                                m.mappedProperty.getColumnWriter(
+                                        "#{" + m.property.columnName +
                                                 jdbcTypeParameterFor(propType) + "}");
                     }).collect(Collectors.joining(" AND "))).append("\n");
 
