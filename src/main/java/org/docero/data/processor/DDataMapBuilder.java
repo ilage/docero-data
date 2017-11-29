@@ -55,26 +55,20 @@ class DDataMapBuilder {
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
             if (repositoryElement == null) {
                 repositoryNamespace = repository.forInterfaceName();
-                createSimpleGet(mapperRoot, repository, defaultFetchOptions, null);
-                createSimpleInsert(mapperRoot, repository, defaultFetchOptions, null);
-                createSimpleUpdate(mapperRoot, repository, defaultFetchOptions, null);
+                createSimpleGet(mapperRoot, repository, defaultFetchOptions);
+                createSimpleInsert(mapperRoot, repository, defaultFetchOptions);
+                createSimpleUpdate(mapperRoot, repository, defaultFetchOptions);
                 createSimpleDelete(mapperRoot, repository, defaultFetchOptions);
                 if (bean.isDictionary()) createDictionaryList(mapperRoot, defaultFetchOptions);
             } else {
                 repositoryNamespace = repository.repositoryInterface.toString();
 
-                AnnotationMirror da = repositoryElement.getAnnotationMirrors().stream()
-                        .filter(am -> am.getAnnotationType().toString().endsWith("_Discriminator_"))
-                        .findAny().orElse(null);
-                DataRepositoryDiscriminator discriminator = da == null ? null :
-                        new DataRepositoryDiscriminator(bean, repositoryElement, da, environment);
-
                 if (repository.defaultGetMethod == null)
-                    createSimpleGet(mapperRoot, repository, defaultFetchOptions, discriminator);
+                    createSimpleGet(mapperRoot, repository, defaultFetchOptions);
                 if (!repository.hasInsert)
-                    createSimpleInsert(mapperRoot, repository, defaultFetchOptions, discriminator);
+                    createSimpleInsert(mapperRoot, repository, defaultFetchOptions);
                 if (!repository.hasUpdate)
-                    createSimpleUpdate(mapperRoot, repository, defaultFetchOptions, discriminator);
+                    createSimpleUpdate(mapperRoot, repository, defaultFetchOptions);
                 if (repository.defaultDeleteMethod == null)
                     createSimpleDelete(mapperRoot, repository, defaultFetchOptions);
                 if (bean.isDictionary() && repository.defaultListMethod == null)
@@ -85,7 +79,7 @@ class DDataMapBuilder {
                     if (methodElement.getKind() == ElementKind.METHOD && !methodElement.getModifiers().contains(Modifier.STATIC) ?
                             !methodElement.getModifiers().contains(Modifier.DEFAULT) :
                             methodElement.getModifiers().contains(Modifier.ABSTRACT))
-                        createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository, discriminator);
+                        createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository);
             }
             repository.lazyLoads.values().forEach(mapperRoot::appendChild);
             mapperRoot.setAttribute("namespace", repositoryNamespace);
@@ -189,8 +183,7 @@ class DDataMapBuilder {
     private void createDefinedMethod(
             org.w3c.dom.Element mapperRoot,
             ExecutableElement methodElement,
-            DataRepositoryBuilder repository,
-            DataRepositoryDiscriminator discriminator
+            DataRepositoryBuilder repository
     ) throws Exception {
         TypeMirror returnType = methodElement.getReturnType();
         DDataMethodBuilder method = repository.methods.stream().filter(m ->
@@ -243,8 +236,8 @@ class DDataMapBuilder {
                     })
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList()));
-            if (discriminator != null)
-                addTables4MultiType(discriminator, mappedTables, index, fetchOptions);
+            if (repository.discriminator != null)
+                addTables4MultiType(repository.discriminator, mappedTables, index, fetchOptions);
 
             String methodName = method == repository.defaultGetMethod || method == repository.defaultDeleteMethod ?
                     method.methodName :
@@ -255,7 +248,7 @@ class DDataMapBuilder {
                         createDictionaryList(mapperRoot, fetchOptions);
                 case GET:
                     if (fetchOptions.resultMap.length() == 0 && !method.returnSimpleType)
-                        buildResultMap(mapperRoot, method.repositoryBuilder, discriminator, methodName, fetchOptions, mappedTables, filters);
+                        buildResultMap(mapperRoot, method.repositoryBuilder, repository.discriminator, methodName, fetchOptions, mappedTables, filters);
 
                     org.w3c.dom.Element select = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("select"));
@@ -269,28 +262,28 @@ class DDataMapBuilder {
                         select.setAttribute("resultMap", fetchOptions.resultMap);
                         userMappingFiles.add(fetchOptions.resultMap.substring(0, fetchOptions.resultMap.lastIndexOf('.')));
                     }
-                    buildSql(repository, discriminator, method, bean, fetchOptions, mappedTables, select, filters, order, false);
+                    buildSql(repository, method, bean, fetchOptions, mappedTables, select, filters, order, false);
                     break;
                 case INSERT:
                     org.w3c.dom.Element insert = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("insert"));
                     insert.setAttribute("id", methodName);
                     insert.setAttribute("parameterType", "HashMap");
-                    buildSql(repository, discriminator, method, bean, fetchOptions, mappedTables, insert, filters, order, false);
+                    buildSql(repository, method, bean, fetchOptions, mappedTables, insert, filters, order, false);
                     break;
                 case UPDATE:
                     org.w3c.dom.Element update = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("update"));
                     update.setAttribute("id", methodName);
                     update.setAttribute("parameterType", "HashMap");
-                    buildSql(repository, discriminator, method, bean, fetchOptions, mappedTables, update, filters, order, false);
+                    buildSql(repository, method, bean, fetchOptions, mappedTables, update, filters, order, false);
                     break;
                 default: //case DELETE:
                     org.w3c.dom.Element delete = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("select"));
                     delete.setAttribute("id", methodName);
                     delete.setAttribute("parameterType", "HashMap");
-                    buildSql(repository, discriminator, method, bean, fetchOptions, mappedTables, delete, filters, order, false);
+                    buildSql(repository, method, bean, fetchOptions, mappedTables, delete, filters, order, false);
             }
         } else
             userMappingFiles.add(method.selectId.substring(0, method.selectId.lastIndexOf('.')));
@@ -318,7 +311,6 @@ class DDataMapBuilder {
 
     private void buildSql(
             DataRepositoryBuilder repository,
-            DataRepositoryDiscriminator discriminator,
             DDataMethodBuilder method,
             DataBeanBuilder bean,
             FetchOptions fetchOptions,
@@ -1152,14 +1144,13 @@ class DDataMapBuilder {
 
         select.setAttribute("parameterType", bean.keyType);
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.DELETE);
-        buildSql(repository, null, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
+        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
     private void createSimpleUpdate(
             org.w3c.dom.Element mapperRoot,
             DataRepositoryBuilder repository,
-            FetchOptions fetchOptions,
-            DataRepositoryDiscriminator discriminator
+            FetchOptions fetchOptions
     ) {
         DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
         Document doc = mapperRoot.getOwnerDocument();
@@ -1169,14 +1160,13 @@ class DDataMapBuilder {
 
         select.setAttribute("parameterType", bean.getImplementationName());
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.UPDATE);
-        buildSql(repository, discriminator, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
+        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
     private void createSimpleInsert(
             org.w3c.dom.Element mapperRoot,
             DataRepositoryBuilder repository,
-            FetchOptions fetchOptions,
-            DataRepositoryDiscriminator discriminator
+            FetchOptions fetchOptions
     ) {
         DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
         Document doc = mapperRoot.getOwnerDocument();
@@ -1186,14 +1176,13 @@ class DDataMapBuilder {
 
         select.setAttribute("parameterType", bean.getImplementationName());
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.INSERT);
-        buildSql(repository, discriminator, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
+        buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
     private void createSimpleGet(
             org.w3c.dom.Element mapperRoot,
             DataRepositoryBuilder repository,
-            FetchOptions fetchOptions,
-            DataRepositoryDiscriminator discriminator
+            FetchOptions fetchOptions
     ) {
         DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
         AtomicInteger index = new AtomicInteger();
@@ -1205,12 +1194,12 @@ class DDataMapBuilder {
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList()));
-        if (discriminator != null)
-            addTables4MultiType(discriminator, mappedTables, index, fetchOptions);
+        if (repository.discriminator != null)
+            addTables4MultiType(repository.discriminator, mappedTables, index, fetchOptions);
 
         Document doc = mapperRoot.getOwnerDocument();
 
-        buildResultMap(mapperRoot, repository, discriminator, "get", fetchOptions, mappedTables, null);
+        buildResultMap(mapperRoot, repository, repository.discriminator, "get", fetchOptions, mappedTables, null);
 
         org.w3c.dom.Element select = (org.w3c.dom.Element)
                 mapperRoot.appendChild(doc.createElement("select"));
@@ -1219,7 +1208,7 @@ class DDataMapBuilder {
 
         select.setAttribute("parameterType", bean.keyType);
         DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.GET);
-        buildSql(repository, discriminator, method, bean, fetchOptions, mappedTables, select, null, null, true);
+        buildSql(repository, method, bean, fetchOptions, mappedTables, select, null, null, true);
     }
 
     private class FilterOption {

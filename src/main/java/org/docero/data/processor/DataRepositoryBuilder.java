@@ -32,6 +32,10 @@ class DataRepositoryBuilder {
     final boolean hasUpdate;
     final HashMap<String, org.w3c.dom.Element> lazyLoads = new HashMap<>();
     final TypeMirror versionalType;
+    /**
+     * Dicriminator annotation readed in build() method
+     */
+    DataRepositoryDiscriminator discriminator;
 
     DataRepositoryBuilder(
             DDataBuilder rootBuilder,
@@ -141,11 +145,11 @@ class DataRepositoryBuilder {
         int simpNameDel = daoClassName.lastIndexOf('.');
 
         try (JavaClassWriter cf = new JavaClassWriter(environment, daoClassName)) {
+            String beanPkg = forInterfaceName.toString();
+            beanPkg = beanPkg.substring(0, beanPkg.lastIndexOf('.'));
             cf.println("package " +
                     daoClassName.substring(0, simpNameDel) + ";");
 
-            String beanPkg = forInterfaceName.toString();
-            beanPkg = beanPkg.substring(0, beanPkg.lastIndexOf('.'));
             if (!daoClassName.substring(0, daoClassName.lastIndexOf(".")).equals(beanPkg))
                 cf.println("import " + beanPkg + ".*;");
 
@@ -154,6 +158,15 @@ class DataRepositoryBuilder {
             cf.endBlock("*/");
 
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
+            TypeElement repositoryElement = environment.getElementUtils()
+                    .getTypeElement(repositoryInterface.toString());
+            if (repositoryElement != null) {
+                AnnotationMirror da = repositoryElement.getAnnotationMirrors().stream()
+                        .filter(am -> am.getAnnotationType().toString().endsWith("_Discriminator_"))
+                        .findAny().orElse(null);
+                discriminator = da == null ? null :
+                        new DataRepositoryDiscriminator(bean, repositoryElement, da, environment);
+            }
             cf.startBlock("public final class " +
                     daoClassName.substring(simpNameDel + 1) +
                     " extends org.docero.data.AbstractRepository<" + bean.interfaceType + "," + bean.inversionalKey + ">" +
@@ -190,8 +203,8 @@ class DataRepositoryBuilder {
 
             buildMethodCreate(cf);
             if (defaultGetMethod == null) buildMethodGet(cf);
-            if (!hasInsert) buildMethodInsert(cf);
-            if (!hasUpdate) buildMethodUpdate(cf);
+            if (!hasInsert) buildMethodInsert(cf, discriminator);
+            if (!hasUpdate) buildMethodUpdate(cf, discriminator);
             if (defaultDeleteMethod == null) buildMethodDelete(cf);
             if (bean.dictionary != DictionaryType.NO && defaultListMethod == null) {
                 cf.println("");
@@ -369,7 +382,7 @@ class DataRepositoryBuilder {
         }
     }
 
-    private void buildMethodUpdate(JavaClassWriter cf) throws IOException {
+    private void buildMethodUpdate(JavaClassWriter cf, DataRepositoryDiscriminator discriminator) throws IOException {
         DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
         cf.println("");
         if (versionalType != null) {
@@ -380,12 +393,21 @@ class DataRepositoryBuilder {
                             "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
                     .orElse("")
             );
-            cf.println("getSqlSession().insert(\"" +
-                    mappingClassName + ".insert\", bean);");
+            printInsertBody(cf, discriminator);
             cf.endBlock("}");
         } else {
             cf.startBlock("public void update(" +
                     forInterfaceName + " bean) {");
+            if (discriminator != null)
+                for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
+                    DataRepositoryBuilder strep = rootBuilder.repositoriesByBean.get(item.beanInterface);
+                    cf.startBlock("if (bean instanceof " + item.beanInterface + ") {");
+                    cf.println("getSqlSession().update(\"" +
+                            (strep == null ? item.beanInterface : strep.mappingClassName) +
+                            ".update\", bean);");
+                    cf.println("return;");
+                    cf.endBlock("}");
+                }
             cf.println("getSqlSession().update(\"" +
                     mappingClassName + ".update\", bean);");
             if (bean.dictionary != DictionaryType.NO)
@@ -394,7 +416,7 @@ class DataRepositoryBuilder {
         }
     }
 
-    private void buildMethodInsert(JavaClassWriter cf) throws IOException {
+    private void buildMethodInsert(JavaClassWriter cf, DataRepositoryDiscriminator discriminator) throws IOException {
         DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
 
         cf.println("");
@@ -407,11 +429,25 @@ class DataRepositoryBuilder {
                     .orElse("")
             );
         }
-        cf.println("getSqlSession().insert(\"" +
-                mappingClassName + ".insert\", bean);");
+        printInsertBody(cf, discriminator);
         if (bean.dictionary != DictionaryType.NO)
             cf.println("cache(bean);");
         cf.endBlock("}");
+    }
+
+    private void printInsertBody(JavaClassWriter cf, DataRepositoryDiscriminator discriminator) throws IOException {
+        if (discriminator != null)
+            for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
+                DataRepositoryBuilder strep = rootBuilder.repositoriesByBean.get(item.beanInterface);
+                cf.startBlock("if (bean instanceof " + item.beanInterface + ") {");
+                cf.println("getSqlSession().insert(\"" +
+                        (strep == null ? item.beanInterface : strep.mappingClassName) +
+                        ".insert\", bean);");
+                cf.println("return;");
+                cf.endBlock("}");
+            }
+        cf.println("getSqlSession().insert(\"" +
+                mappingClassName + ".insert\", bean);");
     }
 
     private void buildMethodGet(JavaClassWriter cf) throws IOException {
