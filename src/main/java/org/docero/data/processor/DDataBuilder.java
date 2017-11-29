@@ -248,24 +248,6 @@ class DDataBuilder {
             }
     }
 
-    private static final HashSet<String> unmaskedTypes = new HashSet<String>() {{
-        this.add("BOOLEAN");
-        this.add("SMALLINT");
-        this.add("INTEGER");
-        this.add("BIGINT");
-        this.add("REAL");
-        this.add("DOUBLE");
-        this.add("NUMERIC");
-    }};
-
-    String maskedValue(DataBeanPropertyBuilder property, String value) {
-        if (unmaskedTypes.contains(property.jdbcType)) return value;
-        if ("DATE".equals(property.jdbcType)) return "CAST('" + value + "' AS DATE)";
-        if ("TIME".equals(property.jdbcType)) return "CAST('" + value + "' AS TIME)";
-        if ("TIMESTAMP".equals(property.jdbcType)) return "CAST('" + value + "' AS TIMESTAMP)";
-        return "'" + value + "'";
-    }
-
     String jdbcTypeFor(TypeMirror type) {
         String s = type.toString();
 

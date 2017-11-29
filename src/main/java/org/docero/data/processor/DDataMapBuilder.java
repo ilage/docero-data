@@ -3,6 +3,7 @@ package org.docero.data.processor;
 import org.docero.data.DDataFetchType;
 import org.docero.data.DDataFilterOption;
 import org.docero.data.DictionaryType;
+import org.docero.data.utils.DDataTypes;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentType;
 
@@ -1042,7 +1043,7 @@ class DDataMapBuilder {
                                 .append("   AND t0.\"")
                                 .append(discriminator.property.columnName)
                                 .append("\" = ")
-                                .append(builder.maskedValue(discriminator.property, i.value))
+                                .append(DDataTypes.maskedValue(discriminator.property.jdbcType, i.value))
                                 .append("\n"));
 
                     if (mappedBean.versionalType != null &&
