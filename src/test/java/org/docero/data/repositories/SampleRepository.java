@@ -2,6 +2,7 @@ package org.docero.data.repositories;
 
 import org.docero.data.*;
 import org.docero.data.beans.*;
+import org.docero.data.beans.Sample;
 
 import java.io.IOException;
 import java.util.HashSet;

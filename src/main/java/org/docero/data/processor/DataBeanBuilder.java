@@ -4,6 +4,7 @@ import org.docero.data.DDataBean;
 import org.docero.data.DDataProperty;
 import org.docero.data.DictionaryType;
 import org.docero.data.TableGrowType;
+import org.docero.dgen.processor.DGenClass;
 
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
@@ -31,19 +32,38 @@ class DataBeanBuilder {
     final String cacheMap;
 
     DataBeanBuilder(
-            Element beanElement, DDataBuilder builder,
+            TypeElement beanElement, DDataBuilder builder,
             TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType
     ) {
         rootBuilder = builder;
         interfaceType = (beanElement.asType());
+
+        DGenClass dGen = null;
+        for (TypeMirror typeMirror : beanElement.getInterfaces()) {
+            String key = typeMirror.toString();
+            if (!key.contains("."))
+                key = beanElement.getEnclosingElement().toString() + "." + key;
+            dGen = builder.dGenInterface.get(key);
+            if (dGen != null) {
+                dGen.getProperties().forEach(dGenProperty -> {
+                    properties.put(dGenProperty.getName(), DataBeanPropertyBuilder.from(
+                            this, dGenProperty, rootBuilder,
+                            dGenProperty.getElement().getAnnotation(DDataProperty.class),
+                            collectionType, mapType
+                    ));
+                });
+                break;
+            }
+        }
+
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
-        schema = (ddBean.schema());
+        schema = ddBean.schema();
         table = ddBean.table().trim().length() == 0 ?
-                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.')+1)) :
+                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1)) :
                 ddBean.table();
-        name = ddBean.value().trim().length()==0 ?
-                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.')+1)) :
-                ddBean.value().replace(' ','_');
+        name = ddBean.value().trim().length() == 0 ?
+                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1)) :
+                ddBean.value().replace(' ', '_');
         grown = (ddBean.growth());
         dictionary = (ddBean.dictionary());
         cacheMap = new StringBuilder(interfaceType.toString()).reverse().toString();
@@ -55,13 +75,13 @@ class DataBeanBuilder {
                     !elt.getModifiers().contains(Modifier.STATIC)
                     ) {
                 DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
-                DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this, ddProperty,
-                        (ExecutableElement) elt, builder.environment, collectionType, mapType, voidType);
+                DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(this, ddProperty,
+                        (ExecutableElement) elt, collectionType, mapType, voidType);
                 if (beanBuilder.type != voidType)
                     properties.put(beanBuilder.enumName, beanBuilder);
             }
 
-        for (Element elt : builder.environment.getElementUtils().getAllMembers((TypeElement) beanElement))
+        for (Element elt : builder.environment.getElementUtils().getAllMembers(beanElement))
             if (elt.getKind() == ElementKind.METHOD &&
                     !elt.getModifiers().contains(Modifier.DEFAULT) &&
                     !elt.getModifiers().contains(Modifier.STATIC)
@@ -69,8 +89,8 @@ class DataBeanBuilder {
                 DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
                 if (ddProperty != null || ((ExecutableElement) elt).getAnnotationMirrors().stream()
                         .anyMatch(a -> a.getAnnotationType().toString().endsWith("_Map_"))) {
-                    DataBeanPropertyBuilder beanBuilder = new DataBeanPropertyBuilder(this, ddProperty,
-                            (ExecutableElement) elt, builder.environment, collectionType, mapType, voidType);
+                    DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(this, ddProperty,
+                            (ExecutableElement) elt, collectionType, mapType, voidType);
                     if (!properties.containsKey(beanBuilder.enumName) && beanBuilder.type != voidType)
                         properties.put(beanBuilder.enumName, beanBuilder);
                 }
@@ -476,7 +496,7 @@ class DataBeanBuilder {
             cf.println("import java.lang.annotation.RetentionPolicy;");
             cf.println("import java.lang.annotation.Target;");
             cf.println("@Retention(RetentionPolicy.SOURCE)");
-            cf.println("@Target(ElementType.METHOD)");
+            cf.println("@Target({ElementType.METHOD,ElementType.FIELD})");
             cf.startBlock("public @interface " + annotName + " {");
 
             cf.print(interfaceType + "_[] value()");

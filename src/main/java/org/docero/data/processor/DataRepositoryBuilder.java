@@ -295,7 +295,7 @@ class DataRepositoryBuilder {
             cf.println("import java.lang.annotation.RetentionPolicy;");
             cf.println("import java.lang.annotation.Target;");
             cf.println("@Retention(RetentionPolicy.SOURCE)");
-            cf.println("@Target(ElementType.METHOD)");
+            cf.println("@Target({ElementType.METHOD,ElementType.FIELD})");
             cf.startBlock("@interface " + annotName + " {");
 
             cf.startBlock("/**");

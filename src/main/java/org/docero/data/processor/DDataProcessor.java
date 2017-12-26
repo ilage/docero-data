@@ -12,10 +12,8 @@ import java.util.Set;
 
 /**
  * Процессор анотаций.
- * <p>Подключение в Maven: &lt;annotationProcessor&gt;org.docero.histdb.HistDbProcessor&lt;/annotationProcessor&gt;</p>
- * histDbEntityPath - пакет в котором генерировать классы сущностей
- * <p>в Maven: &lt;compilerArgument&gt;-AhistDbEntityPath=org.name.project.entities&lt;/compilerArgument&gt;</p>
- * Created by i.vasyashin on 01.09.2016.
+ * <p>Подключение в Maven: &lt;annotationProcessor&gt;org.docero.data.processor.DDataProcessor&lt;/annotationProcessor&gt;</p>
+ * Created by i.vasyashin on 01.09.2017.
  */
 @SupportedAnnotationTypes({
         "org.docero.data.DDataBean",
@@ -65,7 +63,11 @@ public class DDataProcessor extends AbstractProcessor {
                 case STEP1_ENUM_GEN:
                     Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
                     for (Element beanElement : entities)
-                        builder.checkInterface(beanElement, collectionType, mapType, versionalBeanType);
+                        if (beanElement.getEnclosingElement().getKind() != ElementKind.PACKAGE)
+                            builder.checkDGenInterface((TypeElement) beanElement);
+                    for (Element beanElement : entities)
+                        if (beanElement.getEnclosingElement().getKind() == ElementKind.PACKAGE)
+                            builder.checkInterface((TypeElement) beanElement, collectionType, mapType, versionalBeanType);
 
                     builder.generateBeansAnnotations();
 
@@ -99,6 +101,7 @@ public class DDataProcessor extends AbstractProcessor {
                 default:
             }
         } catch (Exception e) {
+            //processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,e.getMessage());
             e.printStackTrace();
             throw new Error(e);
         }
@@ -126,7 +129,7 @@ public class DDataProcessor extends AbstractProcessor {
                 for (AnnotationMirror annotationMirror : method.getAnnotationMirrors())
                     if (annotationMirror.getAnnotationType().toString().contains("_Map_")) {
                         mapping = new Mapping(annotationMirror, bean);
-                        if(!mapping.mappedProperties.isEmpty())
+                        if (!mapping.mappedProperties.isEmpty())
                             builder.mappings.put(mappingKey, mapping);
 
                         /*System.out.println(annotationMirror.getAnnotationType() + " tail:");
@@ -147,7 +150,7 @@ public class DDataProcessor extends AbstractProcessor {
                         // надо ли это?
                         DataBeanPropertyBuilder property = propertyName4Method(bean, method);
                         mapping = new Mapping(property, mappedBean);
-                        if(!mapping.mappedProperties.isEmpty())
+                        if (!mapping.mappedProperties.isEmpty())
                             builder.mappings.put(mappingKey, mapping);
                     }
                 }

@@ -1,7 +1,7 @@
 package org.docero.data.processor;
 
+import org.docero.dgen.processor.DGenClass;
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 class DDataBuilder {
     final ProcessingEnvironment environment;
     final HashMap<String, DataBeanBuilder> beansByInterface = new HashMap<>();
+    final HashMap<String, DGenClass> dGenInterface = new HashMap<>();
     final ArrayList<DataRepositoryBuilder> repositories = new ArrayList<>();
     final ArrayList<BatchRepositoryBuilder> batchRepositories = new ArrayList<>();
     final HashMap<String, DataRepositoryBuilder> repositoriesByBean = new HashMap<>();
@@ -37,11 +38,16 @@ class DDataBuilder {
                 "org.springframework.cache.annotation.Cacheable") != null;
     }
 
-    void checkInterface(Element beanElement, TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType) {
+    void checkInterface(TypeElement beanElement, TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType) {
         String typeName = beanElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
         DataBeanBuilder value = new DataBeanBuilder(beanElement, this, collectionType, mapType, versionedBeanType);
         beansByInterface.put(value.interfaceType.toString(), value);
+    }
+
+    void checkDGenInterface(TypeElement beanElement) {
+        DGenClass dGen = DGenClass.readInterface(beanElement);
+        dGenInterface.put(dGen.getTargetClassName(), dGen);
     }
 
     void checkRepository(TypeElement repositoryElement, TypeMirror versionalType) {
@@ -297,7 +303,7 @@ class DDataBuilder {
         return "";
     }
 
-    public void buildDataReferenceEnums() throws IOException {
+    void buildDataReferenceEnums() throws IOException {
         for (DataBeanBuilder dataBeanBuilder : beansByInterface.values()) {
             dataBeanBuilder.buildDataReferenceEnum(environment, beansByInterface, mappings);
         }

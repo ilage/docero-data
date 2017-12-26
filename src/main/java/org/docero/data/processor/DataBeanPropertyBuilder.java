@@ -4,12 +4,15 @@ import org.docero.data.DDataProperty;
 import org.docero.data.DictionaryType;
 import org.docero.data.GeneratedValue;
 import org.docero.data.GenerationType;
+import org.docero.dgen.processor.DGenProperty;
 
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.stream.Collectors;
@@ -36,14 +39,54 @@ class DataBeanPropertyBuilder {
     final String readerSql;
     final String writerSql;
 
-    DataBeanPropertyBuilder(
+    static DataBeanPropertyBuilder from(
             DataBeanBuilder bean, DDataProperty ddProperty, ExecutableElement method,
-            ProcessingEnvironment environment,
             TypeMirror collectionType, TypeMirror mapType, TypeMirror voidType
     ) {
+        String sn = method.getSimpleName().toString();
+        String name;
+        TypeMirror type;
+        if (sn.startsWith("get") || sn.startsWith("has")) {
+            name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);
+            type = method.getReturnType();
+        } else if (sn.startsWith("set")) {
+            name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);
+            type = method.getTypeParameters().size() != 1 ? voidType :
+                    method.getTypeParameters().get(0).asType();
+        } else if (sn.startsWith("is")) {
+            name = Character.toLowerCase(sn.charAt(2)) + sn.substring(3);
+            type = method.getReturnType();
+        } else {
+            name = sn;
+            type = method.getReturnType();
+        }
+        return new DataBeanPropertyBuilder(
+                bean, name, type, ddProperty, method, bean.rootBuilder, collectionType, mapType
+        );
+    }
+
+    static DataBeanPropertyBuilder from(
+            DataBeanBuilder bean, DGenProperty dGen, DDataBuilder rootBuilder,
+            DDataProperty ddProperty, TypeMirror collectionType,
+            TypeMirror mapType) {
+        String name = dGen.getName();
+        TypeMirror type = dGen.getType();
+        return new DataBeanPropertyBuilder(
+                bean, name, type, ddProperty, dGen.getElement(), rootBuilder, collectionType, mapType
+        );
+    }
+
+    private DataBeanPropertyBuilder(
+            DataBeanBuilder bean, String name, TypeMirror type,
+            DDataProperty ddProperty, Element element,
+            DDataBuilder rootBuilder,
+            TypeMirror collectionType,
+            TypeMirror mapType) {
         this.dataBean = bean;
-        this.ignored = ddProperty != null && ddProperty.Trancient();
-        GeneratedValue genVal = method.getAnnotation(GeneratedValue.class);
+        this.name = name;
+        this.type = type;
+        jdbcType = rootBuilder.jdbcTypeFor(this.type);
+        GeneratedValue genVal = element.getAnnotation(GeneratedValue.class);
         if (genVal != null) {
             this.generatedStrategy = genVal.strategy();
             if (genVal.value().length() == 0)
@@ -56,22 +99,7 @@ class DataBeanPropertyBuilder {
             this.generatedValue = null;
             this.generatedBefore = true;
         }
-        String sn = method.getSimpleName().toString();
-        if (sn.startsWith("get") || sn.startsWith("has")) {
-            name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);
-            this.type = method.getReturnType();
-        } else if (sn.startsWith("set")) {
-            name = Character.toLowerCase(sn.charAt(3)) + sn.substring(4);
-            this.type = method.getTypeParameters().size() != 1 ? voidType :
-                    method.getTypeParameters().get(0).asType();
-        } else if (sn.startsWith("is")) {
-            name = Character.toLowerCase(sn.charAt(2)) + sn.substring(3);
-            this.type = method.getReturnType();
-        } else {
-            name = sn;
-            this.type = method.getReturnType();
-        }
-        jdbcType = dataBean.rootBuilder.jdbcTypeFor(this.type);
+        this.ignored = ddProperty != null && ddProperty.Trancient();
         nullable = ddProperty == null || ddProperty.nullable();
         isVersionFrom = ddProperty != null && ddProperty.versionFrom();
         isVersionTo = ddProperty != null && ddProperty.versionTo();
@@ -87,16 +115,17 @@ class DataBeanPropertyBuilder {
             readerSql = null;
             writerSql = null;
         }
-        TypeMirror ltypeErasure = environment.getTypeUtils().erasure(this.type);
-        isCollection = environment.getTypeUtils().isSubtype(ltypeErasure, collectionType);
-        isMap = environment.getTypeUtils().isSubtype(ltypeErasure, mapType);
+        Types typeUtils = rootBuilder.environment.getTypeUtils();
+        TypeMirror ltypeErasure = typeUtils.erasure(this.type);
+        isCollection = typeUtils.isSubtype(ltypeErasure, collectionType);
+        isMap = typeUtils.isSubtype(ltypeErasure, mapType);
         if (isCollection) mappedType =
-                environment.getTypeUtils().erasure(((DeclaredType) this.type).getTypeArguments().get(0));
+                typeUtils.erasure(((DeclaredType) this.type).getTypeArguments().get(0));
         else if (isMap) mappedType =
-                environment.getTypeUtils().erasure(((DeclaredType) this.type).getTypeArguments().get(1));
+                typeUtils.erasure(((DeclaredType) this.type).getTypeArguments().get(1));
         else mappedType = this.type.getKind().isPrimitive() ?
-                    environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
-                    environment.getTypeUtils().erasure(this.type);
+                    typeUtils.boxedClass((PrimitiveType) this.type).asType() :
+                    typeUtils.erasure(this.type);
 
         StringBuilder elemName = new StringBuilder();
         for (char c : name.toCharArray()) {
@@ -207,9 +236,9 @@ class DataBeanPropertyBuilder {
                     this.name + "\"," +
                     manType.interfaceType + "_WB_.class,\"" + (this.isSimple() ? "" : "ARRAY") +
                     "\"," + manType.isDictionary() + ", true" + ", " + this.isCollection +
-                    ",\"" + manType.getTableRef().replace("\"","\\\"") + "\", new java.util.HashMap<String, String>(){{" +
-                            mappings.get(dataBean.interfaceType.toString()+"."+this.name).stream()
-                            .map(m->"put(\""+m.property.columnName+"\",\""+m.mappedProperty.columnName+"\");")
+                    ",\"" + manType.getTableRef().replace("\"", "\\\"") + "\", new java.util.HashMap<String, String>(){{" +
+                    mappings.get(dataBean.interfaceType.toString() + "." + this.name).stream()
+                            .map(m -> "put(\"" + m.property.columnName + "\",\"" + m.mappedProperty.columnName + "\");")
                             .collect(Collectors.joining(" ")) +
                     "}}" + "),");
         }
