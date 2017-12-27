@@ -62,12 +62,7 @@ abstract class MapElement {
     }
 
     final MapElement addTable(MapElement map) {
-        MapElement discriminator = mapBuilder().getDiscriminatorElement(map.fromInterface());
-        if (discriminator != null)
-            discriminator.mappedElements.add(map);
-        else {
-            mappedElements.add(map);
-        }
+        mappedElements.add(map);
         return map;
     }
 

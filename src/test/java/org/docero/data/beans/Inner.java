@@ -6,7 +6,7 @@ import org.docero.data.DictionaryType;
 
 import java.io.Serializable;
 
-@DDataBean(value = "inner", table = "inner", schema = "ddata", dictionary = DictionaryType.SMALL)
+@DDataBean(value = "inner", table = "inner", schema = "ddata")
 public interface Inner extends Serializable {
     @DDataProperty(value = "id", id = true)
     int getId();

@@ -26,9 +26,7 @@ import java.io.IOException;
 public class TestsConfig {
     @Bean
     CacheManager cacheManager() {
-        return new ConcurrentMapCacheManager(
-                new StringBuilder(org.docero.data.beans.Inner.class.getCanonicalName()).reverse().toString()
-        );
+        return new ConcurrentMapCacheManager(DData.cacheNames);
     }
 
     @Bean

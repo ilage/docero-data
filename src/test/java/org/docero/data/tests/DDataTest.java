@@ -109,11 +109,31 @@ public class DDataTest {
                     "  id INT NOT NULL,\n" +
                     "  elem_type INT NOT NULL DEFAULT 0,\n" +
                     "  linked INT,\n" +
+                    "  sm INT,\n" +
+                    "  lg INT,\n" +
                     "  CONSTRAINT a1_pk PRIMARY KEY (id)\n" +
                     ");" +
                     "INSERT INTO ddata.a1 (id) VALUES (1);\n" +
-                    "INSERT INTO ddata.a1 (id,elem_type,linked) VALUES (2,1,1001);\n" +
-                    "INSERT INTO ddata.a1 (id,elem_type,linked) VALUES (3,2,1);\n" +
+                    "INSERT INTO ddata.a1 (id,elem_type,linked,sm,lg) VALUES (2,1,1001,1,1);\n" +
+                    "INSERT INTO ddata.a1 (id,elem_type,linked,sm,lg) VALUES (3,2,1,2,2);\n" +
+                    "" +
+                    "DROP TABLE IF EXISTS ddata.\"smdict\";" +
+                    "CREATE TABLE ddata.\"smdict\" (\n" +
+                    "  id INT NOT NULL," +
+                    "  name VARCHAR,\n" +
+                    "  CONSTRAINT smdict_pk PRIMARY KEY (id)\n" +
+                    ");" +
+                    "INSERT INTO ddata.\"smdict\" (id,name) VALUES (1,'КС знач 1');" +
+                    "INSERT INTO ddata.\"smdict\" (id,name) VALUES (2,'КС знач 2');" +
+                    "" +
+                    "DROP TABLE IF EXISTS ddata.\"lgdict\";" +
+                    "CREATE TABLE ddata.\"lgdict\" (\n" +
+                    "  id INT NOT NULL," +
+                    "  name VARCHAR,\n" +
+                    "  CONSTRAINT lgdict_pk PRIMARY KEY (id)\n" +
+                    ");" +
+                    "INSERT INTO ddata.\"lgdict\" (id,name) VALUES (1,'БС знач 1');" +
+                    "INSERT INTO ddata.\"lgdict\" (id,name) VALUES (2,'БС знач 2');" +
                     "" +
                     "DROP SEQUENCE ddata.sample_seq;\n" +
                     "\n" +
@@ -138,12 +158,15 @@ public class DDataTest {
         ItemAbstraction s = multiTypesRepository.get(3);
         assertNotNull(s);
         assertTrue(s instanceof ItemSample);
-        assertNotNull(((ItemSample)s).getSample());
+        assertNotNull(((ItemSample) s).getSample());
+        assertNotNull(((ItemSample) s).getSmall());
+        assertNotNull(((ItemSample) s).getLarge());
 
         ItemAbstraction i = multiTypesRepository.get(2);
         assertNotNull(i);
         assertTrue(i instanceof ItemInner);
-        assertNotNull(((ItemInner)i).getInner());
+        assertNotNull(((ItemInner) i).getInner());
+        assertNotNull(((ItemInner) i).getLarge());
     }
 
     @Test

@@ -20,5 +20,23 @@ abstract class DGen {
         @DDataProperty("i")
         int innerId;
     }
+    @DGenInterface
+    @DDataBean
+    abstract class SmallDictTable implements Serializable {
+        @GeneratedValue("ddata.sample_seq")
+        @DDataProperty(value = "id", id = true)
+        int id;
+        @DDataProperty(value = "name", nullable = false)
+        String name;
+    }
+    @DGenInterface
+    @DDataBean
+    abstract class LargeDictTable implements Serializable {
+        @GeneratedValue("ddata.sample_seq")
+        @DDataProperty(value = "id", id = true)
+        int id;
+        @DDataProperty(value = "name", nullable = false)
+        String name;
+    }
 }
 
