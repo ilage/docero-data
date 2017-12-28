@@ -58,18 +58,7 @@ Code Generation Library for MyBatis
 
     @DDataBean(value = "sample", table = "sample", schema = "ddata")
     public interface Sample extends SampleTable {
-        @DDataProperty("i")
-        int getInnerId();
-        void setInnerId(int val);
-        
-        @GeneratedValue("ddata.sample_seq")
-        @DDataProperty(value="id", id=true)
-        int getId();
-        void setId(int val);
-        
-        @DDataProperty(value="s", nullable=false)
-        String getStrParameter();
-        void setStrParameter(String val);
+        ...
         
         @Sample_Map_(value = Sample_.INNER_ID, inner = Inner_.ID)
         Inner getInner();
