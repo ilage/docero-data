@@ -25,6 +25,7 @@ class DDataMethodBuilder {
     final MType methodType;
     final boolean returnSimpleType;
     final String selectId;
+    private List<DDataMapBuilder.FilterOption> filters = Collections.emptyList();
 
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement) {
         this.repositoryBuilder = repositoryBuilder;
@@ -155,7 +156,33 @@ class DDataMethodBuilder {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
                 for (DDataMethodParameter parameter : parameters) {
-                    cf.println("this.put(\"" + parameter.name + "\", " + parameter.name + ");");
+                    DDataMapBuilder.FilterOption filter = filters.stream()
+                            .filter(f -> f.parameter != null && f.parameter.equals(parameter.name))
+                            .findAny().orElse(null);
+                    String parameterFunc = parameter.name;
+                    if (filter != null) {
+                        switch (filter.option) {
+                            case LIKE:
+                                parameterFunc = "org.docero.data.utils.DDataLike.in(" + parameter.name + ")";
+                                break;
+                            case LIKE_HAS:
+                                parameterFunc = "org.docero.data.utils.DDataLike.has(" + parameter.name + ")";
+                                break;
+                            case LIKE_ENDS:
+                                parameterFunc = "org.docero.data.utils.DDataLike.ends(" + parameter.name + ")";
+                                break;
+                            case LIKE_STARTS:
+                                parameterFunc = "org.docero.data.utils.DDataLike.starts(" + parameter.name + ")";
+                                break;
+                            case LIKE_ALL_STARTS:
+                                parameterFunc = "org.docero.data.utils.DDataLike.allStarts(" + parameter.name + ")";
+                                break;
+                            case LIKE_ALL_HAS:
+                                parameterFunc = "org.docero.data.utils.DDataLike.allHas(" + parameter.name + ")";
+                                break;
+                        }
+                    }
+                    cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
                 }
                 cf.endBlock("}}");
             }
@@ -192,6 +219,10 @@ class DDataMethodBuilder {
                     ");");
             cf.endBlock("}");
         }
+    }
+
+    void setFilters(List<DDataMapBuilder.FilterOption> filters) {
+        if (filters != null) this.filters = filters;
     }
 
     enum MType {SELECT, GET, INSERT, UPDATE, DELETE}

@@ -12,4 +12,6 @@ public interface ItemInner extends ItemAbstraction {
     Inner getInner();
     @ItemInner_Map_(value = ItemInner_.LG_ID, large = LargeNotDict_.ID)
     LargeNotDict getLarge();
+    @ItemInner_Map_(value = ItemInner_.LG_ID, largeCached = LargeDict_.ID)
+    LargeDict getLargeCached();
 }

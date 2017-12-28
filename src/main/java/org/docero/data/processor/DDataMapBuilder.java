@@ -55,6 +55,8 @@ class DDataMapBuilder {
             FetchOptions defaultFetchOptions = new FetchOptions(1);
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
             if (repositoryElement == null) {
+                // методов с фильтрами нет, можно строить репозиторий, для мультиклассовых
+                repository.build(environment, builder.spring);
                 repositoryNamespace = repository.forInterfaceName();
                 createSimpleGet(mapperRoot, repository, defaultFetchOptions);
                 createSimpleInsert(mapperRoot, repository, defaultFetchOptions);
@@ -63,6 +65,14 @@ class DDataMapBuilder {
                 if (bean.isDictionary()) createDictionaryList(mapperRoot, defaultFetchOptions);
             } else {
                 repositoryNamespace = repository.repositoryInterface.toString();
+                //System.out.println(repository.repositoryInterface + ":" + repositoryElement.getEnclosedElements());
+                for (Element methodElement : repositoryElement.getEnclosedElements())
+                    if (methodElement.getKind() == ElementKind.METHOD && !methodElement.getModifiers().contains(Modifier.STATIC) ?
+                            !methodElement.getModifiers().contains(Modifier.DEFAULT) :
+                            methodElement.getModifiers().contains(Modifier.ABSTRACT))
+                        createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository);
+                // методы с фильтрами обновлены, можно строить репозиторий, для мультиклассовых
+                repository.build(environment, builder.spring);
 
                 if (repository.defaultGetMethod == null)
                     createSimpleGet(mapperRoot, repository, defaultFetchOptions);
@@ -74,13 +84,6 @@ class DDataMapBuilder {
                     createSimpleDelete(mapperRoot, repository, defaultFetchOptions);
                 if (bean.isDictionary() && repository.defaultListMethod == null)
                     createDictionaryList(mapperRoot, defaultFetchOptions);
-
-                //System.out.println(repository.repositoryInterface + ":" + repositoryElement.getEnclosedElements());
-                for (Element methodElement : repositoryElement.getEnclosedElements())
-                    if (methodElement.getKind() == ElementKind.METHOD && !methodElement.getModifiers().contains(Modifier.STATIC) ?
-                            !methodElement.getModifiers().contains(Modifier.DEFAULT) :
-                            methodElement.getModifiers().contains(Modifier.ABSTRACT))
-                        createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository);
             }
             repository.lazyLoads.values().forEach(mapperRoot::appendChild);
             mapperRoot.setAttribute("namespace", repositoryNamespace);
@@ -187,21 +190,20 @@ class DDataMapBuilder {
             DataRepositoryBuilder repository
     ) throws Exception {
         TypeMirror returnType = methodElement.getReturnType();
+        String paramHash = methodElement.getParameters().stream()
+                .map(e -> environment.getTypeUtils().erasure(e.asType()))
+                .map(TypeMirror::toString)
+                .collect(Collectors.joining(","));
         DDataMethodBuilder method = repository.methods.stream().filter(m ->
                 m.methodName.equals(methodElement.getSimpleName().toString()) && (
                         (m.returnType == null && returnType == null) ||
                                 (m.returnType != null && m.returnType.toString().equals(returnType.toString()))
                 ) &&
-                        m.parameters.size() == methodElement.getParameters().size()/* &&
-                        m.parameters.stream()
-                                .map(p -> environment.getTypeUtils().erasure(p.type).toString())
-                                .map(p -> p.lastIndexOf('.') > 0 ? p.substring(p.lastIndexOf('.')) : p)
-                                .collect(Collectors.joining("|")).equals(
-                                methodElement.getParameters().stream()
-                                        .map(p -> environment.getTypeUtils().erasure(p.asType()).toString())
-                                        .map(p -> p.lastIndexOf('.') > 0 ? p.substring(p.lastIndexOf('.')) : p)
-                                        .collect(Collectors.joining("|"))
-                        )*/
+                        m.parameters.size() == methodElement.getParameters().size() &&
+                        m.parameters.stream().map(p -> environment.getTypeUtils().erasure(p.type))
+                                .map(TypeMirror::toString)
+                                .collect(Collectors.joining(","))
+                                .equals(paramHash)
         ).findAny().orElse(null);
 
         if (method == null)
@@ -226,6 +228,7 @@ class DDataMapBuilder {
                     order = variableElement;
                 }
             }
+            repository.setMethodFilters(methodElement, filters);
 
             AtomicInteger index = new AtomicInteger();
             CopyOnWriteArrayList<MappedTable> mappedTables = new CopyOnWriteArrayList<>(bean.properties.values().stream()
@@ -664,6 +667,8 @@ class DDataMapBuilder {
                                 filter.property.getColumnRef() + " IS NULL\n"));
                         break;
                     case IN:
+                        TypeMirror itemType = environment.getTypeUtils()
+                                .erasure(((DeclaredType) filter.variableType).getTypeArguments().get(0));
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         org.w3c.dom.Element e_in = (org.w3c.dom.Element)
@@ -675,17 +680,44 @@ class DDataMapBuilder {
                                 "AND t" + tIdx + "." + filter.property.getColumnRef() + " IN (");
                         e_in.setAttribute("close", ")");
                         e_in.setAttribute("separator", ",");
-                        TypeMirror itemType = environment.getTypeUtils()
-                                .erasure(((DeclaredType) filter.variableType).getTypeArguments().get(0));
                         e_in.appendChild(doc.createTextNode("#{item" + ", javaType=" +
                                 itemType + jdbcTypeParameterFor(itemType) + "}"));
                         break;
-                    case LIKE:
                     case LIKE_HAS:
-                    case LIKE_STARTS:
-                    case LIKE_ENDS:
+                        e = doc.createElement("if");
+                        e.setAttribute("test", filter.parameter + " != null");
+                        org.w3c.dom.Element e_like = (org.w3c.dom.Element)
+                                e.appendChild(doc.createElement("foreach"));
+                        e_like.setAttribute("item", "item");
+                        e_like.setAttribute("index", "index");
+                        e_like.setAttribute("collection", filter.parameter);
+                        e_like.setAttribute("open", "AND ");
+                        e_like.setAttribute("close", "");
+                        e_like.setAttribute("separator", " OR ");
+                        e_like.appendChild(doc.createTextNode("t" +
+                                tIdx + "." + filter.property.getColumnRef() +
+                                " LIKE #{item" + ", javaType=" + filter.variableType +
+                                jdbcTypeParameterFor(filter.variableType) + "}"));
+                        break;
                     case LIKE_ALL_STARTS:
                     case LIKE_ALL_HAS:
+                        e = doc.createElement("if");
+                        e.setAttribute("test", filter.parameter + " != null");
+                        e_like = (org.w3c.dom.Element) e.appendChild(doc.createElement("foreach"));
+                        e_like.setAttribute("item", "item");
+                        e_like.setAttribute("index", "index");
+                        e_like.setAttribute("collection", filter.parameter);
+                        e_like.setAttribute("open", "AND ");
+                        e_like.setAttribute("close", "");
+                        e_like.setAttribute("separator", " AND ");
+                        e_like.appendChild(doc.createTextNode("t" +
+                                tIdx + "." + filter.property.getColumnRef() +
+                                " LIKE #{item" + ", javaType=" + filter.variableType +
+                                jdbcTypeParameterFor(filter.variableType) + "}"));
+                        break;
+                    case LIKE:
+                    case LIKE_STARTS:
+                    case LIKE_ENDS:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
@@ -1233,7 +1265,7 @@ class DDataMapBuilder {
         buildSql(repository, method, bean, fetchOptions, mappedTables, select, null, null, true);
     }
 
-    private class FilterOption {
+    class FilterOption {
         final DDataFilterOption option;
         final DataBeanPropertyBuilder property;
         final String parameter;

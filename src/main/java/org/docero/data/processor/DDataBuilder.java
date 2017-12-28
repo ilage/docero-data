@@ -109,9 +109,6 @@ class DDataBuilder {
         for (DataBeanBuilder bean : beansByInterface.values()) {
             bean.buildImplementation(environment);
         }
-        for (DataRepositoryBuilder repositoryBuilder : repositories) {
-            repositoryBuilder.build(environment, spring);
-        }
     }
 
     void generateDdata() throws IOException {

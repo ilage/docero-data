@@ -1,6 +1,5 @@
 package org.docero.data.processor;
 
-import org.docero.data.DDataDiscriminator;
 import org.docero.data.DDataRep;
 import org.docero.data.DictionaryType;
 
@@ -8,8 +7,10 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 class DataRepositoryBuilder {
     final String name;
@@ -141,7 +142,12 @@ class DataRepositoryBuilder {
         buildMultiTypesAnnotation(environment);
     }
 
+    private boolean isAlreadyBuild = false;
+
     void build(ProcessingEnvironment environment, boolean spring) throws IOException {
+        if (isAlreadyBuild) return;
+        isAlreadyBuild = true;
+
         int simpNameDel = daoClassName.lastIndexOf('.');
 
         try (JavaClassWriter cf = new JavaClassWriter(environment, daoClassName)) {
@@ -356,9 +362,7 @@ class DataRepositoryBuilder {
             DDataBuilder rootBuilder,
             DataBeanBuilder bean
     ) throws IOException {
-        DataRepositoryBuilder builder = new DataRepositoryBuilder(rootBuilder, bean);
-        builder.build(rootBuilder.environment, rootBuilder.spring);
-        return builder;
+        return new DataRepositoryBuilder(rootBuilder, bean);
     }
 
     private void buildMethodDelete(JavaClassWriter cf) throws IOException {
@@ -489,5 +493,21 @@ class DataRepositoryBuilder {
         cf.startBlock("public " + forInterfaceName + " create() {");
         cf.println("return new " + beanImplementation + "();");
         cf.endBlock("}");
+    }
+
+    void setMethodFilters(ExecutableElement method, ArrayList<DDataMapBuilder.FilterOption> filters) {
+        Types tu = this.rootBuilder.environment.getTypeUtils();
+        String returntype = method.getReturnType() != null ? method.getReturnType().toString() : "";
+        String paramHash = method.getParameters().stream()
+                .map(e -> tu.erasure(e.asType()))
+                .map(TypeMirror::toString)
+                .collect(Collectors.joining(","));
+        methods.stream().filter(m -> method.getSimpleName().toString().equals(m.methodName))
+                .filter(m -> m.returnType != null && returntype.equals(m.returnType.toString()))
+                .filter(m -> m.parameters.size() == method.getParameters().size())
+                .filter(m -> m.parameters.stream().map(p -> tu.erasure(p.type))
+                        .map(TypeMirror::toString)
+                        .collect(Collectors.joining(",")).equals(paramHash))
+                .findAny().ifPresent(m -> m.setFilters(filters));
     }
 }

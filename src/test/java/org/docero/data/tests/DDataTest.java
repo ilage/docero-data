@@ -167,6 +167,8 @@ public class DDataTest {
         assertTrue(i instanceof ItemInner);
         assertNotNull(((ItemInner) i).getInner());
         assertNotNull(((ItemInner) i).getLarge());
+        assertNotNull(((ItemInner) i).getLargeCached());
+        assertEquals(((ItemInner) i).getLarge().getId(), ((ItemInner) i).getLargeCached().getId());
     }
 
     @Test
