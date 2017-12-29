@@ -6,27 +6,17 @@ Code Generation Library for MyBatis
 
 Подключаем в Maven pom.xml
 
-            <plugin>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>default-testCompile</id>
-                        <phase>generate-test-sources</phase>
-                        <goals>
-                            <goal>testCompile</goal>
-                        </goals>
-                        <configuration>
-                            <annotationProcessors>
-                                <annotationProcessor>org.docero.data.processor.DDataProcessor</annotationProcessor>
-                            </annotationProcessors>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+    <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+            <source>1.8</source>
+            <target>1.8</target>
+            <annotationProcessors>
+                <annotationProcessor>org.docero.data.processor.DDataProcessor</annotationProcessor>
+            </annotationProcessors>
+        </configuration>
+    </plugin>
+
             
 Создаём интерфейсы описания сущностей (таблиц БД)
 
