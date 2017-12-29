@@ -170,14 +170,14 @@ DDataRepository и их пока переопределять не будем. �
 
 **Интерфейсы**
 
-DDataVersionalBean<T extends Temporal> предназначен для работы
+DDataVersionalBean&lt;T extends Temporal&gt; предназначен для работы
 с версионными репозиториями, расширяет Serializable
 (все сущности должны поддерживать сериализацию) и 
 указывает на тип ключа версии.
  
-DDataRepository<T extends Serializable, C extends Serializable> 
+DDataRepository&lt;T extends Serializable, C extends Serializable&gt; 
 репозиторий данных для сущностей 
-типа <T> с ключом типа <C>, определяет минимальный набор
+типа &lt;T&gt; с ключом типа &lt;C&gt;, определяет минимальный набор
 методов работы с данными:
 
     T create();
@@ -186,7 +186,7 @@ DDataRepository<T extends Serializable, C extends Serializable>
     void update(T bean);
     void delete(C id);
 
-DDataVersionalRepository<T extends DDataVersionalBean<A>, C extends Serializable, A extends Temporal>
+DDataVersionalRepository&lt;T extends DDataVersionalBean&lt;A&gt;, C extends Serializable, A extends Temporal&gt;
 репозиторий версионных данных (таблицы с двумя или более 
 ключевых полей, одно из которых значение версии), расширяет
 DDataRepository и добавляет метод:
