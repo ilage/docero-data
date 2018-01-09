@@ -3,7 +3,6 @@ package org.docero.data.processor;
 import org.docero.data.DDataFetchType;
 import org.docero.data.DDataFilterOption;
 import org.docero.data.DictionaryType;
-import org.docero.data.utils.DDataTypes;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentType;
 
@@ -11,6 +10,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
@@ -70,9 +70,15 @@ class DDataMapBuilder {
                     if (methodElement.getKind() == ElementKind.METHOD && !methodElement.getModifiers().contains(Modifier.STATIC) ?
                             !methodElement.getModifiers().contains(Modifier.DEFAULT) :
                             methodElement.getModifiers().contains(Modifier.ABSTRACT))
-                        createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository);
+                        checkMethodFilters((ExecutableElement) methodElement, repository);
                 // методы с фильтрами обновлены, можно строить репозиторий, для мультиклассовых
                 repository.build(environment, builder.spring);
+
+                for (Element methodElement : repositoryElement.getEnclosedElements())
+                    if (methodElement.getKind() == ElementKind.METHOD && !methodElement.getModifiers().contains(Modifier.STATIC) ?
+                            !methodElement.getModifiers().contains(Modifier.DEFAULT) :
+                            methodElement.getModifiers().contains(Modifier.ABSTRACT))
+                        createDefinedMethod(mapperRoot, (ExecutableElement) methodElement, repository);
 
                 if (repository.defaultGetMethod == null)
                     createSimpleGet(mapperRoot, repository, defaultFetchOptions);
@@ -184,41 +190,36 @@ class DDataMapBuilder {
         return true;
     }
 
-    private void createDefinedMethod(
-            org.w3c.dom.Element mapperRoot,
-            ExecutableElement methodElement,
-            DataRepositoryBuilder repository
-    ) throws Exception {
+    private DDataMethodBuilder findMethodBuilder(ExecutableElement methodElement, DataRepositoryBuilder repository) {
         TypeMirror returnType = methodElement.getReturnType();
         String paramHash = methodElement.getParameters().stream()
                 .map(e -> environment.getTypeUtils().erasure(e.asType()))
                 .map(TypeMirror::toString)
                 .collect(Collectors.joining(","));
-        DDataMethodBuilder method = repository.methods.stream().filter(m ->
-                m.methodName.equals(methodElement.getSimpleName().toString()) && (
-                        (m.returnType == null && returnType == null) ||
-                                (m.returnType != null && m.returnType.toString().equals(returnType.toString()))
-                ) &&
+        return repository.methods.stream().filter(m ->
+                m.methodName.equals(methodElement.getSimpleName().toString()) &&
+                        ((
+                                (m.returnType == null || m.returnType.getKind() == TypeKind.VOID) &&
+                                        (returnType == null || returnType.getKind() == TypeKind.VOID)
+                        ) || (
+                                m.returnType != null && returnType != null &&
+                                        m.returnType.toString().equals(returnType.toString())
+                        )) &&
                         m.parameters.size() == methodElement.getParameters().size() &&
                         m.parameters.stream().map(p -> environment.getTypeUtils().erasure(p.type))
                                 .map(TypeMirror::toString)
                                 .collect(Collectors.joining(","))
                                 .equals(paramHash)
         ).findAny().orElse(null);
+    }
 
+    private void checkMethodFilters(ExecutableElement methodElement, DataRepositoryBuilder repository) throws Exception {
+        DDataMethodBuilder method = findMethodBuilder(methodElement, repository);
         if (method == null)
             throw new Exception("not found info about method '" + methodElement.getSimpleName() +
                     " of " + repository.repositoryInterface);
 
         if (method.selectId == null) {
-            Document doc = mapperRoot.getOwnerDocument();
-            DataBeanBuilder bean = builder.beansByInterface.get(method.repositoryBuilder.forInterfaceName());
-
-            FetchOptions fetchOptions = methodElement.getAnnotationMirrors().stream()
-                    .filter(a -> a.toString().indexOf("_DDataFetch_") > 0)
-                    .findAny().map(f -> new FetchOptions(repository, f))
-                    .orElse(new FetchOptions(1));
-
             ArrayList<FilterOption> filters = new ArrayList<>();
             VariableElement order = null;
             for (VariableElement variableElement : methodElement.getParameters()) {
@@ -228,7 +229,32 @@ class DDataMapBuilder {
                     order = variableElement;
                 }
             }
-            repository.setMethodFilters(methodElement, filters);
+            VariableElement finalOrder = order;
+            repository.onMethod(methodElement, m -> m.setFiltersAndOrder(filters, finalOrder));
+        }
+    }
+
+    private void createDefinedMethod(
+            org.w3c.dom.Element mapperRoot,
+            ExecutableElement methodElement,
+            DataRepositoryBuilder repository
+    ) throws Exception {
+        DDataMethodBuilder method = findMethodBuilder(methodElement, repository);
+        if (method == null)
+            throw new Exception("not found info about method '" + methodElement.getSimpleName() +
+                    " of " + repository.repositoryInterface);
+
+        if (method.selectId == null) {
+            List<FilterOption> filters = method.getFilters();
+            VariableElement order = method.getOrder();
+
+            Document doc = mapperRoot.getOwnerDocument();
+            DataBeanBuilder bean = builder.beansByInterface.get(method.repositoryBuilder.forInterfaceName());
+
+            FetchOptions fetchOptions = methodElement.getAnnotationMirrors().stream()
+                    .filter(a -> a.toString().indexOf("_DDataFetch_") > 0)
+                    .findAny().map(f -> new FetchOptions(repository, f))
+                    .orElse(new FetchOptions(1));
 
             AtomicInteger index = new AtomicInteger();
             CopyOnWriteArrayList<MappedTable> mappedTables = new CopyOnWriteArrayList<>(bean.properties.values().stream()
@@ -252,7 +278,7 @@ class DDataMapBuilder {
                         createDictionaryList(mapperRoot, fetchOptions);
                 case GET:
                     if (fetchOptions.resultMap.length() == 0 && !method.returnSimpleType)
-                        buildResultMap(mapperRoot, method.repositoryBuilder, repository.discriminator, methodName, fetchOptions, mappedTables, filters);
+                        buildResultMap(mapperRoot, repository, methodName, fetchOptions, mappedTables, filters);
 
                     org.w3c.dom.Element select = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("select"));
@@ -320,7 +346,7 @@ class DDataMapBuilder {
             FetchOptions fetchOptions,
             List<MappedTable> mappedTables,
             org.w3c.dom.Element domElement,
-            ArrayList<FilterOption> filters,
+            List<FilterOption> filters,
             VariableElement order,
             boolean defaultGet) {
         Document doc = domElement.getOwnerDocument();
@@ -436,6 +462,7 @@ class DDataMapBuilder {
                             .filter(DataBeanPropertyBuilder::notIgnored)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                             .filter(this::notManagedBean)
+                            .filter(p -> filterIgnored(fetchOptions, p))
                             .map(DataBeanPropertyBuilder::getColumnRef)
                             .collect(Collectors.joining(", ")));
                     sql.append(")\n");
@@ -444,6 +471,7 @@ class DDataMapBuilder {
                             .filter(DataBeanPropertyBuilder::notIgnored)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                             .filter(this::notManagedBean)
+                            .filter(p -> filterIgnored(fetchOptions, p))
                             .map(p -> buildSqlParameter(bean, p))
                             .collect(Collectors.joining(",\n")));
                     sql.append("\n)\n");
@@ -454,6 +482,7 @@ class DDataMapBuilder {
                             .filter(DataBeanPropertyBuilder::notIgnored)
                             .filter(DataBeanPropertyBuilder::notId)
                             .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                            .filter(p -> filterIgnored(fetchOptions, p))
                             .filter(this::notManagedBean)
                             .map(p -> p.getColumnRef() + " = " + buildSqlParameter(bean, p))
                             .collect(Collectors.joining(",\n")))
@@ -557,6 +586,10 @@ class DDataMapBuilder {
         }
     }
 
+    private boolean filterIgnored(FetchOptions fetchOptions, DataBeanPropertyBuilder p) {
+        return fetchOptions.ignore.stream().noneMatch(f -> f.name.equals(p.name));
+    }
+
     private boolean notManagedBean(DataBeanPropertyBuilder propertyBuilder) {
         return !this.builder.beansByInterface.containsKey(propertyBuilder.type.toString());
     }
@@ -581,7 +614,7 @@ class DDataMapBuilder {
             DataBeanBuilder bean,
             DDataMethodBuilder method,
             List<MappedTable> mappedTables,
-            ArrayList<FilterOption> filters,
+            List<FilterOption> filters,
             VariableElement order,
             boolean addJoins
     ) {
@@ -920,11 +953,10 @@ class DDataMapBuilder {
     private void buildResultMap(
             org.w3c.dom.Element mapperRoot,
             DataRepositoryBuilder repository,
-            DataRepositoryDiscriminator discriminator,
             String methodName,
             FetchOptions fetchOptions,
             List<MappedTable> mappedTables,
-            ArrayList<FilterOption> filters
+            List<FilterOption> filters
     ) {
         Document doc = mapperRoot.getOwnerDocument();
         MapBuilder map = new MapBuilder(methodName, repository);
@@ -938,7 +970,7 @@ class DDataMapBuilder {
                 .filter(MappedTable::notSingleSmallDictionaryValue)
                 .filter(mappedTable -> fetchOptions.filter4ResultMap(mappedTable.property))
                 .filter(mappedTable -> !mappedTable.property.isCollectionOrMap())
-                .filter(mappedTable -> discriminator == null || bean.properties.values().stream()
+                .filter(mappedTable -> repository.discriminator == null || bean.properties.values().stream()
                         .anyMatch(p -> mappedTable.mappedBean.interfaceType.toString().equals(p.mappedType.toString())))
                 .forEach(mappedTable ->
                         addManagedBeanToResultMap(doc, map, mappedTable,
@@ -948,7 +980,7 @@ class DDataMapBuilder {
         unmodifiableTables.stream()
                 .filter(mappedTable -> fetchOptions.filter4ResultMap(mappedTable.property))
                 .filter(mappedTable -> mappedTable.property.isCollectionOrMap())
-                .filter(mappedTable -> discriminator == null || bean.properties.values().stream()
+                .filter(mappedTable -> repository.discriminator == null || bean.properties.values().stream()
                         .anyMatch(p -> mappedTable.mappedBean.interfaceType.toString().equals(p.mappedType.toString())))
                 .forEach(mappedTable ->
                         addManagedBeanToResultMap(doc, map, mappedTable,
@@ -956,9 +988,9 @@ class DDataMapBuilder {
                                 fetchOptions.eagerTrunkLevel, filters,
                                 false));
 
-        if (discriminator != null) {
+        if (repository.discriminator != null) {
             unmodifiableTables = new ArrayList<>(mappedTables);
-            for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
+            for (DataRepositoryDiscriminator.Item item : repository.discriminator.beans) {
                 DataBeanBuilder dbean = builder.beansByInterface.get(item.beanInterface);
                 /*ArrayList<DataBeanPropertyBuilder> properties = new ArrayList<>();
                 for (DataBeanPropertyBuilder prop : dbean.properties.values())
@@ -1253,7 +1285,7 @@ class DDataMapBuilder {
 
         Document doc = mapperRoot.getOwnerDocument();
 
-        buildResultMap(mapperRoot, repository, repository.discriminator, "get", fetchOptions, mappedTables, null);
+        buildResultMap(mapperRoot, repository, "get", fetchOptions, mappedTables, null);
 
         org.w3c.dom.Element select = (org.w3c.dom.Element)
                 mapperRoot.appendChild(doc.createElement("select"));

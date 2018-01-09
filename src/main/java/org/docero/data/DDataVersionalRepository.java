@@ -5,5 +5,5 @@ import java.time.temporal.Temporal;
 
 public interface DDataVersionalRepository<T extends DDataVersionalBean<A>, C extends Serializable, A extends Temporal>
         extends DDataRepository<T, C> {
-    T get(C id, A at);
+    <B extends T> B get(C id, A at);
 }

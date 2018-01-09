@@ -149,8 +149,8 @@ class MapBuilder extends MapElement {
 
         String resultMapId() {
             return discriminator.beanInterface
-                    .substring(discriminator.beanInterface.lastIndexOf('.') + 1) +
-                    "_extention";
+                    .substring(discriminator.beanInterface.lastIndexOf('.') + 1) + "_" +
+                    parent.methodName + "_extension";
         }
 
         @Override

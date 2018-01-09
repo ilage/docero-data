@@ -6,7 +6,10 @@ import org.docero.data.SelectId;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
 import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.ExecutableType;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,6 +19,7 @@ import java.util.stream.Collectors;
 class DDataMethodBuilder {
     private static final String ROW_BOUNDS_CLASS = "org.apache.ibatis.session.RowBounds";
 
+    final List<? extends TypeVariable> typeVariables;
     final TypeMirror returnType;
     final String methodName;
     final ArrayList<DDataMethodParameter> parameters = new ArrayList<>();
@@ -26,6 +30,7 @@ class DDataMethodBuilder {
     final boolean returnSimpleType;
     final String selectId;
     private List<DDataMapBuilder.FilterOption> filters = Collections.emptyList();
+    private VariableElement order;
 
     DDataMethodBuilder(DataRepositoryBuilder repositoryBuilder, ExecutableElement methodElement) {
         this.repositoryBuilder = repositoryBuilder;
@@ -36,7 +41,8 @@ class DDataMethodBuilder {
             parameters.add(new DDataMethodParameter(variableElement.getSimpleName(), variableElement.asType()));
         }
         throwTypes = methodElement.getThrownTypes();
-        if (returnType == null) {
+        typeVariables = ((ExecutableType) methodElement.asType()).getTypeVariables();
+        if (returnType == null || returnType.getKind() == TypeKind.VOID) {
             String nameString = methodName.toLowerCase();
             this.methodType = nameString.contains("insert") ? MType.INSERT : (
                     nameString.contains("update") ? MType.UPDATE :
@@ -61,7 +67,7 @@ class DDataMethodBuilder {
             MType methodType
     ) {
         this.repositoryBuilder = repositoryBuilder;
-        returnType = repositoryBuilder.forInterfaceName;
+        typeVariables = Collections.emptyList();
         returnSimpleType = false;
         this.methodType = methodType;
         methodIndex = 0;
@@ -69,18 +75,22 @@ class DDataMethodBuilder {
         switch (methodType) {
             case GET:
                 methodName = "get";
+                returnType = repositoryBuilder.forInterfaceName;
                 parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
                 break;
             case INSERT:
                 methodName = "insert";
+                returnType = null;
                 parameters.add(new DDataMethodParameter("bean", repositoryBuilder.forInterfaceName));
                 break;
             case UPDATE:
                 methodName = "update";
+                returnType = null;
                 parameters.add(new DDataMethodParameter("bean", repositoryBuilder.forInterfaceName));
                 break;
             default:
                 methodName = "delete";
+                returnType = null;
                 parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
         }
         selectId = null;
@@ -101,7 +111,8 @@ class DDataMethodBuilder {
                 cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap +
                         "\")");
         }
-        cf.startBlock("public " + (returnType == null ? "void" : returnType) + " " + methodName + "(");
+        cf.startBlock("public " + typeVariables2String() +
+                (returnType == null ? "void" : returnType) + " " + methodName + "(");
         int i = 0;
         for (DDataMethodParameter parameter : parameters) {
             cf.print("" + parameter.type + " " + parameter.name);
@@ -110,26 +121,31 @@ class DDataMethodBuilder {
         }
         cf.println(")" + throwsPart + " {");
 
-        if (returnType != null) {
-            cf.print("return getSqlSession().");
-            if (returnType.toString().contains("java.util.List")) {
-                cf.print("selectList");
-            } else if (returnType.toString().contains("java.util.Map")) {
-                cf.print("selectMap");
-            } else {
+        switch (methodType) {
+            case GET:
+                cf.print("return getSqlSession().");
                 cf.print("selectOne");
-            }
-        } else {
-            switch (methodType) {
-                case INSERT:
-                    cf.print("insert");
-                    break;
-                case UPDATE:
-                    cf.print("update");
-                    break;
-                default:
-                    cf.print("delete");
-            }
+                break;
+            case SELECT:
+                if (returnType != null) {
+                    cf.print("return getSqlSession().");
+                    if (returnType.toString().contains("java.util.List")) {
+                        cf.print("selectList");
+                    } else if (returnType.toString().contains("java.util.Map")) {
+                        cf.print("selectMap");
+                    } else {
+                        cf.print("selectOne");
+                    }
+                }
+                break;
+            case INSERT:
+                cf.print("getSqlSession().insert");
+                break;
+            case UPDATE:
+                cf.print("getSqlSession().update");
+                break;
+            default:
+                cf.print("getSqlSession().delete");
         }
         if (selectId != null)
             cf.print("(\"" + selectId + "\"");
@@ -212,7 +228,7 @@ class DDataMethodBuilder {
                     else cf.print(" ");
                 }
             }
-            cf.startBlock("public " + returnType + " get(" +
+            cf.startBlock("public " + typeVariables2String() + returnType + " get(" +
                     repositoryBuilder.idClass + " id)" + throwsPart + " {");
             cf.println("return get(id, " +
                     DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
@@ -221,8 +237,24 @@ class DDataMethodBuilder {
         }
     }
 
-    void setFilters(List<DDataMapBuilder.FilterOption> filters) {
+    private String typeVariables2String() {
+        if (typeVariables.isEmpty()) return "";
+        return "<" + typeVariables.stream()
+                .map(tv -> tv.asElement() + " extends " + tv.getUpperBound())
+                .collect(Collectors.joining(",")) + "> ";
+    }
+
+    void setFiltersAndOrder(List<DDataMapBuilder.FilterOption> filters, VariableElement order) {
         if (filters != null) this.filters = filters;
+        this.order = order;
+    }
+
+    List<DDataMapBuilder.FilterOption> getFilters() {
+        return filters;
+    }
+
+    VariableElement getOrder() {
+        return order;
     }
 
     enum MType {SELECT, GET, INSERT, UPDATE, DELETE}

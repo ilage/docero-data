@@ -10,6 +10,7 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
 import java.io.IOException;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 class DataRepositoryBuilder {
@@ -495,7 +496,7 @@ class DataRepositoryBuilder {
         cf.endBlock("}");
     }
 
-    void setMethodFilters(ExecutableElement method, ArrayList<DDataMapBuilder.FilterOption> filters) {
+    void onMethod(ExecutableElement method, Consumer<? super DDataMethodBuilder> consumer) {
         Types tu = this.rootBuilder.environment.getTypeUtils();
         String returntype = method.getReturnType() != null ? method.getReturnType().toString() : "";
         String paramHash = method.getParameters().stream()
@@ -508,6 +509,6 @@ class DataRepositoryBuilder {
                 .filter(m -> m.parameters.stream().map(p -> tu.erasure(p.type))
                         .map(TypeMirror::toString)
                         .collect(Collectors.joining(",")).equals(paramHash))
-                .findAny().ifPresent(m -> m.setFilters(filters));
+                .findAny().ifPresent(consumer);
     }
 }
