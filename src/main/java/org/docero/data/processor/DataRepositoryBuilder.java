@@ -42,10 +42,11 @@ class DataRepositoryBuilder {
     DataRepositoryBuilder(
             DDataBuilder rootBuilder,
             TypeElement repositoryElement
-    ) {
+    ) throws Exception {
         DDataRep ddRep = repositoryElement.getAnnotation(DDataRep.class);
         repositoryInterface = repositoryElement.asType();
-        this.mappingClassName = rootBuilder.environment.getTypeUtils().erasure(repositoryInterface).toString();
+        Types tu = rootBuilder.environment.getTypeUtils();
+        this.mappingClassName = tu.erasure(repositoryInterface).toString();
         if (ddRep.value().length() > 0) name = ddRep.value();
         else name = mappingClassName.substring(mappingClassName.lastIndexOf('.'));
         this.rootBuilder = rootBuilder;
@@ -58,24 +59,20 @@ class DataRepositoryBuilder {
                 interfaceType = (DeclaredType) i;
             if (isHistorical) break;
         }
+        if (interfaceType == null)
+            throw new Exception("can't find interface for " + repositoryElement);
 
         String str = repositoryElement.getSimpleName().toString();
         repositoryVariableName = Character.toLowerCase(str.charAt(0)) + str.substring(1);
-        if (interfaceType != null) {
-            List<? extends TypeMirror> gens = interfaceType.getTypeArguments();
-            forInterfaceName = gens.get(0);
-            idClass = gens.get(1);
-            actualTimeClass = !isHistorical ? null : gens.get(2);
-            DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
-            beanImplementation = bean.getImplementationName();
-            this.versionalType = !isHistorical ? null : gens.get(2);
-        } else {
-            forInterfaceName = null;
-            idClass = null;
-            actualTimeClass = null;
-            beanImplementation = null;
-            this.versionalType = null;
-        }
+
+        List<? extends TypeMirror> gens = interfaceType.getTypeArguments();
+        forInterfaceName = gens.get(0);
+        idClass = gens.get(1);
+        actualTimeClass = !isHistorical ? null : gens.get(2);
+        DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
+        beanImplementation = bean.getImplementationName();
+        this.versionalType = !isHistorical ? null : gens.get(2);
+
         daoClassName = repositoryElement.asType().toString() + "_Dao_";
         restClassName = repositoryElement.asType().toString() + "Controller";
 
@@ -87,18 +84,21 @@ class DataRepositoryBuilder {
                     methods.add(new DDataMethodBuilder(this, (ExecutableElement) element));
                 }
             }
+
         defaultGetMethod = methods.stream().filter(m ->
-                "get".equals(m.methodName) &&
-                        m.parameters.size() == (versionalType == null ? 1 : 2) &&
-                        rootBuilder.environment.getTypeUtils().isSameType(m.parameters.get(0).type, idClass))
-                .findAny().orElse(null);
+                "get".equals(m.methodName) && m.parameters.size() == 1 &&
+                        tu.isSameType(m.parameters.get(0).type, idClass)
+        ).findAny().orElse(null);
+
         defaultDeleteMethod = methods.stream().filter(m ->
                 "delete".equals(m.methodName) && m.parameters.size() == 1 &&
-                        rootBuilder.environment.getTypeUtils().isSameType(m.parameters.get(0).type, idClass))
-                .findAny().orElse(null);
+                        tu.isSameType(m.parameters.get(0).type, idClass)
+        ).findAny().orElse(null);
+
         defaultListMethod = methods.stream().filter(m ->
-                "list".equals(m.methodName) && m.parameters.size() == 0)
-                .findAny().orElse(null);
+                "list".equals(m.methodName) && m.parameters.size() == 0
+        ).findAny().orElse(null);
+
         hasInsert = methods.stream().anyMatch(m -> "insert".equals(m.methodName));
         hasUpdate = methods.stream().anyMatch(m -> "update".equals(m.methodName));
     }
@@ -109,15 +109,16 @@ class DataRepositoryBuilder {
         this.actualTimeClass = bean.versionalType;
         this.daoClassName = bean.interfaceType + "_Dao_";
         this.restClassName = null;
-        this.mappingClassName = rootBuilder.environment.getTypeUtils().erasure(forInterfaceName).toString();
+        Types tu = rootBuilder.environment.getTypeUtils();
+        this.mappingClassName = tu.erasure(forInterfaceName).toString();
         String str = mappingClassName.substring(mappingClassName.lastIndexOf('.') + 1) + "Repository";
         repositoryVariableName = Character.toLowerCase(str.charAt(0)) + str.substring(1);
         this.versionalType = bean.versionalType;
         this.repositoryInterface = versionalType != null ?
-                rootBuilder.environment.getTypeUtils().getDeclaredType(
+                tu.getDeclaredType(
                         rootBuilder.environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalRepository"),
                         forInterfaceName, idClass, versionalType) :
-                rootBuilder.environment.getTypeUtils().getDeclaredType(
+                tu.getDeclaredType(
                         rootBuilder.environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
                         forInterfaceName, idClass);
         this.name = mappingClassName.substring(mappingClassName.lastIndexOf('.'));
@@ -209,10 +210,22 @@ class DataRepositoryBuilder {
             }
 
             buildMethodCreate(cf);
-            if (defaultGetMethod == null) buildMethodGet(cf);
-            if (!hasInsert) buildMethodInsert(cf, discriminator);
-            if (!hasUpdate) buildMethodUpdate(cf, discriminator);
-            if (defaultDeleteMethod == null) buildMethodDelete(cf);
+            if (defaultGetMethod == null) {
+                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.GET).build(cf);
+                //buildMethodGet(cf);
+            }
+            if (!hasInsert) {
+                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.INSERT).build(cf);
+                //buildMethodInsert(cf, discriminator);
+            }
+            if (!hasUpdate) {
+                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.UPDATE).build(cf);
+                //buildMethodUpdate(cf, discriminator);
+            }
+            if (defaultDeleteMethod == null) {
+                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.DELETE).build(cf);
+                //buildMethodDelete(cf);
+            }
             if (bean.dictionary != DictionaryType.NO && defaultListMethod == null) {
                 cf.println("");
                 cf.startBlock("public java.util.List<" + forInterfaceName + "> list() {");
@@ -364,126 +377,6 @@ class DataRepositoryBuilder {
             DataBeanBuilder bean
     ) throws IOException {
         return new DataRepositoryBuilder(rootBuilder, bean);
-    }
-
-    private void buildMethodDelete(JavaClassWriter cf) throws IOException {
-        DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
-        cf.println("");
-        if (versionalType != null) {
-            cf.startBlock("public void delete(" +
-                    idClass + " id) {");
-            cf.println("getSqlSession().delete(\"" +
-                    mappingClassName + ".delete\", new " + bean.keyType + "(id));");
-            cf.endBlock("}");
-        } else {
-            if (bean.dictionary != DictionaryType.NO && rootBuilder.useSpringCache)
-                cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap + "\")");
-
-            cf.startBlock("public void delete(" +
-                    idClass + " id) {");
-            cf.println("getSqlSession().delete(\"" +
-                    mappingClassName + ".delete\", id);");
-            cf.endBlock("}");
-        }
-    }
-
-    private void buildMethodUpdate(JavaClassWriter cf, DataRepositoryDiscriminator discriminator) throws IOException {
-        DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
-        cf.println("");
-        cf.startBlock("public void update(" + forInterfaceName + " bean) {");
-
-        if (versionalType != null)
-            cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
-                    "bean.set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
-                            "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
-                    .orElse("")
-            );
-
-        if (discriminator != null)
-            for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
-                DataRepositoryBuilder strep = rootBuilder.repositoriesByBean.get(item.beanInterface);
-                cf.startBlock("if (bean instanceof " + item.beanInterface + ") {");
-                cf.println("getSqlSession().update(\"" +
-                        (strep == null ? item.beanInterface : strep.mappingClassName) +
-                        ".update\", bean);");
-                cf.println("return;");
-                cf.endBlock("}");
-            }
-
-        /*if (versionalType != null)
-            cf.println("getSqlSession().insert(\"" + mappingClassName + ".insert\", bean);");
-        else*/
-        cf.println("getSqlSession().update(\"" + mappingClassName + ".update\", bean);");
-
-        if (bean.dictionary != DictionaryType.NO)
-            cf.println("cache(bean);");
-        cf.endBlock("}");
-    }
-
-    private void buildMethodInsert(JavaClassWriter cf, DataRepositoryDiscriminator discriminator) throws IOException {
-        DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
-
-        cf.println("");
-        cf.startBlock("public void insert(" +
-                forInterfaceName + " bean) {");
-        if (versionalType != null) {
-            cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
-                    "bean.set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
-                            "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
-                    .orElse("")
-            );
-        }
-
-        if (discriminator != null)
-            for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
-                DataRepositoryBuilder strep = rootBuilder.repositoriesByBean.get(item.beanInterface);
-                cf.startBlock("if (bean instanceof " + item.beanInterface + ") {");
-                cf.println("getSqlSession().insert(\"" +
-                        (strep == null ? item.beanInterface : strep.mappingClassName) +
-                        ".insert\", bean);");
-                cf.println("return;");
-                cf.endBlock("}");
-            }
-
-        cf.println("getSqlSession().insert(\"" + mappingClassName + ".insert\", bean);");
-
-        if (bean.dictionary != DictionaryType.NO)
-            cf.println("cache(bean);");
-        cf.endBlock("}");
-    }
-
-    private void buildMethodGet(JavaClassWriter cf) throws IOException {
-        DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
-        cf.println("");
-        if (versionalType == null) {
-            if (bean.dictionary != DictionaryType.NO && rootBuilder.useSpringCache)
-                cf.println("@org.springframework.cache.annotation.Cacheable(cacheNames=\"" + bean.cacheMap + "\", sync=true)");
-
-            cf.startBlock("public " + forInterfaceName + " get(" +
-                    idClass + " id) {");
-            if (bean.dictionary == DictionaryType.SMALL) {
-                cf.println("java.util.List<" + beanImplementation + "> l = getSqlSession().selectList(\"" +
-                        mappingClassName + ".dictionary\");");
-                cf.println("cache(l);");
-                cf.println("return l.stream().filter(r->java.util.Objects.equals(id, r.getDDataBeanKey_())).findAny().orElse(null);");
-            } else cf.println("return getSqlSession().selectOne(\"" +
-                    mappingClassName + ".get\", id);");
-            cf.endBlock("}");
-        } else {
-            cf.startBlock("public " + forInterfaceName + " get(" +
-                    idClass + " id) {");
-            cf.println("return getSqlSession().selectOne(\"" +
-                    mappingClassName + ".get\", new " + bean.keyType + "(id));");
-            cf.endBlock("}");
-
-            cf.println("");
-            cf.startBlock("public " + forInterfaceName + " get(" +
-                    idClass + " id, " +
-                    actualTimeClass + " at) {");
-            cf.println("return getSqlSession().selectOne(\"" +
-                    mappingClassName + ".get\", new " + bean.keyType + "(id, at));");
-            cf.endBlock("}");
-        }
     }
 
     private void buildMethodCreate(JavaClassWriter cf) throws IOException {

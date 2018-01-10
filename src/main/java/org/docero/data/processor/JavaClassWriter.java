@@ -51,4 +51,8 @@ public class JavaClassWriter implements Closeable {
         blockIndent--;
         this.println(s);
     }
+
+    public void endBlock() throws IOException {
+        blockIndent--;
+    }
 }

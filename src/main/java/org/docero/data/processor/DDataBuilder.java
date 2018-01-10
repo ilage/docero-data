@@ -50,7 +50,7 @@ class DDataBuilder {
         dGenInterface.put(dGen.getTargetClassName(), dGen);
     }
 
-    void checkRepository(TypeElement repositoryElement, TypeMirror versionalType) {
+    void checkRepository(TypeElement repositoryElement, TypeMirror versionalType) throws Exception {
         String typeName = repositoryElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
         if (repositoryElement.getInterfaces().stream()

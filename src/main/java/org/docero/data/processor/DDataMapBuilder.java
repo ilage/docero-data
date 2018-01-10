@@ -1290,7 +1290,7 @@ class DDataMapBuilder {
         select.setAttribute("id", "delete");
 
         select.setAttribute("parameterType", bean.keyType);
-        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.DELETE);
+        DDataMethodBuilder method = new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.DELETE);
         buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
@@ -1306,7 +1306,7 @@ class DDataMapBuilder {
         select.setAttribute("id", "update");
 
         select.setAttribute("parameterType", bean.getImplementationName());
-        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.UPDATE);
+        DDataMethodBuilder method = new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.UPDATE);
         buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
@@ -1322,7 +1322,7 @@ class DDataMapBuilder {
         select.setAttribute("id", "insert");
 
         select.setAttribute("parameterType", bean.getImplementationName());
-        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.INSERT);
+        DDataMethodBuilder method = new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.INSERT);
         buildSql(repository, method, bean, fetchOptions, Collections.emptyList(), select, null, null, false);
     }
 
@@ -1354,7 +1354,8 @@ class DDataMapBuilder {
         select.setAttribute("resultMap", "get_ResultMap");
 
         select.setAttribute("parameterType", bean.keyType);
-        DDataMethodBuilder method = new DDataMethodBuilder(repository, DDataMethodBuilder.MType.GET);
+
+        DDataMethodBuilder method = new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.GET);
         buildSql(repository, method, bean, fetchOptions, mappedTables, select, null, null, true);
     }
 

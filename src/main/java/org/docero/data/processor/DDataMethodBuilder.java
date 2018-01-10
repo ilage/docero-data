@@ -10,11 +10,15 @@ import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
+import javax.lang.model.util.Elements;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static org.docero.data.processor.DDataMethodBuilder.MType.DELETE;
+import static org.docero.data.processor.DDataMethodBuilder.MType.GET;
 
 class DDataMethodBuilder {
     private static final String ROW_BOUNDS_CLASS = "org.apache.ibatis.session.RowBounds";
@@ -53,7 +57,7 @@ class DDataMethodBuilder {
             String ttype = returnType.toString();
             if (ttype.contains("java.util.List")) methodType = MType.SELECT;
             else if (ttype.contains("java.util.Map")) methodType = MType.SELECT;
-            else methodType = MType.GET;
+            else methodType = GET;
             returnSimpleType = returnType.getKind().isPrimitive() ||
                     "java.lang.Long".equals(returnType.toString()) ||
                     "java.math.BigInteger".equals(returnType.toString());
@@ -69,6 +73,7 @@ class DDataMethodBuilder {
 
     DDataMethodBuilder(
             DataRepositoryBuilder repositoryBuilder,
+            DataBeanBuilder bean,
             MType methodType
     ) {
         this.repositoryBuilder = repositoryBuilder;
@@ -81,7 +86,13 @@ class DDataMethodBuilder {
             case GET:
                 methodName = "get";
                 returnType = repositoryBuilder.forInterfaceName;
-                parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
+                if (repositoryBuilder.versionalType == null)
+                    parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
+                else {
+                    Elements tu = repositoryBuilder.rootBuilder.environment.getElementUtils();
+                    parameters.add(new DDataMethodParameter("id",
+                            tu.getTypeElement(bean.keyType).asType()));
+                }
                 break;
             case INSERT:
                 methodName = "insert";
@@ -96,7 +107,13 @@ class DDataMethodBuilder {
             default:
                 methodName = "delete";
                 returnType = null;
-                parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
+                if (repositoryBuilder.versionalType == null)
+                    parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
+                else {
+                    Elements tu = repositoryBuilder.rootBuilder.environment.getElementUtils();
+                    parameters.add(new DDataMethodParameter("id",
+                            tu.getTypeElement(bean.keyType).asType()));
+                }
         }
         selectId = null;
     }
@@ -108,11 +125,11 @@ class DDataMethodBuilder {
         cf.println("");
         DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
 
-        if (bean.dictionary != DictionaryType.NO && repositoryBuilder.rootBuilder.useSpringCache) {
-            if (repositoryBuilder.defaultGetMethod == this)
+        if (bean.dictionary != DictionaryType.NO && repositoryBuilder.rootBuilder.useSpringCache && methodIndex == 0) {
+            if (methodType == GET)
                 cf.println("@org.springframework.cache.annotation.Cacheable(cacheNames=\"" + bean.cacheMap +
                         "\", sync=true)");
-            else if (repositoryBuilder.defaultDeleteMethod == this)
+            else if (methodType == DELETE)
                 cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap +
                         "\")");
         }
@@ -127,12 +144,20 @@ class DDataMethodBuilder {
         cf.endBlock(") " + throwsPart);
         cf.startBlock("{");
         String cacheFunction = null;
+        String beanParameterName = parameters.size() == 1 ? parameters.get(0).name : null;
+        String selectId = this.selectId != null ? this.selectId : repositoryBuilder.mappingClassName + "." +
+                methodName + (methodIndex == 0 ? "" : "_" + methodIndex);
+        boolean useParameterBean = false;
         switch (methodType) {
             case GET:
-                cf.print("return getSqlSession().");
+                if (bean.dictionary != DictionaryType.NO) {
+                    cf.print(returnType + " bean_ = getSqlSession().");
+                    cacheFunction = "cache(bean_); return bean_;";
+                } else {
+                    cf.print("return getSqlSession().");
+                }
                 cf.print("selectOne");
-                if (bean.dictionary != DictionaryType.NO)
-                    cacheFunction = "cache(bean);";
+                cf.print("(\"" + selectId + "\"");
                 break;
             case SELECT:
                 if (returnType != null) {
@@ -145,10 +170,11 @@ class DDataMethodBuilder {
                         cf.print("selectOne");
                     }
                 }
+                cf.print("(\"" + selectId + "\"");
                 break;
             case INSERT:
-                String beanParameterName = parameters.get(0).name;
-                if (bean.versionalType != null) {
+                useParameterBean = true;
+                if (repositoryBuilder.versionalType != null) {
                     cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                             beanParameterName + ".set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
                                     "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
@@ -166,12 +192,13 @@ class DDataMethodBuilder {
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().insert");
+                cf.print("(\"" + selectId + "\"");
                 if (bean.dictionary != DictionaryType.NO)
-                    cacheFunction = "cache(bean);";
+                    cacheFunction = "cache(" + beanParameterName + ");";
                 break;
             case UPDATE:
-                beanParameterName = parameters.get(0).name;
-                if (bean.versionalType != null) {
+                useParameterBean = true;
+                if (repositoryBuilder.versionalType != null) {
                     cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                             beanParameterName + ".set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
                                     "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
@@ -189,25 +216,22 @@ class DDataMethodBuilder {
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().update");
+                cf.print("(\"" + selectId + "\"");
                 if (bean.dictionary != DictionaryType.NO)
-                    cacheFunction = "cache(bean);";
+                    cacheFunction = "cache(" + beanParameterName + ");";
                 break;
             default:
                 cf.print("getSqlSession().delete");
-                if (bean.dictionary != DictionaryType.NO)
-                    cacheFunction = "evict(bean);";
+                cf.print("(\"" + selectId + "\"");
+                //TODO evict from cache
+                /*if (bean.dictionary != DictionaryType.NO)
+                    cacheFunction = "evict(" +beanParameterName+ ");";*/
         }
 
-        if (selectId != null)
-            cf.print("(\"" + selectId + "\"");
-        else
-            cf.print("(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
-                    methodIndex == 0 ? "" : "_" + methodIndex) + "\"");
-
         if (parameters.size() > 0) {
-            if (bean.isKeyComposite && parameters.size() == 1 && (
-                    repositoryBuilder.defaultGetMethod == this || repositoryBuilder.defaultDeleteMethod == this
-            )) {
+            if (bean.isKeyComposite && parameters.size() == 1 &&
+                    (methodType == GET || methodType == DELETE) && methodIndex == 0
+                    ) {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
                 for (DataBeanPropertyBuilder property : bean.properties.values())
@@ -217,7 +241,9 @@ class DDataMethodBuilder {
                                 property.name.substring(1) + "());");
                     }
                 cf.endBlock("}}");
-            } else if (parameters.size() == 1 && parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
+                cf.endBlock();
+            } else if (parameters.size() == 1 && useParameterBean &&
+                    parameters.get(0).type.equals(repositoryBuilder.forInterfaceName)) {
                 cf.print(", " + parameters.get(0).name);
             } else {
                 cf.startBlock(", ");
@@ -252,6 +278,7 @@ class DDataMethodBuilder {
                     cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
                 }
                 cf.endBlock("}}");
+                cf.endBlock();
             }
 
             if (returnType != null)
@@ -266,27 +293,36 @@ class DDataMethodBuilder {
             cf.println(");");
         }
 
-        if(cacheFunction!=null) cf.println(cacheFunction);
+        if (cacheFunction != null) cf.println(cacheFunction);
         cf.endBlock("}");
 
-        if (repositoryBuilder.defaultGetMethod == this && repositoryBuilder.versionalType != null) {
-            cf.println("");
-            if (throwTypes.size() != 0) {
-                cf.print("throws ");
-                i = 0;
-                for (TypeMirror throwType : throwTypes) {
-                    cf.print(throwType.toString());
-                    if (++i < throwTypes.size()) cf.print(", ");
-                    else cf.print(" ");
-                }
+        if (methodIndex == 0 && repositoryBuilder.versionalType != null)
+            if (methodType == GET) {
+                cf.println("");
+                cf.startBlock("public " + typeVariables2String() + returnType + " get(" +
+                        repositoryBuilder.idClass + " id)" + throwsPart + " {");
+                cf.println("return get(id, " +
+                        DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
+                        ");");
+                cf.endBlock("}");
+
+                cf.println("");
+                cf.startBlock("public " + typeVariables2String() + returnType + " get(" +
+                        repositoryBuilder.idClass + " id, " +
+                        repositoryBuilder.versionalType + " at) {");
+                cf.println("return getSqlSession().selectOne(\"" +
+                        repositoryBuilder.mappingClassName + ".get\", new " + bean.keyType + "(id, at));");
+                cf.endBlock("}");
             }
-            cf.startBlock("public " + typeVariables2String() + returnType + " get(" +
-                    repositoryBuilder.idClass + " id)" + throwsPart + " {");
-            cf.println("return get(id, " +
-                    DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
-                    ");");
-            cf.endBlock("}");
-        }
+            else if(methodType==DELETE) {
+                cf.println("");
+                cf.startBlock("public void delete(" +
+                        repositoryBuilder.idClass + " id) {");
+                cf.println("delete(new " + bean.keyType + "(id, " +
+                        DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
+                        "));");
+                cf.endBlock("}");
+            }
     }
 
     private String typeVariables2String() {
