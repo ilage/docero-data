@@ -11,6 +11,7 @@ import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
 import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -82,6 +83,8 @@ class DDataMethodBuilder {
         this.methodType = methodType;
         methodIndex = 0;
         throwTypes = Collections.emptyList();
+        Elements e = repositoryBuilder.rootBuilder.environment.getElementUtils();
+        Types tu = repositoryBuilder.rootBuilder.environment.getTypeUtils();
         switch (methodType) {
             case GET:
                 methodName = "get";
@@ -89,9 +92,8 @@ class DDataMethodBuilder {
                 if (repositoryBuilder.versionalType == null)
                     parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
                 else {
-                    Elements tu = repositoryBuilder.rootBuilder.environment.getElementUtils();
                     parameters.add(new DDataMethodParameter("id",
-                            tu.getTypeElement(bean.keyType).asType()));
+                            e.getTypeElement(bean.keyType).asType()));
                 }
                 break;
             case INSERT:
@@ -104,16 +106,21 @@ class DDataMethodBuilder {
                 returnType = null;
                 parameters.add(new DDataMethodParameter("bean", repositoryBuilder.forInterfaceName));
                 break;
-            default:
+            case DELETE:
                 methodName = "delete";
                 returnType = null;
                 if (repositoryBuilder.versionalType == null)
                     parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
                 else {
-                    Elements tu = repositoryBuilder.rootBuilder.environment.getElementUtils();
                     parameters.add(new DDataMethodParameter("id",
-                            tu.getTypeElement(bean.keyType).asType()));
+                            e.getTypeElement(bean.keyType).asType()));
                 }
+                break;
+            default:
+                methodName = "list";
+                returnType = tu.getDeclaredType(
+                        e.getTypeElement("java.util.List"), repositoryBuilder.forInterfaceName
+                );
         }
         selectId = null;
     }
@@ -150,14 +157,7 @@ class DDataMethodBuilder {
         boolean useParameterBean = false;
         switch (methodType) {
             case GET:
-                if (bean.dictionary != DictionaryType.NO) {
-                    cf.print(returnType + " bean_ = getSqlSession().");
-                    cacheFunction = "cache(bean_); return bean_;";
-                } else {
-                    cf.print("return getSqlSession().");
-                }
-                cf.print("selectOne");
-                cf.print("(\"" + selectId + "\"");
+                cf.print("return getSqlSession().selectOne(\"" + selectId + "\"");
                 break;
             case SELECT:
                 if (returnType != null) {
@@ -221,11 +221,7 @@ class DDataMethodBuilder {
                     cacheFunction = "cache(" + beanParameterName + ");";
                 break;
             default:
-                cf.print("getSqlSession().delete");
-                cf.print("(\"" + selectId + "\"");
-                //TODO evict from cache
-                /*if (bean.dictionary != DictionaryType.NO)
-                    cacheFunction = "evict(" +beanParameterName+ ");";*/
+                cf.print("getSqlSession().delete(\"" + selectId + "\"");
         }
 
         if (parameters.size() > 0) {
@@ -313,8 +309,7 @@ class DDataMethodBuilder {
                 cf.println("return getSqlSession().selectOne(\"" +
                         repositoryBuilder.mappingClassName + ".get\", new " + bean.keyType + "(id, at));");
                 cf.endBlock("}");
-            }
-            else if(methodType==DELETE) {
+            } else if (methodType == DELETE) {
                 cf.println("");
                 cf.startBlock("public void delete(" +
                         repositoryBuilder.idClass + " id) {");
