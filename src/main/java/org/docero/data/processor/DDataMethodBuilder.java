@@ -126,11 +126,13 @@ class DDataMethodBuilder {
         }
         cf.endBlock(") " + throwsPart);
         cf.startBlock("{");
-
+        String cacheFunction = null;
         switch (methodType) {
             case GET:
                 cf.print("return getSqlSession().");
                 cf.print("selectOne");
+                if (bean.dictionary != DictionaryType.NO)
+                    cacheFunction = "cache(bean);";
                 break;
             case SELECT:
                 if (returnType != null) {
@@ -146,9 +148,16 @@ class DDataMethodBuilder {
                 break;
             case INSERT:
                 String beanParameterName = parameters.get(0).name;
+                if (bean.versionalType != null) {
+                    cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
+                            beanParameterName + ".set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
+                                    "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
+                            .orElse("")
+                    );
+                }
                 if (repositoryBuilder.discriminator != null)
                     for (DataRepositoryDiscriminator.Item item : repositoryBuilder.discriminator.beans) {
-                        DataRepositoryBuilder strep = repositoryBuilder.rootBuilder.repositoriesByBean.get(item.beanInterface);
+                        //DataRepositoryBuilder strep = repositoryBuilder.rootBuilder.repositoriesByBean.get(item.beanInterface);
                         cf.startBlock("if (" + beanParameterName + " instanceof " + item.beanInterface + ") {");
                         cf.println("getSqlSession().insert(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                                 methodIndex == 0 ? "" : "_" + methodIndex) + "_" +
@@ -157,12 +166,21 @@ class DDataMethodBuilder {
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().insert");
+                if (bean.dictionary != DictionaryType.NO)
+                    cacheFunction = "cache(bean);";
                 break;
             case UPDATE:
                 beanParameterName = parameters.get(0).name;
+                if (bean.versionalType != null) {
+                    cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
+                            beanParameterName + ".set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
+                                    "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
+                            .orElse("")
+                    );
+                }
                 if (repositoryBuilder.discriminator != null)
                     for (DataRepositoryDiscriminator.Item item : repositoryBuilder.discriminator.beans) {
-                        DataRepositoryBuilder strep = repositoryBuilder.rootBuilder.repositoriesByBean.get(item.beanInterface);
+                        //DataRepositoryBuilder strep = repositoryBuilder.rootBuilder.repositoriesByBean.get(item.beanInterface);
                         cf.startBlock("if (" + beanParameterName + " instanceof " + item.beanInterface + ") {");
                         cf.println("getSqlSession().update(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                                 methodIndex == 0 ? "" : "_" + methodIndex) + "_" +
@@ -171,10 +189,15 @@ class DDataMethodBuilder {
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().update");
+                if (bean.dictionary != DictionaryType.NO)
+                    cacheFunction = "cache(bean);";
                 break;
             default:
                 cf.print("getSqlSession().delete");
+                if (bean.dictionary != DictionaryType.NO)
+                    cacheFunction = "evict(bean);";
         }
+
         if (selectId != null)
             cf.print("(\"" + selectId + "\"");
         else
@@ -243,6 +266,7 @@ class DDataMethodBuilder {
             cf.println(");");
         }
 
+        if(cacheFunction!=null) cf.println(cacheFunction);
         cf.endBlock("}");
 
         if (repositoryBuilder.defaultGetMethod == this && repositoryBuilder.versionalType != null) {

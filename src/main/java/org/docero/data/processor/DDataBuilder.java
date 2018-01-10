@@ -100,6 +100,11 @@ class DDataBuilder {
             cf.println("DData.cache(bean);");
             cf.endBlock("}");
             cf.println("");
+            cf.startBlock("protected <T extends java.io.Serializable> void evict(T bean) {");
+            //TODO cf.println("DData.evict(bean);");
+            //TODO cf.println("DData.evict();");
+            cf.endBlock("}");
+            cf.println("");
             cf.startBlock("protected <T extends java.io.Serializable> void cache(java.util.Collection<T> beans) {");
             cf.println("DData.cache(beans);");
             cf.endBlock("}");

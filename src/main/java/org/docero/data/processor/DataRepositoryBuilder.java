@@ -390,35 +390,34 @@ class DataRepositoryBuilder {
     private void buildMethodUpdate(JavaClassWriter cf, DataRepositoryDiscriminator discriminator) throws IOException {
         DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
         cf.println("");
-        if (versionalType != null) {
-            cf.startBlock("public void update(" +
-                    forInterfaceName + " bean) {");
+        cf.startBlock("public void update(" + forInterfaceName + " bean) {");
+
+        if (versionalType != null)
             cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                     "bean.set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
                             "(" + DataBeanBuilder.dateNowFrom(bean.versionalType) + ");")
                     .orElse("")
             );
-            printInsertBody(cf, discriminator);
-            cf.endBlock("}");
-        } else {
-            cf.startBlock("public void update(" +
-                    forInterfaceName + " bean) {");
-            if (discriminator != null)
-                for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
-                    DataRepositoryBuilder strep = rootBuilder.repositoriesByBean.get(item.beanInterface);
-                    cf.startBlock("if (bean instanceof " + item.beanInterface + ") {");
-                    cf.println("getSqlSession().update(\"" +
-                            (strep == null ? item.beanInterface : strep.mappingClassName) +
-                            ".update\", bean);");
-                    cf.println("return;");
-                    cf.endBlock("}");
-                }
-            cf.println("getSqlSession().update(\"" +
-                    mappingClassName + ".update\", bean);");
-            if (bean.dictionary != DictionaryType.NO)
-                cf.println("cache(bean);");
-            cf.endBlock("}");
-        }
+
+        if (discriminator != null)
+            for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
+                DataRepositoryBuilder strep = rootBuilder.repositoriesByBean.get(item.beanInterface);
+                cf.startBlock("if (bean instanceof " + item.beanInterface + ") {");
+                cf.println("getSqlSession().update(\"" +
+                        (strep == null ? item.beanInterface : strep.mappingClassName) +
+                        ".update\", bean);");
+                cf.println("return;");
+                cf.endBlock("}");
+            }
+
+        /*if (versionalType != null)
+            cf.println("getSqlSession().insert(\"" + mappingClassName + ".insert\", bean);");
+        else*/
+        cf.println("getSqlSession().update(\"" + mappingClassName + ".update\", bean);");
+
+        if (bean.dictionary != DictionaryType.NO)
+            cf.println("cache(bean);");
+        cf.endBlock("}");
     }
 
     private void buildMethodInsert(JavaClassWriter cf, DataRepositoryDiscriminator discriminator) throws IOException {
@@ -434,13 +433,7 @@ class DataRepositoryBuilder {
                     .orElse("")
             );
         }
-        printInsertBody(cf, discriminator);
-        if (bean.dictionary != DictionaryType.NO)
-            cf.println("cache(bean);");
-        cf.endBlock("}");
-    }
 
-    private void printInsertBody(JavaClassWriter cf, DataRepositoryDiscriminator discriminator) throws IOException {
         if (discriminator != null)
             for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
                 DataRepositoryBuilder strep = rootBuilder.repositoriesByBean.get(item.beanInterface);
@@ -451,8 +444,12 @@ class DataRepositoryBuilder {
                 cf.println("return;");
                 cf.endBlock("}");
             }
-        cf.println("getSqlSession().insert(\"" +
-                mappingClassName + ".insert\", bean);");
+
+        cf.println("getSqlSession().insert(\"" + mappingClassName + ".insert\", bean);");
+
+        if (bean.dictionary != DictionaryType.NO)
+            cf.println("cache(bean);");
+        cf.endBlock("}");
     }
 
     private void buildMethodGet(JavaClassWriter cf) throws IOException {

@@ -284,7 +284,7 @@ class DDataMapBuilder {
                             mapperRoot.appendChild(doc.createElement("select"));
                     select.setAttribute("id", methodName);
                     select.setAttribute("parameterType", "HashMap");
-                    if (method.returnSimpleType)
+                    if (method.returnType != null && method.returnSimpleType)
                         select.setAttribute("resultType", method.returnType.toString());
                     else if (fetchOptions.resultMap.length() == 0)
                         select.setAttribute("resultMap", methodName + "_ResultMap");
@@ -412,7 +412,8 @@ class DDataMapBuilder {
                     if (!limitedSelect) sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
                     break;
                 case INSERT:
-                    generateInsertForBean(sql, bean, fetchOptions, domElement, doc);
+                    generateValuesForBean(bean, domElement);
+                    generateInsertForBean(sql, bean, fetchOptions);
                     if (repository.discriminator != null) {
                         for (DataRepositoryDiscriminator.Item item : repository.discriminator.beans) {
                             DataBeanBuilder itemBean = repository.rootBuilder.beansByInterface.get(item.beanInterface);
@@ -423,19 +424,20 @@ class DDataMapBuilder {
                                     "_" + item.beanInterfaceShort());
                             beanInsert.setAttribute("parameterType", itemBean.getImplementationName());
                             StringBuilder beanSql = new StringBuilder();
-                            generateInsertForBean(beanSql, itemBean, fetchOptions, beanInsert, doc);
+                            generateValuesForBean(itemBean, beanInsert);
+                            generateInsertForBean(beanSql, itemBean, fetchOptions);
                             beanInsert.appendChild(doc.createTextNode(beanSql.toString()));
                         }
                     }
                     break;
                 case UPDATE:
-                    generateUpdateForBean(sql, bean, fetchOptions, domElement, doc);
+                    generateUpdateForBean(sql, bean, fetchOptions);
                     if (repository.discriminator != null) {
                         for (DataRepositoryDiscriminator.Item item : repository.discriminator.beans) {
                             DataBeanBuilder itemBean =
                                     repository.rootBuilder.beansByInterface.get(item.beanInterface);
-                            DataRepositoryBuilder itemRepository =
-                                    repository.rootBuilder.repositoriesByBean.get(itemBean.interfaceType.toString());
+                            /*DataRepositoryBuilder itemRepository =
+                                    repository.rootBuilder.repositoriesByBean.get(itemBean.interfaceType.toString());*/
                             org.w3c.dom.Element beanUpdate = (org.w3c.dom.Element)
                                     domElement.getParentNode().appendChild(doc.createElement("update"));
                             beanUpdate.setAttribute("id", method.methodName +
@@ -443,8 +445,9 @@ class DDataMapBuilder {
                                     "_" + item.beanInterfaceShort());
                             beanUpdate.setAttribute("parameterType", itemBean.getImplementationName());
                             StringBuilder beanSql = new StringBuilder();
-                            generateUpdateForBean(beanSql, itemBean, fetchOptions, beanUpdate, doc);
-                            buildWhereByIds(beanSql, itemRepository, bean, method);
+                            generateUpdateForBean(beanSql, itemBean, fetchOptions);
+                            if (itemBean.versionalType == null)
+                                buildWhereByIds(beanSql, itemBean, method);
                             beanUpdate.appendChild(doc.createTextNode(beanSql.toString()));
                         }
                     }
@@ -482,7 +485,9 @@ class DDataMapBuilder {
                             ssql = new StringBuilder("\n");
                         } else ssql = sql;
 
-                        buildWhereByIds(ssql, repository, bean, method);
+                        if (method.methodType != DDataMethodBuilder.MType.UPDATE || bean.versionalType == null)
+                            buildWhereByIds(ssql, bean, method);
+
                         domElement.appendChild(doc.createTextNode(ssql.toString()));
                     }
                     break;
@@ -516,11 +521,10 @@ class DDataMapBuilder {
     }
 
     private void buildWhereByIds(
-            StringBuilder ssql, DataRepositoryBuilder repository,
-            DataBeanBuilder bean, DDataMethodBuilder method
+            StringBuilder ssql, DataBeanBuilder bean, DDataMethodBuilder method
     ) {
         ssql.append("WHERE ");
-        if (repository.versionalType == null) {
+        if (bean.versionalType == null) {
             ssql.append(bean.properties.values().stream()
                     .filter(DataBeanPropertyBuilder::notIgnored)
                     .filter(p -> p.isId)
@@ -557,23 +561,8 @@ class DDataMapBuilder {
     }
 
     private void generateUpdateForBean(
-            StringBuilder sql, DataBeanBuilder bean, FetchOptions fetchOptions, org.w3c.dom.Element domElement, Document doc
+            StringBuilder sql, DataBeanBuilder bean, FetchOptions fetchOptions
     ) {
-        sql.append("\nUPDATE ").append(bean.getTableRef()).append(" AS t0 SET\n");
-        sql.append(bean.properties.values().stream()
-                .filter(DataBeanPropertyBuilder::notIgnored)
-                .filter(DataBeanPropertyBuilder::notId)
-                .filter(DataBeanPropertyBuilder::notCollectionOrMap)
-                .filter(p -> filterIgnored(fetchOptions, p))
-                .filter(this::notManagedBean)
-                .map(p -> p.getColumnRef() + " = " + buildSqlParameter(bean, p))
-                .collect(Collectors.joining(",\n")))
-                .append("\n");
-    }
-
-    private void generateInsertForBean(
-            StringBuilder sql, DataBeanBuilder bean, FetchOptions fetchOptions, org.w3c.dom.Element domElement,
-            Document doc) {
         if (bean.versionalType != null) {
             sql.append(bean.properties.values().stream()
                     .filter(p -> p.isVersionFrom).findAny()
@@ -594,7 +583,23 @@ class DDataMapBuilder {
                                     " IS NULL);")
                             .orElse("")
                     ).orElse(""));
+            generateInsertForBean(sql, bean, fetchOptions);
+        } else {
+            sql.append("\nUPDATE ").append(bean.getTableRef()).append(" AS t0 SET\n");
+            sql.append(bean.properties.values().stream()
+                    .filter(DataBeanPropertyBuilder::notIgnored)
+                    .filter(DataBeanPropertyBuilder::notId)
+                    .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                    .filter(p -> filterIgnored(fetchOptions, p))
+                    .filter(this::notManagedBean)
+                    .map(p -> p.getColumnRef() + " = " + buildSqlParameter(bean, p))
+                    .collect(Collectors.joining(",\n")))
+                    .append("\n");
         }
+    }
+
+    private void generateValuesForBean(DataBeanBuilder bean, org.w3c.dom.Element domElement) {
+        Document doc = domElement.getOwnerDocument();
         bean.properties.values().stream()
                 .filter(DataBeanPropertyBuilder::isGenerated)
                 .forEach(prop ->
@@ -619,6 +624,9 @@ class DDataMapBuilder {
                         }
                     }
                 });
+    }
+
+    private void generateInsertForBean(StringBuilder sql, DataBeanBuilder bean, FetchOptions fetchOptions) {
         sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
         sql.append(bean.properties.values().stream()
                 .filter(DataBeanPropertyBuilder::notIgnored)
