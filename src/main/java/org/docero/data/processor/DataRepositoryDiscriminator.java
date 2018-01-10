@@ -60,5 +60,9 @@ class DataRepositoryDiscriminator {
             this.beanInterface = beanInterface;
             this.parent = parent;
         }
+
+        String beanInterfaceShort() {
+            return beanInterface.substring(beanInterface.lastIndexOf('.') + 1);
+        }
     }
 }

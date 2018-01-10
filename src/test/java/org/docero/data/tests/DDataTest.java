@@ -170,6 +170,11 @@ public class DDataTest {
         assertNotNull(((ItemInner) i).getLargeCached());
         assertEquals(((ItemInner) i).getLarge().getId(), ((ItemInner) i).getLargeCached().getId());
 
+        ((ItemInner) i).setLarge(((ItemSample) s).getLarge());
+        multiTypesRepository.update(i);
+        assertEquals(((ItemInner) i).getLgId(), ((ItemSample) s).getLgId());
+        assertEquals(((ItemInner) multiTypesRepository.get(2)).getLgId(), ((ItemSample) s).getLgId());
+
         List<ItemAbstraction> l = multiTypesRepository.list();
         assertNotNull(l);
         for (ItemAbstraction a : l)

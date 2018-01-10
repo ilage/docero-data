@@ -17,6 +17,6 @@ import java.util.List;
 @MultiTypesRepository_Discriminator_(value = ItemAbstraction_.ELEM_TYPE)
 public interface MultiTypesRepository extends DDataRepository<ItemAbstraction,Integer> {
     <T extends ItemAbstraction> List<T> list();
-
+    @MultiTypesRepository_DDataFetch_(ignore = ItemAbstraction_.ELEM_TYPE)
     void update(ItemAbstraction obj);
 }
