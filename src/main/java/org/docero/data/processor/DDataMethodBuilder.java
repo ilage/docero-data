@@ -292,32 +292,34 @@ class DDataMethodBuilder {
         if (cacheFunction != null) cf.println(cacheFunction);
         cf.endBlock("}");
 
-        if (methodIndex == 0 && repositoryBuilder.versionalType != null)
-            if (methodType == GET) {
-                cf.println("");
-                cf.startBlock("public " + typeVariables2String() + returnType + " get(" +
-                        repositoryBuilder.idClass + " id)" + throwsPart + " {");
-                cf.println("return get(id, " +
-                        DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
-                        ");");
-                cf.endBlock("}");
+        if (methodIndex == 0) {
+            if (repositoryBuilder.versionalType != null)
+                if (methodType == GET) {
+                    cf.println("");
+                    cf.startBlock("public " + typeVariables2String() + returnType + " get(" +
+                            repositoryBuilder.idClass + " id)" + throwsPart + " {");
+                    cf.println("return get(id, " +
+                            DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
+                            ");");
+                    cf.endBlock("}");
 
-                cf.println("");
-                cf.startBlock("public " + typeVariables2String() + returnType + " get(" +
-                        repositoryBuilder.idClass + " id, " +
-                        repositoryBuilder.versionalType + " at) {");
-                cf.println("return getSqlSession().selectOne(\"" +
-                        repositoryBuilder.mappingClassName + ".get\", new " + bean.keyType + "(id, at));");
-                cf.endBlock("}");
-            } else if (methodType == DELETE) {
-                cf.println("");
-                cf.startBlock("public void delete(" +
-                        repositoryBuilder.idClass + " id) {");
-                cf.println("delete(new " + bean.keyType + "(id, " +
-                        DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
-                        "));");
-                cf.endBlock("}");
-            }
+                    cf.println("");
+                    cf.startBlock("public " + typeVariables2String() + returnType + " get(" +
+                            repositoryBuilder.idClass + " id, " +
+                            repositoryBuilder.versionalType + " at) {");
+                    cf.println("return getSqlSession().selectOne(\"" +
+                            repositoryBuilder.mappingClassName + ".get\", new " + bean.keyType + "(id, at));");
+                    cf.endBlock("}");
+                } else if (methodType == DELETE) {
+                    cf.println("");
+                    cf.startBlock("public void delete(" +
+                            repositoryBuilder.idClass + " id) {");
+                    cf.println("delete(new " + bean.keyType + "(id, " +
+                            DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
+                            "));");
+                    cf.endBlock("}");
+                }
+        }
     }
 
     private String typeVariables2String() {

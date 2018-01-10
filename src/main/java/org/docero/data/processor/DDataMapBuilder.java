@@ -306,8 +306,7 @@ class DDataMapBuilder {
                 method.methodName + (method.methodIndex == 0 ? "" : "_" + method.methodIndex);
         switch (method.methodType) {
             case SELECT:
-                if (repository.defaultListMethod == method)
-                    createDictionaryList(mapperRoot, fetchOptions);
+                if (method.methodIndex == 0) createDictionaryList(mapperRoot, fetchOptions);
             case GET:
                 if (fetchOptions.resultMap.length() == 0 && !method.returnSimpleType)
                     buildResultMap(mapperRoot, repository, methodName, fetchOptions, mappedTables, filters);
