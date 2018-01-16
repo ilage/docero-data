@@ -1,14 +1,15 @@
 package org.docero.data.tests;
 
-import org.docero.data.DDataConfiguration;
-import org.docero.data.DDataOrder;
-import org.docero.data.DDataRepository;
-import org.docero.data.DDataVersionalRepository;
+import org.docero.data.*;
 import org.docero.data.beans.*;
 import org.docero.data.repositories.CompositeKeyRepository;
 import org.docero.data.repositories.MultiTypesRepository;
 import org.docero.data.repositories.SampleRepository;
 import org.docero.data.repositories.VersionalSampleRepository;
+import org.docero.data.utils.DDataException;
+import org.docero.data.view.DDataFilter;
+import org.docero.data.view.DDataFilterOperator;
+import org.docero.data.view.DDataView;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,7 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.sql.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
@@ -144,6 +146,44 @@ public class DDataTest {
                     "  START 2000\n" +
                     "  CACHE 1;")) {
                 st.execute();
+            }
+        }
+    }
+
+    @Test
+    @Transactional
+    public void viewTest() throws SQLException, DDataException {
+        setUp();
+
+        DDataView view = new DDataView(Sample_WB_.class, new ArrayList<DDataFilter>() {{
+            add(new DDataFilter(Sample_WB_.ID));
+            add(new DDataFilter(Sample_WB_.STR_PARAMETER));
+            DDataFilter iCols = new DDataFilter(Sample_WB_.INNER);
+            iCols.add(new DDataFilter(Inner_WB_.TEXT));
+            add(iCols);
+        }});
+        view.setFilter(new DDataFilter(){{
+            add(new DDataFilter(Sample_WB_.ID, DDataFilterOperator.GREATE, 0));
+            add(new DDataFilter(Sample_WB_.INNER){{
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
+            }});
+            add(new DDataFilter(Sample_WB_.LIST_PARAMETER){{
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
+            }});
+        }});
+
+        try (Connection conn = dataSource.getConnection()) {
+            try (Statement st = conn.createStatement()) {
+                long c = 0;
+                ResultSet rs = st.executeQuery(view.select().toString());
+                while (rs.next()) c++;
+                assertEquals(2, c);
+
+                ResultSet rs0 = st.executeQuery(view.count().toString());
+                assertTrue(rs0.next());
+                assertEquals(c, rs0.getLong(1));
+                rs0.close();
             }
         }
     }

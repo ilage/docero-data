@@ -30,6 +30,8 @@ class DataBeanBuilder {
     final TypeMirror versionalType;
     final String inversionalKey;
     final String cacheMap;
+    private String discriminatorValue;
+    private DataBeanPropertyBuilder discriminatorProperty;
 
     DataBeanBuilder(
             TypeElement beanElement, DDataBuilder builder,
@@ -285,7 +287,25 @@ class DataBeanBuilder {
             for (DataBeanPropertyBuilder property : properties.values())
                 property.buildEnumElementWithBeans(cf, beansByInterface, mappings, environment);
 
-            cf.println("NONE_(null,null,null,null,false,false,false,null,null);");
+            cf.println("NONE_(null,null,null,null,false,false,false,null,null,false);");
+            cf.println("");
+            cf.println("public final static String TABLE_NAME = \"" + schema + "." + table + "\";");
+            cf.println("public final static Class<" + interfaceType + "> BEAN_INTERFACE = " + interfaceType + ".class;");
+            cf.println("public final static " + interfaceType + "_WB_ DISCR_ATTR = " +
+                    (discriminatorProperty == null ? "null" : discriminatorProperty.enumName) + ";");
+            cf.println("public final static String DISCR_VAL = \"" +
+                    (discriminatorProperty == null ? "" : discriminatorValue) + "\";");
+            cf.println("public final static " + interfaceType + "_WB_ VERSION_FROM = " +
+                    this.properties.values().stream()
+                            .filter(p -> p.isVersionFrom).findAny()
+                            .map(p -> p.enumName)
+                            .orElse("null") + ";");
+            cf.println("public final static " + interfaceType + "_WB_ VERSION_TO = " +
+                    this.properties.values().stream()
+                            .filter(p -> p.isVersionTo).findAny()
+                            .map(p -> p.enumName)
+                            .orElse("null") + ";");
+            cf.println("");
             cf.println("private final String columnName;");
             cf.println("private final String propertyName;");
             cf.println("private final Class javaType;");
@@ -295,7 +315,8 @@ class DataBeanBuilder {
             cf.println("private final boolean collection;");
             cf.println("private final String joinTable;");
             cf.println("private final java.util.Map<String,String> joinMap;");
-            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, String joinTable, java.util.Map<String,String> joinMap) {");
+            cf.println("private final boolean isPrimaryKey;");
+            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, String joinTable, java.util.Map<String,String> joinMap, boolean isPrimaryKey) {");
             cf.println("this.columnName = columnName;");
             cf.println("this.propertyName = propertyName;");
             cf.println("this.javaType = javaType;");
@@ -305,6 +326,7 @@ class DataBeanBuilder {
             cf.println("this.collection = collection;");
             cf.println("this.joinTable = joinTable;");
             cf.println("this.joinMap = joinMap;");
+            cf.println("this.isPrimaryKey = isPrimaryKey;");
             cf.endBlock("}");
             cf.println("@Override public String getColumnName() {return columnName;}");
             cf.println("@Override public String getPropertyName() {return propertyName;}");
@@ -315,6 +337,7 @@ class DataBeanBuilder {
             cf.println("@Override public boolean isCollection() {return collection;}");
             cf.println("@Override public String joinTable() {return joinTable;}");
             cf.println("@Override public java.util.Map<String,String> joinMapping() {return joinMap;}");
+            cf.println("@Override public boolean isPrimaryKey() {return isPrimaryKey;}");
 
             cf.endBlock("}");
         }
@@ -453,7 +476,7 @@ class DataBeanBuilder {
             for (DataBeanPropertyBuilder property : properties.values())
                 property.buildEnumElement(cf, beansByInterface, environment);
 
-            cf.println("NONE_(null,null,null,null,false,false,false);");
+            cf.println("NONE_(null,null,null,null,false,false,false,false);");
             cf.println("private final String columnName;");
             cf.println("private final String propertyName;");
             cf.println("private final Class javaType;");
@@ -461,7 +484,8 @@ class DataBeanBuilder {
             cf.println("private final boolean dictionary;");
             cf.println("private final boolean mapped;");
             cf.println("private final boolean collection;");
-            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection) {");
+            cf.println("private final boolean isPrimaryKey;");
+            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, boolean isPrimaryKey) {");
             cf.println("this.columnName = columnName;");
             cf.println("this.propertyName = propertyName;");
             cf.println("this.javaType = javaType;");
@@ -469,6 +493,7 @@ class DataBeanBuilder {
             cf.println("this.dictionary = dictionary;");
             cf.println("this.mapped = mapped;");
             cf.println("this.collection = collection;");
+            cf.println("this.isPrimaryKey = isPrimaryKey;");
             cf.endBlock("}");
             cf.println("@Override public String getColumnName() {return columnName;}");
             cf.println("@Override public String getPropertyName() {return propertyName;}");
@@ -479,6 +504,7 @@ class DataBeanBuilder {
             cf.println("@Override public boolean isCollection() {return collection;}");
             cf.println("@Override public String joinTable() {return null;}");
             cf.println("@Override public java.util.Map<String,String> joinMapping() {return null;}");
+            cf.println("@Override public boolean isPrimaryKey() {return isPrimaryKey;}");
             cf.endBlock("}");
         }
         /*
@@ -544,5 +570,21 @@ class DataBeanBuilder {
 
     boolean isDictionary() {
         return dictionary != DictionaryType.NO;
+    }
+
+    public void setDiscriminatorValue(String discriminatorValue) {
+        this.discriminatorValue = discriminatorValue;
+    }
+
+    public String getDiscriminatorValue() {
+        return discriminatorValue;
+    }
+
+    public void setDiscriminatorProperty(DataBeanPropertyBuilder discriminatorProperty) {
+        this.discriminatorProperty = discriminatorProperty;
+    }
+
+    public DataBeanPropertyBuilder getDiscriminatorProperty() {
+        return discriminatorProperty;
     }
 }

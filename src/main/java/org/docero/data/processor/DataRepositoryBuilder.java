@@ -35,7 +35,7 @@ class DataRepositoryBuilder {
     final HashMap<String, org.w3c.dom.Element> lazyLoads = new HashMap<>();
     final TypeMirror versionalType;
     /**
-     * Dicriminator annotation readed in build() method
+     * Dicriminator annotation readed in select() method
      */
     DataRepositoryDiscriminator discriminator;
 
@@ -400,5 +400,14 @@ class DataRepositoryBuilder {
                         .map(TypeMirror::toString)
                         .collect(Collectors.joining(",")).equals(paramHash))
                 .findAny().ifPresent(consumer);
+    }
+
+    void setBeansDiscriminatorProperties() {
+        if(discriminator!=null)
+            for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
+                DataBeanBuilder bean = rootBuilder.beansByInterface.get(item.beanInterface);
+                bean.setDiscriminatorValue(item.value);
+                bean.setDiscriminatorProperty(discriminator.property);
+            }
     }
 }

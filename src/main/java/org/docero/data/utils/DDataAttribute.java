@@ -10,6 +10,7 @@ public interface DDataAttribute {
     boolean isDictionary();
     boolean isMappedBean();
     boolean isCollection();
+    boolean isPrimaryKey();
     String joinTable();
     Map<String,String> joinMapping();
 }

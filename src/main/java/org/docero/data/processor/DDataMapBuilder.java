@@ -116,6 +116,8 @@ class DDataMapBuilder {
             repository.lazyLoads.values().forEach(mapperRoot::appendChild);
             mapperRoot.setAttribute("namespace", repositoryNamespace);
 
+            repository.setBeansDiscriminatorProperties();
+
             int nameDi = repositoryNamespace.lastIndexOf('.');
             FileObject mappingResource = environment.getFiler()//.createSourceFile(repository.forInterfaceName+".xml");
                     .createResource(StandardLocation.SOURCE_OUTPUT,
