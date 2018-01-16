@@ -7,6 +7,7 @@ import org.docero.data.utils.DDataException;
 import java.lang.reflect.Field;
 import java.time.temporal.Temporal;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @SuppressWarnings("unused")
 public class DDataView extends AbstractDataView {
@@ -101,19 +102,23 @@ public class DDataView extends AbstractDataView {
 
     private void buildFilters(SQL sql, Map<String, Integer> usedCols) throws DDataException {
         for (int i = 0; i < roots.length; i++) {
+            Class multiTypeClass = roots[i];
             if (i > 0) sql.OR();
             try {
-                Field discriminator = roots[i].getDeclaredField("DISCR_ATTR");
-                Field dval = roots[i].getDeclaredField("DISCR_VAL");
+                Field discriminator = multiTypeClass.getDeclaredField("DISCR_ATTR");
+                Field dval = multiTypeClass.getDeclaredField("DISCR_VAL");
                 DDataAttribute discriminatorAttribute = (DDataAttribute) discriminator.get(null);
                 if (discriminatorAttribute != null)
                     sql.WHERE("t0." + discriminatorAttribute.getColumnName() + " = " + dval.get(null));
             } catch (NoSuchFieldException | IllegalAccessException e) {
-                throw new DDataException("select view not from *_WB_ enum: " + roots[i].getCanonicalName());
+                throw new DDataException("select view not from *_WB_ enum: " + multiTypeClass.getCanonicalName());
             }
-            String verSql = versionalConstraint(roots[i], 0);
+            String verSql = versionalConstraint(multiTypeClass, 0);
             if (verSql.length() > 0) sql.WHERE(verSql);
-            super.addFilterSql(sql, filter.getFilters(), usedCols, "", 0);
+
+            super.addFilterSql(sql, filter.getFilters().stream()
+                    .filter(f->isApplicable(multiTypeClass,f))
+                    .collect(Collectors.toList()), usedCols, "", 0);
         }
     }
 }

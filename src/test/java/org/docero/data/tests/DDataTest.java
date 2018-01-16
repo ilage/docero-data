@@ -6,12 +6,15 @@ import org.docero.data.repositories.CompositeKeyRepository;
 import org.docero.data.repositories.MultiTypesRepository;
 import org.docero.data.repositories.SampleRepository;
 import org.docero.data.repositories.VersionalSampleRepository;
+import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
 import org.docero.data.view.DDataFilter;
 import org.docero.data.view.DDataFilterOperator;
 import org.docero.data.view.DDataView;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.Commit;
 import org.springframework.test.context.ActiveProfiles;
@@ -39,6 +42,7 @@ import static org.junit.Assert.assertNotNull;
 @ActiveProfiles("test")
 @SuppressWarnings("SpringJavaAutowiringInspection")
 public class DDataTest {
+    private static final Logger LOG = LoggerFactory.getLogger(DDataTest.class);
     @Autowired
     DataSource dataSource;
     @Autowired
@@ -162,36 +166,23 @@ public class DDataTest {
             iCols.add(new DDataFilter(Inner_WB_.TEXT));
             add(iCols);
         }});
-        view.setFilter(new DDataFilter(){{
+        view.setFilter(new DDataFilter() {{
             add(new DDataFilter(Sample_WB_.ID, DDataFilterOperator.GREATE, 0));
-            add(new DDataFilter(Sample_WB_.INNER){{
+            add(new DDataFilter(Sample_WB_.INNER) {{
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
             }});
-            add(new DDataFilter(Sample_WB_.LIST_PARAMETER){{
+            add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
             }});
         }});
-
-        try (Connection conn = dataSource.getConnection()) {
-            try (Statement st = conn.createStatement()) {
-                long c = 0;
-                ResultSet rs = st.executeQuery(view.select().toString());
-                while (rs.next()) c++;
-                assertEquals(2, c);
-
-                ResultSet rs0 = st.executeQuery(view.count().toString());
-                assertTrue(rs0.next());
-                assertEquals(c, rs0.getLong(1));
-                rs0.close();
-            }
-        }
+        checkDDataView(view,2);
     }
 
     @Test
     @Transactional
     @Commit
-    public void multiTypesTest() throws SQLException, IOException {
+    public void multiTypesTest() throws SQLException, IOException, DDataException {
         setUp();
 
         assertNotNull(multiTypesRepository);
@@ -220,6 +211,50 @@ public class DDataTest {
         for (ItemAbstraction a : l)
             if (a.getId() == s.getId()) assertTrue(a instanceof ItemSample);
             else if (a.getId() == i.getId()) assertTrue(a instanceof ItemInner);
+
+        DDataView view = new DDataView(new ArrayList<Class<? extends DDataAttribute>>() {{
+            add(ItemSample_WB_.class);
+            add(ItemInner_WB_.class);
+        }}, new ArrayList<DDataFilter>() {{
+            add(new DDataFilter(ItemSample_WB_.ID));
+            add(new DDataFilter(ItemSample_WB_.ELEM_TYPE));
+            DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
+            iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
+            add(iCols);
+            iCols = new DDataFilter(ItemInner_WB_.INNER);
+            iCols.add(new DDataFilter(Inner_WB_.TEXT));
+            add(iCols);
+        }});
+        view.setFilter(new DDataFilter() {{
+            add(new DDataFilter(ItemSample_WB_.ID, DDataFilterOperator.GREATE, 0));
+            add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
+                add(new DDataFilter(Sample_WB_.INNER) {{
+                    add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
+                }});
+            }});
+            add(new DDataFilter(ItemInner_WB_.INNER) {{
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
+            }});
+        }});
+        checkDDataView(view,2);
+    }
+
+    private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
+        try (Connection conn = dataSource.getConnection()) {
+            try (Statement st = conn.createStatement()) {
+                long c = 0;
+                LOG.debug(view.select().toString());
+                ResultSet rs = st.executeQuery(view.select().toString());
+                while (rs.next()) c++;
+                assertEquals(expectedRows, c);
+
+                ResultSet rs0 = st.executeQuery(view.count().toString());
+                assertTrue(rs0.next());
+                assertEquals(c, rs0.getLong(1));
+                rs0.close();
+            }
+        }
     }
 
     @Test
