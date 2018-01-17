@@ -122,6 +122,7 @@ public class DDataTest {
                     "INSERT INTO ddata.a1 (id) VALUES (1);\n" +
                     "INSERT INTO ddata.a1 (id,elem_type,linked,sm,lg) VALUES (2,1,1001,1,1);\n" +
                     "INSERT INTO ddata.a1 (id,elem_type,linked,sm,lg) VALUES (3,2,1,2,2);\n" +
+                    "INSERT INTO ddata.a1 (id,elem_type,linked,sm,lg) VALUES (4,3,3,2,2);\n" +
                     "" +
                     "DROP TABLE IF EXISTS ddata.\"smdict\";" +
                     "CREATE TABLE ddata.\"smdict\" (\n" +
