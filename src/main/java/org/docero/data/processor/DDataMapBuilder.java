@@ -448,7 +448,7 @@ class DDataMapBuilder {
                     break;
                 case INSERT:
                     generateValuesForBean(bean, domElement);
-                    generateInsertForBean(sql, bean, fetchOptions);
+                    generateInsertForBean(sql, repository, bean, fetchOptions);
                     if (repository.discriminator != null) {
                         for (DataRepositoryDiscriminator.Item item : repository.discriminator.beans) {
                             DataBeanBuilder itemBean = repository.rootBuilder.beansByInterface.get(item.beanInterface);
@@ -460,13 +460,13 @@ class DDataMapBuilder {
                             beanInsert.setAttribute("parameterType", itemBean.getImplementationName());
                             StringBuilder beanSql = new StringBuilder();
                             generateValuesForBean(itemBean, beanInsert);
-                            generateInsertForBean(beanSql, itemBean, fetchOptions);
+                            generateInsertForBean(beanSql, repository, itemBean, fetchOptions);
                             beanInsert.appendChild(doc.createTextNode(beanSql.toString()));
                         }
                     }
                     break;
                 case UPDATE:
-                    generateUpdateForBean(sql, bean, fetchOptions);
+                    generateUpdateForBean(sql, repository, bean, fetchOptions);
                     if (repository.discriminator != null) {
                         for (DataRepositoryDiscriminator.Item item : repository.discriminator.beans) {
                             DataBeanBuilder itemBean =
@@ -480,7 +480,7 @@ class DDataMapBuilder {
                                     "_" + item.beanInterfaceShort());
                             beanUpdate.setAttribute("parameterType", itemBean.getImplementationName());
                             StringBuilder beanSql = new StringBuilder();
-                            generateUpdateForBean(beanSql, itemBean, fetchOptions);
+                            generateUpdateForBean(beanSql, repository, itemBean, fetchOptions);
                             if (itemBean.versionalType == null)
                                 buildWhereByIds(beanSql, itemBean, method);
                             beanUpdate.appendChild(doc.createTextNode(beanSql.toString()));
@@ -596,7 +596,7 @@ class DDataMapBuilder {
     }
 
     private void generateUpdateForBean(
-            StringBuilder sql, DataBeanBuilder bean, FetchOptions fetchOptions
+            StringBuilder sql, DataRepositoryBuilder repository, DataBeanBuilder bean, FetchOptions fetchOptions
     ) {
         if (bean.versionalType != null) {
             sql.append(bean.properties.values().stream()
@@ -618,14 +618,16 @@ class DDataMapBuilder {
                                     " IS NULL);")
                             .orElse("")
                     ).orElse(""));
-            generateInsertForBean(sql, bean, fetchOptions);
+            generateInsertForBean(sql, repository, bean, fetchOptions);
         } else {
+            DataBeanPropertyBuilder dp = repository.discriminator == null ? null : repository.discriminator.property;
             sql.append("\nUPDATE ").append(bean.getTableRef()).append(" AS t0 SET\n");
             sql.append(bean.properties.values().stream()
                     .filter(DataBeanPropertyBuilder::notIgnored)
                     .filter(DataBeanPropertyBuilder::notId)
                     .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                     .filter(p -> filterIgnored(fetchOptions, p))
+                    .filter(p -> dp == null || !dp.columnName.equals(p.columnName))
                     .filter(this::notManagedBean)
                     .map(p -> p.getColumnRef() + " = " + buildSqlParameter(bean, p))
                     .collect(Collectors.joining(",\n")))
@@ -661,15 +663,20 @@ class DDataMapBuilder {
                 });
     }
 
-    private void generateInsertForBean(StringBuilder sql, DataBeanBuilder bean, FetchOptions fetchOptions) {
+    private void generateInsertForBean(
+            StringBuilder sql, DataRepositoryBuilder repository, DataBeanBuilder bean, FetchOptions fetchOptions
+    ) {
+        DataBeanPropertyBuilder dp = repository.discriminator == null ? null : repository.discriminator.property;
         sql.append("\nINSERT INTO ").append(bean.getTableRef()).append(" (");
         sql.append(bean.properties.values().stream()
                 .filter(DataBeanPropertyBuilder::notIgnored)
                 .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                 .filter(this::notManagedBean)
                 .filter(p -> filterIgnored(fetchOptions, p))
+                .filter(p -> dp == null || !dp.columnName.equals(p.columnName))
                 .map(DataBeanPropertyBuilder::getColumnRef)
                 .collect(Collectors.joining(", ")));
+        if (dp != null) sql.append(", ").append(dp.getColumnRef());
         sql.append(")\n");
         sql.append("VALUES (\n");
         sql.append(bean.properties.values().stream()
@@ -677,8 +684,21 @@ class DDataMapBuilder {
                 .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                 .filter(this::notManagedBean)
                 .filter(p -> filterIgnored(fetchOptions, p))
+                .filter(p -> dp == null || !dp.columnName.equals(p.columnName))
                 .map(p -> buildSqlParameter(bean, p))
                 .collect(Collectors.joining(",\n")));
+        if (dp != null) {
+            Optional<DataRepositoryDiscriminator.Item> beanItem = Arrays.stream(repository.discriminator.beans)
+                    .filter(i -> i.beanInterface.equals(bean.interfaceType.toString()))
+                    .findAny();
+            if (beanItem.isPresent()) {
+                sql.append(",\n");
+                if ("java.lang.String".equals(dp.type.toString()))
+                    sql.append('\'').append(beanItem.get().value).append('\'');
+                else
+                    sql.append(beanItem.get().value);
+            }
+        }
         sql.append("\n)\n");
     }
 
@@ -1009,8 +1029,8 @@ class DDataMapBuilder {
 
                     DataBeanPropertyBuilder discriminantProperty = leftBean.getDiscriminatorProperty();
                     if (discriminantProperty != null) {
-                        sql.append("\n AND t").append(join.tableIndex).append('.')
-                                .append(discriminantProperty.columnName).append(" = ");
+                        sql.append("\n AND t").append(join.tableIndex).append('.').append('"')
+                                .append(discriminantProperty.columnName).append("\" = ");
                         if ("java.lang.String".equals(discriminantProperty.type.toString()))
                             sql.append('\'').append(leftBean.getDiscriminatorValue()).append('\'');
                         else
