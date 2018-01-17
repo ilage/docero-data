@@ -48,7 +48,7 @@ abstract class AbstractDataView {
                                     .map(m -> "t" + fromTableIndex + "." + m.getKey() +
                                             "=t" + finalN + "." + m.getValue())
                                     .collect(Collectors.joining(" AND "));
-                    String verSql = versionalConstraint(attribute.getJavaType(), finalN);
+                    String verSql = versionAndTypeConstraint(attribute.getJavaType(), finalN);
                     sql.LEFT_OUTER_JOIN(joinSql + (verSql.length() > 0 ? " AND " + verSql : "") + ")");
                     usedCols.put(pathAttributeKey, tableIndex);
                 }
@@ -137,7 +137,7 @@ abstract class AbstractDataView {
                                         .map(m -> "t" + fromTableIndex + "." + m.getKey() +
                                                 "=t" + finalN + "." + m.getValue())
                                         .collect(Collectors.joining(" AND "));
-                        String verSql = versionalConstraint(filter.getAttribute().getJavaType(), tableIndex);
+                        String verSql = versionAndTypeConstraint(filter.getAttribute().getJavaType(), tableIndex);
                         sql.LEFT_OUTER_JOIN(joinSql + (verSql.length() > 0 ? " AND " + verSql : "") + ")");
                         usedCols.put(key, tableIndex);
                     }
@@ -165,26 +165,40 @@ abstract class AbstractDataView {
 
     private final static DateTimeFormatter sqlTimestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss");
 
-    String versionalConstraint(Class clazz, int toTableIndex) {
+    String versionAndTypeConstraint(Class clazz, int toTableIndex) {
         DDataAttribute versionFrom = null;
         DDataAttribute versionTo = null;
+        DDataAttribute discriminant = null;
+        String discriminantValue = null;
         try {
             versionFrom = (DDataAttribute) clazz.getDeclaredField("VERSION_FROM").get(null);
             versionTo = (DDataAttribute) clazz.getDeclaredField("VERSION_TO").get(null);
+            discriminant = (DDataAttribute) clazz.getDeclaredField("DISCR_ATTR").get(null);
+            discriminantValue = (String) clazz.getDeclaredField("DISCR_VAL").get(null);
         } catch (IllegalAccessException | NoSuchFieldException ignore) {
         }
-
+        String sql;
         if (versionFrom != null && versionTo != null) {
             if (version() == null) {
-                return "t" + toTableIndex + "." + versionTo.getColumnName() + " IS NULL";
+                sql = "t" + toTableIndex + "." + versionTo.getColumnName() + " IS NULL";
             } else {
                 String timeSql = "CAST ('" + sqlTimestamp.format(version()) + "' AS TIMESTAMP)";
-                return "(t" + toTableIndex + "." +
+                sql = "(t" + toTableIndex + "." +
                         versionFrom.getColumnName() + " <= " + timeSql +
                         " AND (t" + toTableIndex + "." + versionTo.getColumnName() +
                         " > " + timeSql + " OR " +
                         "t" + toTableIndex + "." + versionTo.getColumnName() + " IS NULL))";
             }
-        } else return "";
+        } else
+            sql = "";
+
+        if (discriminant != null)
+            sql = sql + (sql.length() > 0 ? " AND " : "") + "t" +
+                    toTableIndex + "." + discriminant.getColumnName() + "=" +
+                    (String.class.isInstance(discriminant.getJavaType()) ?
+                            "'" + discriminantValue + "'" :
+                            discriminantValue);
+
+        return sql;
     }
 }

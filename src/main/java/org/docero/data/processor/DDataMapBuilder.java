@@ -1006,6 +1006,17 @@ class DDataMapBuilder {
                                     .append(leftVersionTo.columnName).append(" IS NULL)");
                         }
                     }
+
+                    DataBeanPropertyBuilder discriminantProperty = leftBean.getDiscriminatorProperty();
+                    if (discriminantProperty != null) {
+                        sql.append("\n AND t").append(join.tableIndex).append('.')
+                                .append(discriminantProperty.columnName).append(" = ");
+                        if ("java.lang.String".equals(discriminantProperty.type.toString()))
+                            sql.append('\'').append(leftBean.getDiscriminatorValue()).append('\'');
+                        else
+                            sql.append(leftBean.getDiscriminatorValue());
+                    }
+
                     sql.append(")\n");
                 });
     }

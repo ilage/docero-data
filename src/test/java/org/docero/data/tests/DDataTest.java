@@ -228,7 +228,7 @@ public class DDataTest {
         view.setFilter(new DDataFilter() {{
             add(new DDataFilter(ItemSample_WB_.ID, DDataFilterOperator.GREATE, 0));
             add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
-                add(new DDataFilter(Sample_WB_.INNER) {{
+                add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
                     add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
                 }});
             }});

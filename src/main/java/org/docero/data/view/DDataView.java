@@ -113,7 +113,7 @@ public class DDataView extends AbstractDataView {
             } catch (NoSuchFieldException | IllegalAccessException e) {
                 throw new DDataException("select view not from *_WB_ enum: " + multiTypeClass.getCanonicalName());
             }
-            String verSql = versionalConstraint(multiTypeClass, 0);
+            String verSql = versionAndTypeConstraint(multiTypeClass, 0);
             if (verSql.length() > 0) sql.WHERE(verSql);
 
             super.addFilterSql(sql, filter.getFilters().stream()
