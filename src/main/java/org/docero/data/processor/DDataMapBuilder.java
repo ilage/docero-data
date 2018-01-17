@@ -363,7 +363,9 @@ class DDataMapBuilder {
         for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
             List<MappedTable> beanTables = builder.beansByInterface.get(item.beanInterface).properties.values().stream()
                     .filter(DataBeanPropertyBuilder::notIgnored)
-                    .filter(p -> mappedTables.stream().noneMatch(m -> m.property.columnName.equals(p.columnName)))
+                    .filter(p -> mappedTables.stream().noneMatch(m ->
+                            m.property.columnName.equals(p.columnName) &&
+                                    m.property.mappedType.toString().equals(p.mappedType.toString())))
                     .map(p -> {
                         DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
                         return b == null ? null : new MappedTable(0, index.incrementAndGet(), p, b, fetchOptions, null);
@@ -512,7 +514,7 @@ class DDataMapBuilder {
                             addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, order, true);
                     } else {
                         if (method.methodType == DDataMethodBuilder.MType.GET)
-                            addJoins(mappedTables, sql);
+                            addJoins(mappedTables, sql, repository);
 
                         StringBuilder ssql;
                         if (method.methodType == DDataMethodBuilder.MType.GET && method.methodIndex == 0) {
@@ -534,12 +536,12 @@ class DDataMapBuilder {
                         StringBuilder ssql = new StringBuilder();
                         addFiltersToSql(domElement, ssql, bean, method, mappedTables, filters, order, false);
                         ssql.append("\n) AS t0\n");
-                        addJoins(mappedTables, ssql);
+                        addJoins(mappedTables, ssql, repository);
                         domElement.appendChild(doc.createTextNode(ssql.toString()));
                     } else if (filters != null && filters.size() > 0) {
                         addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, order, true);
                     } else {
-                        addJoins(mappedTables, sql);
+                        addJoins(mappedTables, sql, repository);
                         domElement.appendChild(doc.createTextNode(sql.toString()));
                         if (order != null)
                             addOrder(order, mappedTables.stream()
@@ -917,7 +919,7 @@ class DDataMapBuilder {
             elt.appendChild(ex.element);
             where.add(elt);
         });
-        if (addJoins) addJoins(mappedTables, sql);
+        if (addJoins) addJoins(mappedTables, sql, null);
 
         if (method.methodType == DDataMethodBuilder.MType.SELECT || method.methodType == DDataMethodBuilder.MType.GET) {
             domElement.appendChild(doc.createTextNode(sql.toString()));
@@ -977,7 +979,7 @@ class DDataMapBuilder {
         forElt.appendChild(dynSql.getOwnerDocument().createTextNode("${item.attribute.columnName} ${item.order}"));
     }
 
-    private void addJoins(Collection<MappedTable> joins, StringBuilder sql) {
+    private void addJoins(Collection<MappedTable> joins, StringBuilder sql, DataRepositoryBuilder repository) {
         joins.stream()
                 .filter(MappedTable::useInFieldsListOrFilters)
                 .sorted(Comparator.comparingInt(t -> t.tableIndex))
@@ -1028,13 +1030,25 @@ class DDataMapBuilder {
                     }
 
                     DataBeanPropertyBuilder discriminantProperty = leftBean.getDiscriminatorProperty();
+                    DataRepositoryDiscriminator.Item discriminantItem = null;
+                    if (discriminantProperty == null && repository != null && repository.discriminator != null) {
+                        discriminantItem = Arrays.stream(repository.discriminator.beans)
+                                .filter(i -> i.beanInterface.equals(leftBean.interfaceType.toString()))
+                                .findAny().orElse(null);
+                        if (discriminantItem != null)
+                            discriminantProperty = repository.discriminator.property;
+                    }
                     if (discriminantProperty != null) {
+                        String dval = leftBean.getDiscriminatorValue();
+                        if (dval == null && discriminantItem != null)
+                            dval = discriminantItem.value;
+
                         sql.append("\n AND t").append(join.tableIndex).append('.').append('"')
                                 .append(discriminantProperty.columnName).append("\" = ");
                         if ("java.lang.String".equals(discriminantProperty.type.toString()))
-                            sql.append('\'').append(leftBean.getDiscriminatorValue()).append('\'');
+                            sql.append('\'').append(dval).append('\'');
                         else
-                            sql.append(leftBean.getDiscriminatorValue());
+                            sql.append(dval);
                     }
 
                     sql.append(")\n");

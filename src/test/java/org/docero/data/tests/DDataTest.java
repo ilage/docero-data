@@ -213,6 +213,11 @@ public class DDataTest {
             if (a.getId() == s.getId()) assertTrue(a instanceof ItemSample);
             else if (a.getId() == i.getId()) assertTrue(a instanceof ItemInner);
 
+        ItemItemSample iis = multiTypesRepository.get(4);
+        assertNotNull(iis.getSample());
+        assertEquals(3, iis.getSample().getId());
+        assertNotNull(iis.getSample().getSample());
+
         DDataView view = new DDataView(new ArrayList<Class<? extends DDataAttribute>>() {{
             add(ItemSample_WB_.class);
             add(ItemInner_WB_.class);
@@ -238,7 +243,7 @@ public class DDataTest {
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
             }});
         }});
-        checkDDataView(view,2);
+        checkDDataView(view, 2);
     }
 
     private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
