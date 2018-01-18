@@ -418,7 +418,7 @@ class DDataMapBuilder {
                                 sql.append("CAST(").append(buildSqlParameter(bean, p)).append(" AS TIMESTAMP)");
                             else
                                 sql.append(buildSqlParameter(bean, p));
-                            sql.append(" AS dDataBeanActualAt_,\n");
+                            sql.append(" AS t0_dDataBeanActualAt_,\n");
                         });
                     }
                     HashMap<String, DataBeanPropertyBuilder> allProperties = new HashMap<>();
@@ -1165,7 +1165,7 @@ class DDataMapBuilder {
                 .filter(p -> p.isId)
                 .forEach(p -> map.addId(prefix, p));
 
-        if (properties.iterator().next().dataBean.versionalType != null) map.addVersionalProperty();
+        map.setVersionalProperty(properties.iterator().next().dataBean.versionalType);
 
         properties.stream()
                 .filter(DataBeanPropertyBuilder::notIgnored)
@@ -1226,7 +1226,7 @@ class DDataMapBuilder {
                         environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType)) {
 
                     if (thisVersionFrom != null && mappedVersionFrom != null && mappedVersionTo != null) {
-                        columnsMapping.append(',').append(mappedVersionFrom.columnName).append("=").append("dDataBeanActualAt_");
+                        columnsMapping.append(',').append(mappedVersionFrom.columnName).append("=").append("t0_dDataBeanActualAt_");
                     }
                 }
                 managed.setAttribute("column", "{" + columnsMapping + "}");

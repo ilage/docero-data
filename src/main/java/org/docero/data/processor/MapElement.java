@@ -3,6 +3,7 @@ package org.docero.data.processor;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
+import javax.lang.model.type.TypeMirror;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,7 +14,7 @@ abstract class MapElement {
     final List<MapElement> mappedElements = new ArrayList<>();
     final HashMap<String, String> attributes = new HashMap<>();
 
-    boolean useVersionalProperty;
+    TypeMirror useVersionalProperty;
 
     abstract String id();
 
@@ -33,11 +34,12 @@ abstract class MapElement {
             idElement.write(map);
         for (ResultElement resultElement : resultElements)
             resultElement.write(map);
-        if (useVersionalProperty && this == mapBuilder()) {
+        if (useVersionalProperty!=null && this == mapBuilder()) {
             org.w3c.dom.Element id = (org.w3c.dom.Element)
                     map.appendChild(map.getOwnerDocument().createElement("result"));
             id.setAttribute("property", "dDataBeanActualAt_");
-            id.setAttribute("column", "dDataBeanActualAt_");
+            id.setAttribute("column", "t0_dDataBeanActualAt_");
+            id.setAttribute("javaType", useVersionalProperty.toString());
         }
         for (MapElement association : mappedElements)
             if (association.notCollection()) association.write(map);
@@ -68,8 +70,8 @@ abstract class MapElement {
 
     abstract String fromInterface();
 
-    void addVersionalProperty() {
-        useVersionalProperty = true;
+    void setVersionalProperty(TypeMirror versionalType) {
+        useVersionalProperty = versionalType;
     }
 
     static class IdElement {
