@@ -116,8 +116,6 @@ class DDataMapBuilder {
             repository.lazyLoads.values().forEach(mapperRoot::appendChild);
             mapperRoot.setAttribute("namespace", repositoryNamespace);
 
-            repository.setBeansDiscriminatorProperties();
-
             int nameDi = repositoryNamespace.lastIndexOf('.');
             FileObject mappingResource = environment.getFiler()//.createSourceFile(repository.forInterfaceName+".xml");
                     .createResource(StandardLocation.SOURCE_OUTPUT,
@@ -1029,20 +1027,9 @@ class DDataMapBuilder {
                         }
                     }
 
-                    DataBeanPropertyBuilder discriminantProperty = leftBean.getDiscriminatorProperty();
-                    DataRepositoryDiscriminator.Item discriminantItem = null;
-                    if (discriminantProperty == null && repository != null && repository.discriminator != null) {
-                        discriminantItem = Arrays.stream(repository.discriminator.beans)
-                                .filter(i -> i.beanInterface.equals(leftBean.interfaceType.toString()))
-                                .findAny().orElse(null);
-                        if (discriminantItem != null)
-                            discriminantProperty = repository.discriminator.property;
-                    }
+                    DataBeanPropertyBuilder discriminantProperty = leftBean.discriminatorProperty;
                     if (discriminantProperty != null) {
-                        String dval = leftBean.getDiscriminatorValue();
-                        if (dval == null && discriminantItem != null)
-                            dval = discriminantItem.value;
-
+                        String dval = leftBean.discriminatorValue;
                         sql.append("\n AND t").append(join.tableIndex).append('.').append('"')
                                 .append(discriminantProperty.columnName).append("\" = ");
                         if ("java.lang.String".equals(discriminantProperty.type.toString()))

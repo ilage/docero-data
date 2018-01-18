@@ -28,7 +28,11 @@ class MapBuilder extends MapElement {
         org.w3c.dom.Element map = (org.w3c.dom.Element)
                 mapperRoot.appendChild(doc.createElement("resultMap"));
         map.setAttribute("id", methodName + "_ResultMap");
-        map.setAttribute("type", repository.beanImplementation);
+        if(repository.beanImplementation.length==1) {
+            map.setAttribute("type", repository.beanImplementation[0]);
+        } else {
+            map.setAttribute("type", repository.forInterfaceName());
+        }
         super.write(map);
         if (discriminatorElements.size() > 0) {
             Element elt = (Element) map.appendChild(doc.createElement("discriminator"));

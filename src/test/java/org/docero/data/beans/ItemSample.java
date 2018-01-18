@@ -1,9 +1,11 @@
 package org.docero.data.beans;
 
 import org.docero.data.DDataBean;
+import org.docero.data.DDataDiscriminator;
 import org.docero.data.DDataProperty;
 
 @DDataBean(table = "a1", schema = "ddata")
+@DDataDiscriminator("2")
 public interface ItemSample extends ItemAbstraction {
     @DDataProperty("sm")
     Integer getSmId();

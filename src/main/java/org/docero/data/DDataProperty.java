@@ -20,7 +20,7 @@ public @interface DDataProperty {
      *
      * @return
      */
-    boolean Trancient() default false;
+    boolean Transient() default false;
 
     /**
      * Is id column, bean can contains no one or number of id properties,
@@ -71,4 +71,12 @@ public @interface DDataProperty {
      * @return sql
      */
     String writer() default "";
+
+    /**
+     * Property used as discriminator for multi-types table beans mapping
+     * <p>discriminator value set by @DDataDiscriminator per each DDataBean</p>
+     *
+     * @return default false
+     */
+    boolean discriminator() default false;
 }

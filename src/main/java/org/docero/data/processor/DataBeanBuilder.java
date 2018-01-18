@@ -1,9 +1,6 @@
 package org.docero.data.processor;
 
-import org.docero.data.DDataBean;
-import org.docero.data.DDataProperty;
-import org.docero.data.DictionaryType;
-import org.docero.data.TableGrowType;
+import org.docero.data.*;
 import org.docero.dgen.processor.DGenClass;
 
 import javax.annotation.processing.ProcessingEnvironment;
@@ -24,18 +21,22 @@ class DataBeanBuilder {
     final TableGrowType grown;
     final DictionaryType dictionary;
     final HashMap<String, DataBeanPropertyBuilder> properties = new HashMap<>();
-    final TypeMirror collectionType;
     final String keyType;
     final boolean isKeyComposite;
     final TypeMirror versionalType;
     final String inversionalKey;
     final String cacheMap;
-    private String discriminatorValue;
-    private DataBeanPropertyBuilder discriminatorProperty;
+    final String discriminatorValue;
+    final DataBeanPropertyBuilder discriminatorProperty;
 
     DataBeanBuilder(
-            TypeElement beanElement, DDataBuilder builder,
-            TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType
+            TypeElement beanElement, DDataBuilder builder
+    ) {
+        this(beanElement,builder,null);
+    }
+
+    DataBeanBuilder(
+            TypeElement beanElement, DDataBuilder builder, DataBeanBuilder discriminatedBean
     ) {
         rootBuilder = builder;
         interfaceType = (beanElement.asType());
@@ -51,7 +52,7 @@ class DataBeanBuilder {
                     properties.put(dGenProperty.getName(), DataBeanPropertyBuilder.from(
                             this, dGenProperty, rootBuilder,
                             dGenProperty.getElement().getAnnotation(DDataProperty.class),
-                            collectionType, mapType
+                            rootBuilder.collectionType, rootBuilder.mapType
                     ));
                 });
                 break;
@@ -59,17 +60,24 @@ class DataBeanBuilder {
         }
 
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
-        schema = ddBean.schema();
-        table = ddBean.table().trim().length() == 0 ?
-                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1)) :
-                ddBean.table();
-        name = ddBean.value().trim().length() == 0 ?
-                propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1)) :
-                ddBean.value().replace(' ', '_');
-        grown = (ddBean.growth());
-        dictionary = (ddBean.dictionary());
+        if(ddBean!=null) {
+            schema = ddBean.schema();
+            table = ddBean.table().trim().length() == 0 ?
+                    propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1)) :
+                    ddBean.table();
+            name = ddBean.value().trim().length() == 0 ?
+                    propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1)) :
+                    ddBean.value().replace(' ', '_');
+            grown = (ddBean.growth());
+            dictionary = (ddBean.dictionary());
+        } else {
+            schema = discriminatedBean.schema;
+            table = discriminatedBean.table;
+            name = propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1));
+            grown = TableGrowType.NO;
+            dictionary = DictionaryType.NO;
+        }
         cacheMap = new StringBuilder(interfaceType.toString()).reverse().toString();
-        TypeMirror voidType = builder.environment.getElementUtils().getTypeElement("java.lang.Void").asType();
 
         for (Element elt : beanElement.getEnclosedElements())
             if (elt.getKind() == ElementKind.METHOD &&
@@ -78,8 +86,8 @@ class DataBeanBuilder {
                     ) {
                 DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
                 DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(this, ddProperty,
-                        (ExecutableElement) elt, collectionType, mapType, voidType);
-                if (beanBuilder.type != voidType)
+                        (ExecutableElement) elt, rootBuilder.collectionType, rootBuilder.mapType, rootBuilder.voidType);
+                if (beanBuilder.type != rootBuilder.voidType)
                     properties.put(beanBuilder.enumName, beanBuilder);
             }
 
@@ -92,19 +100,18 @@ class DataBeanBuilder {
                 if (ddProperty != null || ((ExecutableElement) elt).getAnnotationMirrors().stream()
                         .anyMatch(a -> a.getAnnotationType().toString().endsWith("_Map_"))) {
                     DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(this, ddProperty,
-                            (ExecutableElement) elt, collectionType, mapType, voidType);
-                    if (!properties.containsKey(beanBuilder.enumName) && beanBuilder.type != voidType)
+                            (ExecutableElement) elt, rootBuilder.collectionType, rootBuilder.mapType, rootBuilder.voidType);
+                    if (!properties.containsKey(beanBuilder.enumName) && beanBuilder.type != rootBuilder.voidType)
                         properties.put(beanBuilder.enumName, beanBuilder);
                 }
             }
 
-        this.collectionType = collectionType;
         List<DataBeanPropertyBuilder> ids = properties.values().stream()
                 .filter(p -> p.isId)
                 .collect(Collectors.toList());
         if (rootBuilder.environment.getTypeUtils().isSubtype(
                 rootBuilder.environment.getTypeUtils().erasure(interfaceType),
-                versionedBeanType)) {
+                rootBuilder.versionalBeanType)) {
             List<? extends TypeMirror> directSupertypes = rootBuilder.environment.getTypeUtils().directSupertypes(interfaceType);
             TypeMirror vt = directSupertypes.stream()
                     .filter(ta -> ta.toString().startsWith("org.docero.data.DDataVersionalBean"))
@@ -127,6 +134,11 @@ class DataBeanBuilder {
             versionalType = vt;
         } else
             versionalType = null;
+
+        discriminatorProperty = properties.values().stream()
+                .filter(p -> p.isDiscriminator).findAny().orElse(null);
+        DDataDiscriminator dataDiscriminator = beanElement.getAnnotation(DDataDiscriminator.class);
+        discriminatorValue = dataDiscriminator == null ? null : dataDiscriminator.value();
 
         if (ids.size() == 1) {
             keyType = ids.get(0).type.getKind().isPrimitive() ?
@@ -570,21 +582,5 @@ class DataBeanBuilder {
 
     boolean isDictionary() {
         return dictionary != DictionaryType.NO;
-    }
-
-    public void setDiscriminatorValue(String discriminatorValue) {
-        this.discriminatorValue = discriminatorValue;
-    }
-
-    public String getDiscriminatorValue() {
-        return discriminatorValue;
-    }
-
-    public void setDiscriminatorProperty(DataBeanPropertyBuilder discriminatorProperty) {
-        this.discriminatorProperty = discriminatorProperty;
-    }
-
-    public DataBeanPropertyBuilder getDiscriminatorProperty() {
-        return discriminatorProperty;
     }
 }

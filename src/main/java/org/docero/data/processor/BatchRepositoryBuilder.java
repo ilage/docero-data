@@ -16,21 +16,7 @@ class BatchRepositoryBuilder {
         dataBuilder = dDataBuilder;
         repositoryInterface = repositoryElement.asType();
         implClassName = repositoryInterface + "_Impl_";
-        beans = new ArrayList<>();
-        Optional<Object> beansOpt = repositoryElement.getAnnotationMirrors().stream()
-                .filter(m -> m.getAnnotationType().toString().endsWith("DDataRep"))
-                .findAny()
-                .map(m -> m.getElementValues().entrySet().stream()
-                        .filter(e -> e.getKey().toString().equals("beans()"))
-                        .findAny().map(e -> e.getValue().getValue()).orElse(""));
-        if (beansOpt.isPresent()) {
-            List b = beansOpt.get() instanceof List ? (List) beansOpt.get() : Collections.singletonList(beansOpt.get());
-            for (Object v : b) {
-                String classValue = v.toString();
-                beans.add(dataBuilder.environment.getElementUtils()
-                        .getTypeElement(classValue.substring(0, classValue.lastIndexOf('.'))).asType());
-            }
-        }
+        beans = dDataBuilder.readBeansFromBeanElement(repositoryElement);
     }
 
     void createSpringBean(JavaClassWriter cf) throws IOException {

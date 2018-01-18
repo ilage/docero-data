@@ -40,18 +40,6 @@ public class DDataProcessor extends AbstractProcessor {
     @Override
     public void init(ProcessingEnvironment environment) {
         super.init(environment);
-        collectionType = environment.getTypeUtils().erasure(
-                environment.getElementUtils().getTypeElement("java.util.Collection").asType()
-        );
-        mapType = environment.getTypeUtils().erasure(
-                environment.getElementUtils().getTypeElement("java.util.Map").asType()
-        );
-        versionalBeanType = environment.getTypeUtils().erasure(
-                environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalBean").asType()
-        );
-        versionalRepositoryType = environment.getTypeUtils().erasure(
-                environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalRepository").asType()
-        );
         builder = new DDataBuilder(environment);
     }
 
@@ -67,7 +55,7 @@ public class DDataProcessor extends AbstractProcessor {
                             builder.checkDGenInterface((TypeElement) beanElement);
                     for (Element beanElement : entities)
                         if (beanElement.getEnclosingElement().getKind() == ElementKind.PACKAGE)
-                            builder.checkInterface((TypeElement) beanElement, collectionType, mapType, versionalBeanType);
+                            builder.checkInterface((TypeElement) beanElement);
 
                     builder.generateBeansAnnotations();
 

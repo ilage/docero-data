@@ -28,6 +28,7 @@ class DataBeanPropertyBuilder {
     final boolean isId;
     final boolean isCollection;
     final boolean isMap;
+    final boolean isDiscriminator;
     final DataBeanBuilder dataBean;
     final TypeMirror mappedType;
     final boolean isVersionFrom;
@@ -99,7 +100,7 @@ class DataBeanPropertyBuilder {
             this.generatedValue = null;
             this.generatedBefore = true;
         }
-        this.ignored = ddProperty != null && ddProperty.Trancient();
+        this.ignored = ddProperty != null && ddProperty.Transient();
         nullable = ddProperty == null || ddProperty.nullable();
         isVersionFrom = ddProperty != null && ddProperty.versionFrom();
         isVersionTo = ddProperty != null && ddProperty.versionTo();
@@ -109,9 +110,11 @@ class DataBeanPropertyBuilder {
             readerSql = ddProperty.reader().length() == 0 ? null : ddProperty.reader();
             writerSql = ddProperty.writer().length() == 0 ? null : ddProperty.writer();
             isId = ddProperty.id();
+            isDiscriminator = ddProperty.discriminator();
         } else {
             columnName = DataBeanBuilder.propertyName2sqlName(name);
             isId = ddProperty != null && ddProperty.id();
+            isDiscriminator = ddProperty != null && ddProperty.discriminator();
             readerSql = null;
             writerSql = null;
         }

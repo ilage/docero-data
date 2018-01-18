@@ -1,14 +1,13 @@
 package org.docero.data.processor;
 
 import org.docero.dgen.processor.DGenClass;
+
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
 import java.util.stream.Collectors;
 
 class DDataBuilder {
@@ -24,6 +23,13 @@ class DDataBuilder {
     final TypeMirror temporalType;
     final TypeMirror oldDateType;
     final boolean useSpringCache;
+    final TypeMirror collectionType;
+    final TypeMirror mapType;
+    final TypeMirror versionalBeanType;
+    final TypeMirror versionalRepositoryType;
+    final TypeMirror voidType;
+    final TypeMirror stringType;
+    final ArrayList<DataBeanBuilder> unimplementedBeans = new ArrayList<>();
 
     DDataBuilder(ProcessingEnvironment environment) {
         this.environment = environment;
@@ -36,12 +42,27 @@ class DDataBuilder {
         oldDateType = environment.getElementUtils().getTypeElement("java.util.Date").asType();
         useSpringCache = environment.getElementUtils().getTypeElement(
                 "org.springframework.cache.annotation.Cacheable") != null;
+
+        collectionType = environment.getTypeUtils().erasure(
+                environment.getElementUtils().getTypeElement("java.util.Collection").asType()
+        );
+        mapType = environment.getTypeUtils().erasure(
+                environment.getElementUtils().getTypeElement("java.util.Map").asType()
+        );
+        versionalBeanType = environment.getTypeUtils().erasure(
+                environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalBean").asType()
+        );
+        versionalRepositoryType = environment.getTypeUtils().erasure(
+                environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalRepository").asType()
+        );
+        voidType = environment.getElementUtils().getTypeElement("java.lang.Void").asType();
+        stringType = environment.getElementUtils().getTypeElement("java.lang.String").asType();
     }
 
-    void checkInterface(TypeElement beanElement, TypeMirror collectionType, TypeMirror mapType, TypeMirror versionedBeanType) {
+    void checkInterface(TypeElement beanElement) {
         String typeName = beanElement.asType().toString();
         packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-        DataBeanBuilder value = new DataBeanBuilder(beanElement, this, collectionType, mapType, versionedBeanType);
+        DataBeanBuilder value = new DataBeanBuilder(beanElement, this);
         beansByInterface.put(value.interfaceType.toString(), value);
     }
 
@@ -63,6 +84,10 @@ class DDataBuilder {
                     new DataRepositoryBuilder(this, repositoryElement);
             repositoriesByBean.put(builder.forInterfaceName(), builder);
             repositories.add(builder);
+
+            for (DataBeanBuilder beanBuilder : unimplementedBeans)
+                beanBuilder.buildAnnotationsAndEnums(environment, beansByInterface);
+            unimplementedBeans.clear();
         }
     }
 
@@ -304,5 +329,24 @@ class DDataBuilder {
         for (DataBeanBuilder dataBeanBuilder : beansByInterface.values()) {
             dataBeanBuilder.buildDataReferenceEnum(environment, beansByInterface, mappings);
         }
+    }
+
+    List<TypeMirror> readBeansFromBeanElement(TypeElement repositoryElement) {
+        ArrayList<TypeMirror> beans = new ArrayList<>();
+        Optional<Object> beansOpt = repositoryElement.getAnnotationMirrors().stream()
+                .filter(m -> m.getAnnotationType().toString().endsWith("DDataRep"))
+                .findAny()
+                .map(m -> m.getElementValues().entrySet().stream()
+                        .filter(e -> e.getKey().toString().equals("beans()"))
+                        .findAny().map(e -> e.getValue().getValue()).orElse(""));
+        if (beansOpt.isPresent()) {
+            List b = beansOpt.get() instanceof List ? (List) beansOpt.get() : Collections.singletonList(beansOpt.get());
+            for (Object v : b) {
+                String classValue = v.toString();
+                if (classValue.length() > 0) beans.add(environment.getElementUtils()
+                        .getTypeElement(classValue.substring(0, classValue.lastIndexOf('.'))).asType());
+            }
+        }
+        return beans;
     }
 }

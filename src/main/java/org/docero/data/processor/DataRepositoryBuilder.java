@@ -21,7 +21,6 @@ class DataRepositoryBuilder {
     final String daoClassName;
     final String restClassName;
     final TypeMirror repositoryInterface;
-    final String beanImplementation;
     final ArrayList<DDataMethodBuilder> methods = new ArrayList<>();
     final DDataBuilder rootBuilder;
     final String mappingClassName;
@@ -34,10 +33,8 @@ class DataRepositoryBuilder {
     final boolean hasUpdate;
     final HashMap<String, org.w3c.dom.Element> lazyLoads = new HashMap<>();
     final TypeMirror versionalType;
-    /**
-     * Dicriminator annotation readed in select() method
-     */
-    DataRepositoryDiscriminator discriminator;
+    final String[] beanImplementation;
+    final DataRepositoryDiscriminator discriminator;
 
     DataRepositoryBuilder(
             DDataBuilder rootBuilder,
@@ -70,9 +67,31 @@ class DataRepositoryBuilder {
         idClass = gens.get(1);
         actualTimeClass = !isHistorical ? null : gens.get(2);
         DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
-        beanImplementation = bean.getImplementationName();
+        List<TypeMirror> forMultiplyInterfaces = rootBuilder.readBeansFromBeanElement(repositoryElement);
+        if (bean == null || forMultiplyInterfaces.size() > 0) {
+            beanImplementation = forMultiplyInterfaces.stream()
+                    .map(t -> rootBuilder.beansByInterface.get(t.toString()))
+                    .map(DataBeanBuilder::getImplementationName)
+                    .toArray(String[]::new);
+            if (bean == null) {
+                bean = new DataBeanBuilder(
+                        rootBuilder.environment.getElementUtils().getTypeElement(forInterfaceName.toString()),
+                        rootBuilder,
+                        rootBuilder.beansByInterface.get(forMultiplyInterfaces.get(0).toString()));
+                rootBuilder.beansByInterface.put(forInterfaceName.toString(), bean);
+                rootBuilder.unimplementedBeans.add(bean);
+                discriminator = new DataRepositoryDiscriminator(
+                        forMultiplyInterfaces.stream()
+                                .map(t -> rootBuilder.beansByInterface.get(t.toString()))
+                                .collect(Collectors.toList())
+                );
+            }
+            else discriminator = null;
+        } else {
+            beanImplementation = new String[]{bean.getImplementationName()};
+            discriminator = null;
+        }
         this.versionalType = !isHistorical ? null : gens.get(2);
-
         daoClassName = repositoryElement.asType().toString() + "_Dao_";
         restClassName = repositoryElement.asType().toString() + "Controller";
 
@@ -122,7 +141,8 @@ class DataRepositoryBuilder {
                         rootBuilder.environment.getElementUtils().getTypeElement("org.docero.data.DDataRepository"),
                         forInterfaceName, idClass);
         this.name = mappingClassName.substring(mappingClassName.lastIndexOf('.'));
-        this.beanImplementation = bean.getImplementationName();
+        this.beanImplementation = new String[]{bean.getImplementationName()};
+        discriminator = null;
         //final ArrayList<DDataMethodBuilder> methods = new ArrayList<>();
         this.rootBuilder = rootBuilder;
         defaultGetMethod = null;
@@ -166,15 +186,6 @@ class DataRepositoryBuilder {
             cf.endBlock("*/");
 
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
-            TypeElement repositoryElement = environment.getElementUtils()
-                    .getTypeElement(repositoryInterface.toString());
-            if (repositoryElement != null) {
-                AnnotationMirror da = repositoryElement.getAnnotationMirrors().stream()
-                        .filter(am -> am.getAnnotationType().toString().endsWith("_Discriminator_"))
-                        .findAny().orElse(null);
-                discriminator = da == null ? null :
-                        new DataRepositoryDiscriminator(bean, repositoryElement, da, environment);
-            }
             cf.startBlock("public final class " +
                     daoClassName.substring(simpNameDel + 1) +
                     " extends org.docero.data.AbstractRepository<" + bean.interfaceType + "," + bean.inversionalKey + ">" +
@@ -382,7 +393,7 @@ class DataRepositoryBuilder {
     private void buildMethodCreate(JavaClassWriter cf) throws IOException {
         cf.println("");
         cf.startBlock("public " + forInterfaceName + " create() {");
-        cf.println("return new " + beanImplementation + "();");
+        cf.println("return new " + beanImplementation[0] + "();");
         cf.endBlock("}");
     }
 
@@ -400,14 +411,5 @@ class DataRepositoryBuilder {
                         .map(TypeMirror::toString)
                         .collect(Collectors.joining(",")).equals(paramHash))
                 .findAny().ifPresent(consumer);
-    }
-
-    void setBeansDiscriminatorProperties() {
-        if(discriminator!=null)
-            for (DataRepositoryDiscriminator.Item item : discriminator.beans) {
-                DataBeanBuilder bean = rootBuilder.beansByInterface.get(item.beanInterface);
-                bean.setDiscriminatorValue(item.value);
-                bean.setDiscriminatorProperty(discriminator.property);
-            }
     }
 }
