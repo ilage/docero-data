@@ -160,7 +160,7 @@ public class DDataTest {
     public void viewTest() throws SQLException, DDataException {
         setUp();
 
-        DDataView view = new DDataView(Sample_WB_.class, new ArrayList<DDataFilter>() {{
+        /*DDataView view = new DDataView(Sample_WB_.class, new ArrayList<DDataFilter>() {{
             add(new DDataFilter(Sample_WB_.ID));
             add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             DDataFilter iCols = new DDataFilter(Sample_WB_.INNER);
@@ -177,7 +177,64 @@ public class DDataTest {
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
             }});
         }});
-        checkDDataView(view, 2);
+        checkDDataView(view, 2);*/
+
+        DDataView view = new DDataView(new ArrayList<Class<? extends DDataAttribute>>() {{
+            add(ItemSample_WB_.class);
+            add(ItemInner_WB_.class);
+            add(ItemItemSample_WB_.class);
+        }}, new ArrayList<DDataFilter>() {{
+            add(new DDataFilter(ItemSample_WB_.ID));
+            add(new DDataFilter(ItemSample_WB_.ELEM_TYPE));
+            add(new DDataFilter(ItemSample_WB_.SM_ID));
+            DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
+            iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
+            add(iCols);
+            iCols = new DDataFilter(ItemInner_WB_.INNER);
+            iCols.add(new DDataFilter(Inner_WB_.TEXT));
+            add(iCols);
+
+            add(new DDataFilter(ItemItemSample_WB_.SAMPLE) {{
+                add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
+                    add(new DDataFilter(Sample_WB_.STR_PARAMETER));
+                }});
+            }});
+        }});
+        view.setFilter(new DDataFilter() {{
+            add(new DDataFilter(ItemSample_WB_.ID, DDataFilterOperator.GREATE, 0));
+
+            add(new DDataFilter(ItemItemSample_WB_.SAMPLE) {{
+                add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
+                    add(new DDataFilter(Sample_WB_.ID, DDataFilterOperator.GREATE, 0));
+                }});
+            }});
+
+            add(new DDataFilter(ItemInner_WB_.INNER) {{
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
+            }});
+        }});
+        checkDDataView(view, 3);
+    }
+
+    private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
+        try (Connection conn = dataSource.getConnection()) {
+            try (Statement st = conn.createStatement()) {
+                long c = 0;
+                String runSql = view.select().toString();
+                LOG.debug(runSql);
+                ResultSet rs = st.executeQuery(runSql);
+                while (rs.next()) c++;
+                assertEquals(expectedRows, c);
+
+                runSql = view.count().toString();
+                LOG.debug(runSql);
+                ResultSet rs0 = st.executeQuery(runSql);
+                assertTrue(rs0.next());
+                assertEquals(c, rs0.getLong(1));
+                rs0.close();
+            }
+        }
     }
 
     @Test
@@ -217,53 +274,6 @@ public class DDataTest {
         assertNotNull(iis.getSample());
         assertEquals(3, iis.getSample().getId());
         assertNotNull(iis.getSample().getSample());
-
-        DDataView view = new DDataView(new ArrayList<Class<? extends DDataAttribute>>() {{
-            add(ItemSample_WB_.class);
-            add(ItemInner_WB_.class);
-            add(ItemItemSample_WB_.class);
-        }}, new ArrayList<DDataFilter>() {{
-            add(new DDataFilter(ItemSample_WB_.ID));
-            add(new DDataFilter(ItemSample_WB_.ELEM_TYPE));
-            DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
-            iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
-            add(iCols);
-            iCols = new DDataFilter(ItemInner_WB_.INNER);
-            iCols.add(new DDataFilter(Inner_WB_.TEXT));
-            add(iCols);
-        }});
-        view.setFilter(new DDataFilter() {{
-            add(new DDataFilter(ItemSample_WB_.ID, DDataFilterOperator.GREATE, 0));
-
-            add(new DDataFilter(ItemItemSample_WB_.SAMPLE) {{
-                add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
-                    add(new DDataFilter(Sample_WB_.ID, DDataFilterOperator.GREATE, 0));
-                }});
-            }});
-
-            add(new DDataFilter(ItemInner_WB_.INNER) {{
-                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
-                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
-            }});
-        }});
-        //checkDDataView(view, 2);
-    }
-
-    private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
-        try (Connection conn = dataSource.getConnection()) {
-            try (Statement st = conn.createStatement()) {
-                long c = 0;
-                LOG.debug(view.select().toString());
-                ResultSet rs = st.executeQuery(view.select().toString());
-                while (rs.next()) c++;
-                assertEquals(expectedRows, c);
-
-                ResultSet rs0 = st.executeQuery(view.count().toString());
-                assertTrue(rs0.next());
-                assertEquals(c, rs0.getLong(1));
-                rs0.close();
-            }
-        }
     }
 
     @Test

@@ -87,7 +87,7 @@ public class DDataView extends AbstractDataView {
         for (DDataFilter column : columns)
             for (Class root : roots)
                 if (super.isApplicable(root, column)) {
-                    super.addColumnToViewSql(sql, usedCols, root, column, "", 0);
+                    super.addColumnToViewSql(sql, usedCols, root, column, "", "", 0);
                     break;
                 }
 
@@ -116,9 +116,7 @@ public class DDataView extends AbstractDataView {
             String verSql = versionAndTypeConstraint(multiTypeClass, 0);
             if (verSql.length() > 0) sql.WHERE(verSql);
 
-            super.addFilterSql(sql, filter.getFilters().stream()
-                    .filter(f->isApplicable(multiTypeClass,f))
-                    .collect(Collectors.toList()), usedCols, "", 0);
+            super.addFilterSql(sql, filter, multiTypeClass, usedCols, "", 0);
         }
     }
 }
