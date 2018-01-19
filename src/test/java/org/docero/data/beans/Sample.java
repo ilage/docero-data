@@ -17,4 +17,7 @@ public interface Sample extends SampleTable {
     List<? extends Inner> getListParameter();
 
     void setListParameter(List<? extends Inner> list);
+
+    @Sample_Map_(value = Sample_.ID)//(item=ItemAbstraction_.ID)
+    ItemAbstraction getItem();
 }

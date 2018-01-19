@@ -32,7 +32,7 @@ class DataBeanBuilder {
     DataBeanBuilder(
             TypeElement beanElement, DDataBuilder builder
     ) {
-        this(beanElement,builder,null);
+        this(beanElement, builder, null);
     }
 
     DataBeanBuilder(
@@ -60,7 +60,7 @@ class DataBeanBuilder {
         }
 
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
-        if(ddBean!=null) {
+        if (ddBean != null) {
             schema = ddBean.schema();
             table = ddBean.table().trim().length() == 0 ?
                     propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1)) :
@@ -162,6 +162,15 @@ class DataBeanBuilder {
             } else {
                 keyType = interfaceType + "_Key_";
                 inversionalKey = keyType;
+            }
+        }
+        // after all properties calculation we build super interface for discriminated bean if needed
+        if (discriminatorProperty != null && discriminatedBean==null && beanElement.getInterfaces().size() == 1) {
+            String superInterface = beanElement.getInterfaces().get(0).toString();
+            if (!builder.beansByInterface.containsKey(superInterface)) {
+                TypeElement superType = builder.environment.getElementUtils().getTypeElement(superInterface);
+                if (superType != null) builder.beansByInterface.put(superInterface,
+                        new DataBeanBuilder(superType, builder, this));
             }
         }
     }

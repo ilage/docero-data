@@ -5,6 +5,7 @@ import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
+import javax.tools.Diagnostic;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -45,10 +46,18 @@ class Mapping {
                             DataBeanPropertyBuilder mfield = mappedField(mapKey,
                                     ((String) mapValue), bean, hasCollection);
                             if (mfield != null) mappedProperties.add(mfield);
-                            else System.out.println("WARNING: no mapping fileds for " +
-                                    bean.interfaceType + "." + mapKey + " is found");
+                            else {
+                                builder.environment.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                                        "no mapping fields for " + bean.interfaceType + "." + mapKey + " was found");
+                            }
                         });
             }
+        }
+        if (mappedProperties.isEmpty()) {
+            bean.properties.values().stream()
+                    .filter(p -> p.isId).forEach(mappedProperties::add);
+            if (properties.size() != mappedProperties.size())
+                mappedProperties.clear();
         }
         manyToOne = hasCollection.get();
     }

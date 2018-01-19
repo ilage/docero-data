@@ -74,19 +74,19 @@ class DataRepositoryBuilder {
                     .map(DataBeanBuilder::getImplementationName)
                     .toArray(String[]::new);
             if (bean == null) {
+                // if bean was not created by any extending beans (not single interface in declaration)
                 bean = new DataBeanBuilder(
                         rootBuilder.environment.getElementUtils().getTypeElement(forInterfaceName.toString()),
                         rootBuilder,
                         rootBuilder.beansByInterface.get(forMultiplyInterfaces.get(0).toString()));
                 rootBuilder.beansByInterface.put(forInterfaceName.toString(), bean);
                 rootBuilder.unimplementedBeans.add(bean);
-                discriminator = new DataRepositoryDiscriminator(
-                        forMultiplyInterfaces.stream()
-                                .map(t -> rootBuilder.beansByInterface.get(t.toString()))
-                                .collect(Collectors.toList())
-                );
             }
-            else discriminator = null;
+            discriminator = new DataRepositoryDiscriminator(
+                    forMultiplyInterfaces.stream()
+                            .map(t -> rootBuilder.beansByInterface.get(t.toString()))
+                            .collect(Collectors.toList())
+            );
         } else {
             beanImplementation = new String[]{bean.getImplementationName()};
             discriminator = null;
