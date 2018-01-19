@@ -160,7 +160,7 @@ public class DDataTest {
     public void viewTest() throws SQLException, DDataException {
         setUp();
 
-        /*DDataView view = new DDataView(Sample_WB_.class, new ArrayList<DDataFilter>() {{
+        DDataView view = new DDataView(Sample_WB_.class, new ArrayList<DDataFilter>() {{
             add(new DDataFilter(Sample_WB_.ID));
             add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             DDataFilter iCols = new DDataFilter(Sample_WB_.INNER);
@@ -169,17 +169,19 @@ public class DDataTest {
         }});
         view.setFilter(new DDataFilter() {{
             add(new DDataFilter(Sample_WB_.ID, DDataFilterOperator.GREATE, 0));
+
             add(new DDataFilter(Sample_WB_.INNER) {{
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
             }});
+
             add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
             }});
         }});
-        checkDDataView(view, 2);*/
+        checkDDataView(view, 2);
 
-        DDataView view = new DDataView(new ArrayList<Class<? extends DDataAttribute>>() {{
+        view = new DDataView(new ArrayList<Class<? extends DDataAttribute>>() {{
             add(ItemSample_WB_.class);
             add(ItemInner_WB_.class);
             add(ItemItemSample_WB_.class);

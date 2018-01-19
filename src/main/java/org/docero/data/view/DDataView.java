@@ -102,17 +102,9 @@ public class DDataView extends AbstractDataView {
 
     private void buildFilters(SQL sql, Map<String, Integer> usedCols) throws DDataException {
         for (int i = 0; i < roots.length; i++) {
-            Class multiTypeClass = roots[i];
             if (i > 0) sql.OR();
-            try {
-                Field discriminator = multiTypeClass.getDeclaredField("DISCR_ATTR");
-                Field dval = multiTypeClass.getDeclaredField("DISCR_VAL");
-                DDataAttribute discriminatorAttribute = (DDataAttribute) discriminator.get(null);
-                if (discriminatorAttribute != null)
-                    sql.WHERE("t0." + discriminatorAttribute.getColumnName() + " = " + dval.get(null));
-            } catch (NoSuchFieldException | IllegalAccessException e) {
-                throw new DDataException("select view not from *_WB_ enum: " + multiTypeClass.getCanonicalName());
-            }
+
+            Class multiTypeClass = roots[i];
             String verSql = versionAndTypeConstraint(multiTypeClass, 0);
             if (verSql.length() > 0) sql.WHERE(verSql);
 

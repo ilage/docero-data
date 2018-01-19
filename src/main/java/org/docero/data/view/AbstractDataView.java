@@ -116,7 +116,7 @@ abstract class AbstractDataView {
         for (DDataFilter filter : appliedFilters) {
             if (!filter.getAttribute().isCollection()) {
                 if (filter.getOperator() != null && !filter.hasFilters()) {
-                    String columnReference = "t" + fromTableIndex + ".\"" +
+                    String columnReference = "t" + tableIndex + ".\"" +
                             filter.getAttribute().getColumnName() + "\" ";
                     String columnType = filter.getAttribute().getJdbcType();
                     String condition;
@@ -149,21 +149,26 @@ abstract class AbstractDataView {
                         sql.WHERE(condition);
                     }
                 } else if (filter.hasFilters()) {
+                    Class innerClass = filter.getAttribute().getJavaType();
                     String key = path + filter.getAttribute().getPropertyName() + ":" +
-                            filter.getAttribute().getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
-                    addFilterSql(sql, filter, rootClass, usedCols, key, tableIndex);
+                            innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
+                    addFilterSql(sql, filter, innerClass, usedCols, key, tableIndex);
                 }
             } else { // we can't use two separate filters by same table
+                Class innerClass = filter.getAttribute().getJavaType();
                 String key = path + filter.getAttribute().getPropertyName() + ":" +
-                        filter.getAttribute().getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
-                int finalN = tableIndex;
+                        innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
+                int finalN = tablesCounter.incrementAndGet();
+                usedCols.put(key, finalN);
                 sql.WHERE("EXISTS(" + new SQL() {{
                     SELECT("*");
                     FROM(filter.getAttribute().joinTable() + " t" + finalN);
                     WHERE(filter.getAttribute().joinMapping().entrySet().stream()
                             .map(m -> "t" + fromTableIndex + "." + m.getKey() + "=t" + finalN + "." + m.getValue())
                             .collect(Collectors.joining(" AND ")));
-                    addFilterSql(this, filter, rootClass, usedCols, key, finalN);
+                    String verSql = versionAndTypeConstraint(filter.getAttribute().getJavaType(), finalN);
+                    if(verSql.length()>0) WHERE(verSql);
+                    addFilterSql(this, filter, innerClass, usedCols, key, finalN);
                 }}.toString() + ")");
             }
         }
