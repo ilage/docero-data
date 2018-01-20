@@ -32,7 +32,7 @@ class DataBeanBuilder {
     DataBeanBuilder(
             TypeElement beanElement, DDataBuilder builder
     ) {
-        this(beanElement,builder,null);
+        this(beanElement, builder, null);
     }
 
     DataBeanBuilder(
@@ -60,7 +60,7 @@ class DataBeanBuilder {
         }
 
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
-        if(ddBean!=null) {
+        if (ddBean != null) {
             schema = ddBean.schema();
             table = ddBean.table().trim().length() == 0 ?
                     propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1)) :
@@ -204,7 +204,8 @@ class DataBeanBuilder {
             cf.startBlock("public class " +
                     className.substring(simpNameDel + 1)
                     + " extends org.docero.data.AbstractBean"
-                    + " implements " + interfaceType + " {");
+                    + " implements " + interfaceType + ", java.lang.Comparable<" +
+                    interfaceType + "> {");
 
             for (DataBeanPropertyBuilder property : properties.values()) {
                 property.buildProperty(cf);
@@ -256,8 +257,10 @@ class DataBeanBuilder {
             }
 
             cf.println("");
+            cf.println("private int hash;");
             cf.startBlock("public int hashCode() {");
-            cf.println("return getDDataBeanKey_().hashCode();");
+            cf.println("if(hash == 0) hash = getDDataBeanKey_().hashCode();");
+            cf.println("return hash;");
             cf.endBlock("}");
 
             cf.println("");
@@ -275,6 +278,27 @@ class DataBeanBuilder {
                     ";");
             cf.endBlock("}");
 
+            cf.println("");
+            cf.startBlock("public int compareTo(" + interfaceType + " o) {");
+            cf.println("if (o == null) throw new NullPointerException();");
+            boolean notFirst = false;
+            for (DataBeanPropertyBuilder property : properties.values())
+                if (!(property.isId || property.isVersionFrom)) {
+                    String getter = "get" +
+                            Character.toUpperCase(property.name.charAt(0)) +
+                            property.name.substring(1);
+                    if (notFirst) {
+                        cf.println("if(r != 0) return r;");
+                        cf.println("else r = compare(this." +
+                                getter + "(), o." + getter + "());");
+                    } else {
+                        cf.println("int r = compare(this." +
+                                getter + "(), o." + getter + "());");
+                        notFirst = true;
+                    }
+                }
+            cf.println(notFirst ? "return r;" : "return 0;");
+            cf.endBlock("}");
             cf.endBlock("}");
         }
     }
@@ -418,11 +442,15 @@ class DataBeanBuilder {
                 cf.endBlock("}");
 
                 cf.println("");
+                cf.println("private int hash;");
                 cf.startBlock("public int hashCode() {");
-                cf.println("return " + ids.stream().map(p -> {
-                    if (p.type.getKind().isPrimitive()) return "(int)" + p.name;
-                    else return "(" + p.name + "==null?0:" + p.name + ".hashCode())";
+                cf.println("if(hash == 0) hash = " + ids.stream().map(p -> {
+                    if (p.type.getKind().isPrimitive())
+                        return environment.getTypeUtils().boxedClass((PrimitiveType) p.type) +
+                                ".hashCode(" + p.name + ")";
+                    else return "(" + p.name + " == null ? 0 : " + p.name + ".hashCode())";
                 }).collect(Collectors.joining(" ^ ")) + ";");
+                cf.println("return hash;");
                 cf.endBlock("}");
 
                 cf.println("");
