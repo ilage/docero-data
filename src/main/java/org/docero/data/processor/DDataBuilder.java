@@ -111,6 +111,17 @@ class DDataBuilder {
             cf.startBlock("protected <T extends java.io.Serializable> T cached(Class<T> type, java.io.Serializable key) {");
             cf.println("return DData.cache(type, key);");
             cf.endBlock("}");
+
+            cf.println("");
+            cf.startBlock("protected <T> int compare(T o1, T o2) {");
+            cf.println("if (o1 == null) return o2 == null ? 0 : -1;");
+            cf.println("if (o2 == null) return 1;");
+            cf.println("if (o1 instanceof java.lang.Comparable)");
+            cf.println("   return ((java.lang.Comparable) o1).compareTo(o2);");
+            cf.println("else");
+            cf.println("   return 0;");
+            cf.endBlock("}");
+
             cf.endBlock("}");
         }
         try (JavaClassWriter cf = new JavaClassWriter(environment, "org.docero.data.AbstractRepository")) {
@@ -128,6 +139,7 @@ class DDataBuilder {
             cf.startBlock("protected <T extends java.io.Serializable> void cache(java.util.Collection<T> beans) {");
             cf.println("DData.cache(beans);");
             cf.endBlock("}");
+
             cf.endBlock("}");
         }
 

@@ -82,6 +82,23 @@ public class DDataTest {
                     "INSERT INTO ddata.\"sample\" (id, s, i) VALUES (1,'s1',1001);\n" +
                     "INSERT INTO ddata.\"sample\" (id, s, i) VALUES (2,'s2',1003);\n" +
                     "\n" +
+                    "DROP FUNCTION ddata.sample_proc(integer);\n" +
+                    "\n" +
+                    "CREATE OR REPLACE FUNCTION ddata.sample_proc(rid integer)\n" +
+                    "  RETURNS TABLE (i INT, id INT, s VARCHAR, t2_text VARCHAR, t2_id INT, t2_sample_id INT) AS\n" +
+                    "$BODY$\n" +
+                    "SELECT\n" +
+                    "  t0.\"i\" AS \"i\",\n" +
+                    "  t0.\"id\" AS \"id\",\n" +
+                    "  t0.\"s\" AS \"s\",\n" +
+                    "  t2.\"text\" AS t2_text,\n" +
+                    "  t2.\"id\" AS t2_id,\n" +
+                    "  t2.\"sample_id\" AS t2_sample_id\n" +
+                    "FROM \"ddata\".\"sample\" AS t0\n" +
+                    "LEFT JOIN \"ddata\".\"inner\" AS t2 ON (t0.\"i\" = t2.\"id\")\n" +
+                    "$BODY$\n" +
+                    "  LANGUAGE sql;\n" +
+                    "\n" +
                     "INSERT INTO ddata.\"inner\" (id, text, sample_id) VALUES (1001,'i1',1);\n" +
                     "INSERT INTO ddata.\"inner\" (id, text, sample_id) VALUES (1002,'i2',1);\n" +
                     "INSERT INTO ddata.\"inner\" (id, text, sample_id) VALUES (1003,'i3',2);" +
