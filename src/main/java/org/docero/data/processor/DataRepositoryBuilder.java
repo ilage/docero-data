@@ -353,7 +353,8 @@ class DataRepositoryBuilder {
             cf.endBlock("*/");
             cf.println("boolean truncateLazy() default false;");
 
-            cf.println(forInterfaceName + "_[] defaultOrder() default {};");
+            cf.println(forInterfaceName + "_[] forwardOrder() default {};");
+            cf.println(forInterfaceName + "_[] backwardOrder() default {};");
 
             cf.endBlock("}");
         }

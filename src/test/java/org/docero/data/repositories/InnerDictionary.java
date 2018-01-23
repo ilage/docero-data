@@ -9,6 +9,6 @@ import java.util.List;
 
 @DDataRep
 public interface InnerDictionary extends DDataRepository<Inner,Integer> {
-    @InnerDictionary_DDataFetch_(defaultOrder={Inner_.TEXT})
+    @InnerDictionary_DDataFetch_(forwardOrder={Inner_.TEXT})
     List<Inner> list();
 }

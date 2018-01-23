@@ -547,8 +547,8 @@ class DDataMapBuilder {
                                     .collect(Collectors.toList()), domElement);
                         else if (!fetchOptions.order.isEmpty())
                             domElement.appendChild(doc.createTextNode("\nORDER BY " +
-                                    fetchOptions.order.stream()
-                                            .map(o -> o.getColumnRef() + " ASC")
+                                    fetchOptions.order.keySet().stream()
+                                            .map(o -> o.getColumnRef() + " " + fetchOptions.order.get(o))
                                             .collect(Collectors.joining(", "))));
                     }
             }
@@ -1339,8 +1339,8 @@ class DDataMapBuilder {
         include.setAttribute("refid", "get_select");
         if (!fetchOptions.order.isEmpty()) {
             select.appendChild(doc.createTextNode("ORDER BY " +
-                    fetchOptions.order.stream()
-                            .map(o -> o.getColumnRef() + " ASC")
+                    fetchOptions.order.keySet().stream()
+                            .map(o -> o.getColumnRef() + " " + fetchOptions.order.get(o))
                             .collect(Collectors.joining(", "))));
         }
     }
@@ -1422,7 +1422,7 @@ class DDataMapBuilder {
         final List<DataBeanPropertyBuilder> ignore;
         final int eagerTrunkLevel;
         final boolean truncateLazy;
-        final List<DataBeanPropertyBuilder> order;
+        final Map<DataBeanPropertyBuilder, String> order;
 
         FetchOptions(DataRepositoryBuilder repository, AnnotationMirror fetchMirror) {
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName.toString());
@@ -1458,14 +1458,15 @@ class DDataMapBuilder {
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
 
+            order = new HashMap<>();
             Object orderObj = fetchProps.keySet().stream()
-                    .filter(k -> "defaultOrder".equals(k.getSimpleName().toString()))
+                    .filter(k -> "forwardOrder".equals(k.getSimpleName().toString()))
                     .findAny()
                     .map(k -> fetchProps.get(k).getValue())
                     .orElse(null);
-            final List<Object> orderList = (orderObj != null && orderObj instanceof List) ?
+            List<Object> orderList = (orderObj != null && orderObj instanceof List) ?
                     (List) orderObj : Collections.emptyList();
-            order = orderList.stream()
+            orderList.stream()
                     .map(Object::toString)
                     .map(s -> {
                         int i = s.lastIndexOf('.');
@@ -1476,7 +1477,27 @@ class DDataMapBuilder {
                             .filter(p -> p.enumName.equals(name))
                             .findAny().orElse(null))
                     .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
+                    .forEach(a -> order.put(a, "ASC"));
+
+            orderObj = fetchProps.keySet().stream()
+                    .filter(k -> "backwardOrder".equals(k.getSimpleName().toString()))
+                    .findAny()
+                    .map(k -> fetchProps.get(k).getValue())
+                    .orElse(null);
+            orderList = (orderObj != null && orderObj instanceof List) ?
+                    (List) orderObj : Collections.emptyList();
+            orderList.stream()
+                    .map(Object::toString)
+                    .map(s -> {
+                        int i = s.lastIndexOf('.');
+                        if (i > 0) return s.substring(i + 1);
+                        else return s;
+                    })
+                    .map(name -> bean.properties.values().stream()
+                            .filter(p -> p.enumName.equals(name))
+                            .findAny().orElse(null))
+                    .filter(Objects::nonNull)
+                    .forEach(a -> order.put(a, "DESC"));
 
             sqlSelect = fetchProps.keySet().stream()
                     .filter(k -> "select".equals(k.getSimpleName().toString()))
@@ -1510,7 +1531,7 @@ class DDataMapBuilder {
             ignore = Collections.emptyList();
             eagerTrunkLevel = trunkLevel;
             truncateLazy = false;
-            order = Collections.emptyList();
+            order = Collections.emptyMap();
         }
 
         boolean filterIgnored(DataBeanPropertyBuilder property) {

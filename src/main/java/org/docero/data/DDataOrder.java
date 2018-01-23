@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DDataOrder<T extends DDataAttribute> {
-    static class OrderEntry {
+    public static class OrderEntry {
         private final DDataAttribute attribute;
         private final boolean ascending;
 
