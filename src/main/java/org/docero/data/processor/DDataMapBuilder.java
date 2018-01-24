@@ -1017,12 +1017,14 @@ class DDataMapBuilder {
                     DataBeanPropertyBuilder discriminantProperty = leftBean.discriminatorProperty;
                     if (discriminantProperty != null) {
                         String dval = leftBean.discriminatorValue;
-                        sql.append("\n AND t").append(join.tableIndex).append('.').append('"')
-                                .append(discriminantProperty.columnName).append("\" = ");
-                        if ("java.lang.String".equals(discriminantProperty.type.toString()))
-                            sql.append('\'').append(dval).append('\'');
-                        else
-                            sql.append(dval);
+                        if (dval != null && dval.trim().length() > 0) {
+                            sql.append("\n AND t").append(join.tableIndex).append('.').append('"')
+                                    .append(discriminantProperty.columnName).append("\" = ");
+                            if ("java.lang.String".equals(discriminantProperty.type.toString()))
+                                sql.append('\'').append(dval).append('\'');
+                            else
+                                sql.append(dval);
+                        }
                     }
 
                     sql.append(")\n");
