@@ -266,10 +266,10 @@ class DataBeanBuilder {
             }
 
             cf.println("");
-            cf.println("private int hash;");
+            cf.println("private int hash_;");
             cf.startBlock("public int hashCode() {");
-            cf.println("if(hash == 0) hash = getDDataBeanKey_().hashCode();");
-            cf.println("return hash;");
+            cf.println("if(hash_ == 0) hash_ = getDDataBeanKey_().hashCode();");
+            cf.println("return hash_;");
             cf.endBlock("}");
 
             cf.println("");
@@ -451,15 +451,15 @@ class DataBeanBuilder {
                 cf.endBlock("}");
 
                 cf.println("");
-                cf.println("private int hash;");
+                cf.println("private int hash_;");
                 cf.startBlock("public int hashCode() {");
-                cf.println("if(hash == 0) hash = " + ids.stream().map(p -> {
+                cf.println("if(hash_ == 0) hash_ = " + ids.stream().map(p -> {
                     if (p.type.getKind().isPrimitive())
                         return environment.getTypeUtils().boxedClass((PrimitiveType) p.type) +
                                 ".hashCode(" + p.name + ")";
                     else return "(" + p.name + " == null ? 0 : " + p.name + ".hashCode())";
                 }).collect(Collectors.joining(" ^ ")) + ";");
-                cf.println("return hash;");
+                cf.println("return hash_;");
                 cf.endBlock("}");
 
                 cf.println("");

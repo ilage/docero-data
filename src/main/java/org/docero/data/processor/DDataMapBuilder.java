@@ -395,9 +395,7 @@ class DDataMapBuilder {
                         environment.getTypeUtils().boxedClass((PrimitiveType) parameter.type).asType() :
                         parameter.type;
                 sqlSelect = sqlSelect.replaceAll(":" + parameter.name,
-                        "#{" + parameter.name + ", javaType=" + pType +
-                                jdbcTypeParameterFor(pType) +
-                                "}");
+                        jdbcTypeParameterFor(parameter.name, pType));
             }
             sql.append(sqlSelect).append("\n");
             domElement.appendChild(doc.createTextNode(sql.toString()));
@@ -755,10 +753,8 @@ class DDataMapBuilder {
                 int tIdx = table.map(mb -> mb.tableIndex).orElse(0);
                 MappedTable currentJoin = table.orElse(null);
 
-                String filterParameter = filter.property.getColumnWriter("#{" + filter.parameter + ", javaType=" + (filter.variableType.getKind().isPrimitive() ?
-                        environment.getTypeUtils().boxedClass((PrimitiveType) filter.variableType) :
-                        filter.variableType
-                ) + jdbcTypeParameterFor(filter.variableType) + "}");
+                String filterParameter = filter.property.getColumnWriter(
+                        jdbcTypeParameterFor(filter.parameter, filter.variableType));
 
                 switch (filter.option) {
                     case EQUALS:
@@ -829,8 +825,7 @@ class DDataMapBuilder {
                                 "AND t" + tIdx + "." + filter.property.getColumnRef() + " IN (");
                         e_in.setAttribute("close", ")");
                         e_in.setAttribute("separator", ",");
-                        e_in.appendChild(doc.createTextNode("#{item" + ", javaType=" +
-                                itemType + jdbcTypeParameterFor(itemType) + "}"));
+                        e_in.appendChild(doc.createTextNode(jdbcTypeParameterFor("item", itemType)));
                         break;
                     case LIKE_HAS:
                         e = doc.createElement("if");
@@ -845,8 +840,7 @@ class DDataMapBuilder {
                         e_like.setAttribute("separator", " OR ");
                         e_like.appendChild(doc.createTextNode("t" +
                                 tIdx + "." + filter.property.getColumnRef() +
-                                " LIKE #{item" + ", javaType=" + filter.variableType +
-                                jdbcTypeParameterFor(filter.variableType) + "}"));
+                                " LIKE " + jdbcTypeParameterFor("item", filter.variableType)));
                         break;
                     case LIKE_ALL_STARTS:
                     case LIKE_ALL_HAS:
@@ -861,8 +855,7 @@ class DDataMapBuilder {
                         e_like.setAttribute("separator", " AND ");
                         e_like.appendChild(doc.createTextNode("t" +
                                 tIdx + "." + filter.property.getColumnRef() +
-                                " LIKE #{item" + ", javaType=" + filter.variableType +
-                                jdbcTypeParameterFor(filter.variableType) + "}"));
+                                " LIKE " + jdbcTypeParameterFor("item", filter.variableType)));
                         break;
                     case LIKE:
                     case LIKE_STARTS:
@@ -940,20 +933,14 @@ class DDataMapBuilder {
                     .collect(Collectors.toList()), domElement);
 
         filters.stream().filter(f -> f.option == DDataFilterOption.LIMIT).findAny().ifPresent(limit -> {
-            String limitParameter = "#{" + limit.parameter + ", javaType=" + (limit.variableType.getKind().isPrimitive() ?
-                    environment.getTypeUtils().boxedClass((PrimitiveType) limit.variableType) :
-                    limit.variableType
-            ) + jdbcTypeParameterFor(limit.variableType) + "}";
+            String limitParameter = jdbcTypeParameterFor(limit.parameter, limit.variableType);
 
             org.w3c.dom.Element limitElt = (org.w3c.dom.Element)
                     domElement.appendChild(doc.createElement("if"));
             limitElt.setAttribute("test", limit.parameter + " != null");
             limitElt.appendChild(doc.createTextNode("LIMIT " + limitParameter + "\n"));
             filters.stream().filter(f -> f.option == DDataFilterOption.START).findAny().ifPresent(offset -> {
-                String offsetParameter = "#{" + offset.parameter + ", javaType=" + (offset.variableType.getKind().isPrimitive() ?
-                        environment.getTypeUtils().boxedClass((PrimitiveType) offset.variableType) :
-                        offset.variableType
-                ) + jdbcTypeParameterFor(offset.variableType) + "}";
+                String offsetParameter = jdbcTypeParameterFor(offset.parameter, offset.variableType);
 
                 org.w3c.dom.Element offsetElt = (org.w3c.dom.Element)
                         limitElt.appendChild(doc.createElement("if"));
@@ -1051,19 +1038,21 @@ class DDataMapBuilder {
         Mapping mapping = builder.mappings.get(dataBean.interfaceType.toString() + "." + beanProperty.name);
         if (mapping != null) {
             TypeMirror mappedType = mapping.mappedProperties.get(0).type;
-            return beanProperty.getColumnWriter("#{" + beanProperty.name + "_foreignKey, javaType=" + (mappedType.getKind().isPrimitive() ?
-                    environment.getTypeUtils().boxedClass((PrimitiveType) mappedType) : mappedType
-            ) + jdbcTypeParameterFor(mappedType) + "}");
+            return beanProperty.getColumnWriter(jdbcTypeParameterFor(beanProperty.name, mappedType));
         } else
-            return beanProperty.getColumnWriter("#{" + beanProperty.name + ", javaType=" + (beanProperty.type.getKind().isPrimitive() ?
-                    environment.getTypeUtils().boxedClass((PrimitiveType) beanProperty.type) :
-                    beanProperty.type
-            ) + jdbcTypeParameterFor(beanProperty.type) + "}");
+            return beanProperty.getColumnWriter(jdbcTypeParameterFor(beanProperty.name, beanProperty.type));
     }
 
-    private String jdbcTypeParameterFor(TypeMirror type) {
+    private String jdbcTypeParameterFor(String parameter, TypeMirror type) {
+        StringBuilder p = new StringBuilder("#{");
+        p.append(parameter);
+        if (type.getKind() != TypeKind.ARRAY)
+            p.append(", javaType=").append(type.getKind().isPrimitive() ?
+                    environment.getTypeUtils().boxedClass((PrimitiveType) type) : type
+            );
         String s = builder.jdbcTypeFor(type);
-        return s.length() == 0 ? s : ", jdbcType=" + s;
+        if (s.length() > 0) p.append(", jdbcType=").append(s);
+        return p.append('}').toString();
     }
 
     private void addManagedBeanToFrom(StringBuilder sql, MappedTable mappedTable, FetchOptions fetchOptions) {
@@ -1256,8 +1245,7 @@ class DDataMapBuilder {
                         return "t0." +
                                 m.mappedProperty.getColumnRef() + " = " +
                                 m.mappedProperty.getColumnWriter(
-                                        "#{" + m.property.columnName +
-                                                jdbcTypeParameterFor(propType) + "}");
+                                        jdbcTypeParameterFor(m.property.columnName, propType));
                     }).collect(Collectors.joining(" AND "))).append("\n");
 
                     if (mappedBean.versionalType != null &&

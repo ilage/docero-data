@@ -334,6 +334,9 @@ class DDataBuilder {
                 java.math.BigDecimal.class.getCanonicalName().equals(s)
                 ) return "NUMERIC";
 
+        if ("Ljava.lang.Byte".equals(s) || "java.lang.Byte[]".equals(s) || "byte[]".equals(s)
+                ) return "BINARY";
+
         return "";
     }
 

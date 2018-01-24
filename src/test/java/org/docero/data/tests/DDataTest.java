@@ -69,6 +69,7 @@ public class DDataTest {
                     "  id INT NOT NULL,\n" +
                     "  s VARCHAR(125),\n" +
                     "  i INT,\n" +
+                    "  hash BYTEA,\n" +
                     "  CONSTRAINT \"sample_pkey\" PRIMARY KEY (id)\n" +
                     ");\n" +
                     "\n" +
@@ -445,6 +446,7 @@ public class DDataTest {
         sample.setStrParameter("a");
         sample.setId(3);
         sample.setInner(iInnerRepository.get(1002));
+        sample.setHash(new byte[]{0,1,0,1,0});
         iSampleRepository.insert(sample);
 
         sl = iSampleRepository.list(0, 10, null, null, null, null, 1002);

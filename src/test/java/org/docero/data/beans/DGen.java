@@ -19,6 +19,8 @@ abstract class DGen {
         String strParameter;
         @DDataProperty("i")
         int innerId;
+        @DDataProperty("hash")
+        byte[] hash;
     }
     @DGenInterface
     @DDataBean
