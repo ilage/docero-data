@@ -1,7 +1,10 @@
 package org.docero.data.processor;
 
 import org.docero.data.DDataRep;
+import org.docero.data.DDataRepository;
+import org.docero.data.DDataVersionalRepository;
 import org.docero.data.DictionaryType;
+import org.docero.data.utils.DDataDictionary;
 
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
@@ -50,9 +53,13 @@ class DataRepositoryBuilder {
 
         boolean isHistorical = false;
         DeclaredType interfaceType = null;
+        final String versionalType = DDataVersionalRepository.class.getCanonicalName();
+        final String standartType = DDataRepository.class.getCanonicalName();
+        final String dictionaryType = DDataDictionary.class.getCanonicalName();
         for (TypeMirror i : repositoryElement.getInterfaces()) {
-            isHistorical = i.toString().contains("org.docero.data.DDataVersionalRepository");
-            if (isHistorical || i.toString().contains("org.docero.data.DDataRepository"))
+            String iName = i.toString();
+            isHistorical = iName.contains(versionalType);
+            if (isHistorical || iName.contains(standartType) || iName.contains(dictionaryType))
                 interfaceType = (DeclaredType) i;
             if (isHistorical) break;
         }
