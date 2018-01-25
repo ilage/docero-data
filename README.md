@@ -69,7 +69,8 @@ Code Generation Library for MyBatis
                 String listLike, //exists record in list of inner
                 String innerText, //TODO inner text is
                 Integer inner, //inner_id is
-                DDataOrder<Sample_> sort
+                DDataOrder<Sample_> sort,
+                RowBounds bounds
         ) throws IOException, IllegalArgumentException;
         
         long count();
@@ -87,8 +88,6 @@ Code Generation Library for MyBatis
     public interface SampleRepository extends DDataRepository<Sample, Integer> {
         @SampleRepository_DDataFetch_(value = DDataFetchType.COLLECTIONS_ARE_LAZY, eagerTrunkLevel = 1)
         List<Sample> list(
-                @SampleRepository_Filter_(option = DDataFilterOption.START) int start,
-                @SampleRepository_Filter_(option = DDataFilterOption.LIMIT) int limit,
                 @SampleRepository_Filter_(
                         value = Sample_.STR_PARAMETER,
                         option = DDataFilterOption.LIKE
@@ -107,7 +106,8 @@ Code Generation Library for MyBatis
                 @SampleRepository_Filter_(
                         Sample_.INNER_ID
                 ) Integer inner, //inner_id is
-                DDataOrder<Sample_> sort
+                DDataOrder<Sample_> sort,
+                RowBounds bounds
         ) throws IOException, IllegalArgumentException;
         
         @SampleRepository_DDataFetch_(select = "SELECT COUNT(*) FROM \"ddata\".\"sample\"")
@@ -155,8 +155,9 @@ DDataRepository и их пока переопределять не будем. �
     Sample bean = iSampleRepository.get(1);
         
     List<Sample> sl;
-    sl = iSampleRepository.list(0, 10, null, null, null, null, null,
-         DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID));
+    sl = iSampleRepository.list(null, null, null, null, null,
+         DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID),
+         new RowBounds(0, 10));
 
 **Интерфейсы**
 
