@@ -1,5 +1,6 @@
 package org.docero.data.tests;
 
+import org.apache.ibatis.session.RowBounds;
 import org.docero.data.*;
 import org.docero.data.beans.*;
 import org.docero.data.repositories.CompositeKeyRepository;
@@ -419,26 +420,26 @@ public class DDataTest {
         assertEquals(1, lp.size());
 
         List<Sample> sl;
-        sl = iSampleRepository.list(0, 10, null, null, null, null, null,
-                DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID));
+        sl = iSampleRepository.list(null, null, null, null, null,
+                DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID), new RowBounds(0,10));
         assertEquals(2, sl.size());
 
-        sl = iSampleRepository.list(0, 10, null, null, null, null, 1002);
+        sl = iSampleRepository.list(null, null, null, null, 1002, new RowBounds(0,10));
         assertEquals(0, sl.size());
 
-        sl = iSampleRepository.list(0, 10, null, 1001, null, null, null);
+        sl = iSampleRepository.list(null, 1001, null, null, null, null);
         assertEquals(1, sl.size());
 
-        sl = iSampleRepository.list(0, 10, null, null, null, "i1", null);
+        sl = iSampleRepository.list(null, null, null, "i1", null, new RowBounds(0,10));
         assertEquals(1, sl.size());
 
-        sl = iSampleRepository.list(0, 10, "s1", null, null, null, null);
+        sl = iSampleRepository.list("s1", null, null, null, null, new RowBounds(0,10));
         assertEquals(1, sl.size());
 
-        sl = iSampleRepository.list(0, 10, null, null, "i2", null, null);
+        sl = iSampleRepository.list(null, null, "i2", null, null, new RowBounds(0,10));
         assertEquals(1, sl.size());
 
-        sl = iSampleRepository.list(0, 10, "s2", null, "i2", null, null);
+        sl = iSampleRepository.list("s2", null, "i2", null, null, new RowBounds(0,10));
         assertEquals(0, sl.size());
 
 
@@ -449,7 +450,7 @@ public class DDataTest {
         sample.setHash(new byte[]{0,1,0,1,0});
         iSampleRepository.insert(sample);
 
-        sl = iSampleRepository.list(0, 10, null, null, null, null, 1002);
+        sl = iSampleRepository.list(null, null, null, null, 1002, null);
         assertEquals(1, sl.size());
 
         sample = iSampleRepository.get(sample.getId());

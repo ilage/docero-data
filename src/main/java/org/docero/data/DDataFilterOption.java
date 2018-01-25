@@ -1,7 +1,6 @@
 package org.docero.data;
 
 public enum DDataFilterOption {
-    START, LIMIT,
     EQUALS, NOT_EQUALS,
     LOWER_THAN, GREATER_THAN,
     NO_LOWER_THAN, NO_GREATER_THAN,

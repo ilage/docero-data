@@ -1,5 +1,8 @@
 package org.docero.data.processor;
 
+import org.apache.ibatis.session.RowBounds;
+import org.docero.data.DDataVersionalBean;
+import org.docero.data.DDataVersionalRepository;
 import org.docero.dgen.processor.DGenClass;
 
 import javax.annotation.processing.ProcessingEnvironment;
@@ -29,6 +32,7 @@ class DDataBuilder {
     final TypeMirror versionalRepositoryType;
     final TypeMirror voidType;
     final TypeMirror stringType;
+    final TypeMirror rowBoundsType;
     final ArrayList<DataBeanBuilder> unimplementedBeans = new ArrayList<>();
 
     DDataBuilder(ProcessingEnvironment environment) {
@@ -38,25 +42,26 @@ class DDataBuilder {
         TypeElement dS = environment.getElementUtils()
                 .getTypeElement("org.springframework.dao.support.DaoSupport");
         spring = dS != null && sqlSDS != null && sqlSDS.getKind() == ElementKind.CLASS;
-        temporalType = environment.getElementUtils().getTypeElement("java.time.temporal.Temporal").asType();
-        oldDateType = environment.getElementUtils().getTypeElement("java.util.Date").asType();
+        temporalType = environment.getElementUtils().getTypeElement(java.time.temporal.Temporal.class.getCanonicalName()).asType();
+        oldDateType = environment.getElementUtils().getTypeElement(java.util.Date.class.getCanonicalName()).asType();
         useSpringCache = environment.getElementUtils().getTypeElement(
                 "org.springframework.cache.annotation.Cacheable") != null;
 
         collectionType = environment.getTypeUtils().erasure(
-                environment.getElementUtils().getTypeElement("java.util.Collection").asType()
+                environment.getElementUtils().getTypeElement(java.util.Collection.class.getCanonicalName()).asType()
         );
         mapType = environment.getTypeUtils().erasure(
-                environment.getElementUtils().getTypeElement("java.util.Map").asType()
+                environment.getElementUtils().getTypeElement(java.util.Map.class.getCanonicalName()).asType()
         );
         versionalBeanType = environment.getTypeUtils().erasure(
-                environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalBean").asType()
+                environment.getElementUtils().getTypeElement(DDataVersionalBean.class.getCanonicalName()).asType()
         );
         versionalRepositoryType = environment.getTypeUtils().erasure(
-                environment.getElementUtils().getTypeElement("org.docero.data.DDataVersionalRepository").asType()
+                environment.getElementUtils().getTypeElement(DDataVersionalRepository.class.getCanonicalName()).asType()
         );
-        voidType = environment.getElementUtils().getTypeElement("java.lang.Void").asType();
-        stringType = environment.getElementUtils().getTypeElement("java.lang.String").asType();
+        voidType = environment.getElementUtils().getTypeElement(Void.class.getCanonicalName()).asType();
+        stringType = environment.getElementUtils().getTypeElement(String.class.getCanonicalName()).asType();
+        rowBoundsType = environment.getElementUtils().getTypeElement(RowBounds.class.getCanonicalName()).asType();
     }
 
     void checkInterface(TypeElement beanElement) {

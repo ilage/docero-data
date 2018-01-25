@@ -1,5 +1,6 @@
 package org.docero.data.repositories;
 
+import org.apache.ibatis.session.RowBounds;
 import org.docero.data.*;
 import org.docero.data.beans.*;
 import org.docero.data.beans.Sample;
@@ -23,8 +24,6 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
     @SampleRepository_DDataFetch_(value = DDataFetchType.COLLECTIONS_ARE_LAZY, eagerTrunkLevel = 1)
         //tested: , ignore = {ISample_.INNER})
     List<Sample> list(
-            @SampleRepository_Filter_(option = DDataFilterOption.START) int start,
-            @SampleRepository_Filter_(option = DDataFilterOption.LIMIT) int limit,
             @SampleRepository_Filter_(
                     value = Sample_.STR_PARAMETER,
                     option = DDataFilterOption.LIKE
@@ -42,13 +41,12 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
             ) String innerText, //TODO inner text is
             @SampleRepository_Filter_(
                     Sample_.INNER_ID
-            ) Integer inner //inner_id is
+            ) Integer inner, //inner_id is
+            RowBounds bounds
     ) throws IOException, IllegalArgumentException;
 
     @SampleRepository_DDataFetch_(value = DDataFetchType.COLLECTIONS_ARE_LAZY, eagerTrunkLevel = 1)
     List<Sample> list(
-            @SampleRepository_Filter_(option = DDataFilterOption.START) int start,
-            @SampleRepository_Filter_(option = DDataFilterOption.LIMIT) int limit,
             @SampleRepository_Filter_(
                     value = Sample_.STR_PARAMETER,
                     option = DDataFilterOption.LIKE
@@ -67,7 +65,8 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
             @SampleRepository_Filter_(
                     Sample_.INNER_ID
             ) Integer inner, //inner_id is
-            DDataOrder<Sample_> sort
+            DDataOrder<Sample_> sort,
+            RowBounds bounds
     ) throws IOException, IllegalArgumentException;
 
     @SampleRepository_DDataFetch_(select = "SELECT COUNT(*) FROM \"ddata\".\"sample\"")
@@ -75,8 +74,8 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
 
     @SuppressWarnings("unused")
     default List<Sample> listOrdered() throws IOException {
-        return list(0, 0, null, null, null, null, null,
-                DDataOrder.asc(Sample_.STR_PARAMETER));
+        return list(null, null, null, null, null,
+                DDataOrder.asc(Sample_.STR_PARAMETER), null);
     }
 
     List<Sample> listForInners(

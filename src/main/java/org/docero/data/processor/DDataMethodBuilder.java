@@ -22,8 +22,6 @@ import static org.docero.data.processor.DDataMethodBuilder.MType.DELETE;
 import static org.docero.data.processor.DDataMethodBuilder.MType.GET;
 
 class DDataMethodBuilder {
-    private static final String ROW_BOUNDS_CLASS = "org.apache.ibatis.session.RowBounds";
-
     final List<? extends TypeVariable> typeVariables;
     final TypeMirror returnType;
     final String methodName;
@@ -276,14 +274,6 @@ class DDataMethodBuilder {
                 cf.endBlock("}}");
                 cf.endBlock();
             }
-
-            if (returnType != null)
-                parameters.stream().filter(p -> ROW_BOUNDS_CLASS.equals(p.type.toString())).findAny().ifPresent(p -> {
-                    try {
-                        cf.println(", " + p.name);
-                    } catch (IOException ignore) {
-                    }
-                });
             cf.println(");");
         } else {
             cf.println(");");

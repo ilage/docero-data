@@ -401,10 +401,8 @@ class DDataMapBuilder {
             domElement.appendChild(doc.createTextNode(sql.toString()));
 
         } else {
-            boolean limitedSelect = false;
             switch (method.methodType) {
                 case SELECT:
-                    limitedSelect = filters.stream().anyMatch(f -> f.option == DDataFilterOption.LIMIT);
                 case GET:
                     sql.append("\nSELECT\n");
                     if (bean.versionalType != null) {
@@ -442,7 +440,6 @@ class DDataMapBuilder {
                                 .filter(MappedTable::notSingleSmallDictionaryValue)
                                 .filter(MappedTable::useInFieldsList)
                                 .forEach(t -> addManagedBeanToFrom(sql, t, fetchOptions));
-                    if (!limitedSelect) sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
                     break;
                 case INSERT:
                     generateValuesForBean(bean, domElement);
@@ -493,8 +490,9 @@ class DDataMapBuilder {
                 case INSERT:
                     domElement.appendChild(doc.createTextNode(sql.toString()));
                     break;
-                case UPDATE:
                 case GET:
+                    sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
+                case UPDATE:
                 case DELETE:
                     if (filters != null && filters.size() > 0) {
                         if (method.methodType == DDataMethodBuilder.MType.GET && method.methodIndex == 0) {
@@ -525,30 +523,29 @@ class DDataMapBuilder {
                     }
                     break;
                 default: //LIST
-                    if (limitedSelect) {
-                        sql.append("\nFROM (SELECT * FROM ").append(bean.getTableRef()).append(" AS t0\n");
-                        domElement.appendChild(doc.createTextNode(sql.toString()));
+                    sql.append("\nFROM (SELECT * FROM ").append(bean.getTableRef()).append(" AS t0\n");
+                    domElement.appendChild(doc.createTextNode(sql.toString()));
 
-                        StringBuilder ssql = new StringBuilder();
-                        addFiltersToSql(domElement, ssql, bean, method, mappedTables, filters, order, false);
-                        ssql.append("\n) AS t0\n");
-                        addJoins(mappedTables, ssql, repository);
-                        domElement.appendChild(doc.createTextNode(ssql.toString()));
-                    } else if (filters != null && filters.size() > 0) {
-                        addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, order, true);
-                    } else {
-                        addJoins(mappedTables, sql, repository);
-                        domElement.appendChild(doc.createTextNode(sql.toString()));
-                        if (order != null)
-                            addOrder(order, mappedTables.stream()
-                                    .filter(MappedTable::useInFieldsListOrFilters)
-                                    .collect(Collectors.toList()), domElement);
-                        else if (!fetchOptions.order.isEmpty())
-                            domElement.appendChild(doc.createTextNode("\nORDER BY " +
-                                    fetchOptions.order.keySet().stream()
-                                            .map(o -> o.getColumnRef() + " " + fetchOptions.order.get(o))
-                                            .collect(Collectors.joining(", "))));
-                    }
+                    StringBuilder psql = new StringBuilder();
+                    addFiltersToSql(domElement, psql, bean, method, mappedTables, filters, order, false);
+                    domElement.appendChild(doc.createTextNode(psql.toString()));
+
+                    StringBuilder ssql = new StringBuilder();
+                    if (order != null)
+                        addOrder(order, domElement);
+                    else if (!fetchOptions.order.isEmpty()) ssql
+                            .append("\nORDER BY ")
+                            .append(fetchOptions.order.keySet().stream()
+                                    .map(o -> o.getColumnRef() + " " + fetchOptions.order.get(o))
+                                    .collect(Collectors.joining(", ")));
+
+                    method.parameters.stream()
+                            .filter(p -> environment.getTypeUtils().isSameType(builder.rowBoundsType, p.type))
+                            .findAny().ifPresent(rbParam -> addRowBounds(rbParam, domElement));
+
+                    ssql.append("\n) AS t0\n");
+                    addJoins(mappedTables, ssql, repository);
+                    domElement.appendChild(doc.createTextNode(ssql.toString()));
             }
         }
     }
@@ -926,31 +923,9 @@ class DDataMapBuilder {
             domElement.appendChild(doc.createTextNode(sql.toString()));
             where.forEach(domElement::appendChild);
         }
-
-        if (order != null)
-            addOrder(order, mappedTables.stream()
-                    .filter(MappedTable::useInFieldsList)
-                    .collect(Collectors.toList()), domElement);
-
-        filters.stream().filter(f -> f.option == DDataFilterOption.LIMIT).findAny().ifPresent(limit -> {
-            String limitParameter = jdbcTypeParameterFor(limit.parameter, limit.variableType);
-
-            org.w3c.dom.Element limitElt = (org.w3c.dom.Element)
-                    domElement.appendChild(doc.createElement("if"));
-            limitElt.setAttribute("test", limit.parameter + " != null");
-            limitElt.appendChild(doc.createTextNode("LIMIT " + limitParameter + "\n"));
-            filters.stream().filter(f -> f.option == DDataFilterOption.START).findAny().ifPresent(offset -> {
-                String offsetParameter = jdbcTypeParameterFor(offset.parameter, offset.variableType);
-
-                org.w3c.dom.Element offsetElt = (org.w3c.dom.Element)
-                        limitElt.appendChild(doc.createElement("if"));
-                offsetElt.setAttribute("test", offset.parameter + " != null && " + offset.parameter + " != 0");
-                offsetElt.appendChild(doc.createTextNode("OFFSET " + offsetParameter + "\n"));
-            });
-        });
     }
 
-    private void addOrder(VariableElement order, List<MappedTable> tablesInSelect, org.w3c.dom.Element dynSql) {
+    private void addOrder(VariableElement order, org.w3c.dom.Element dynSql) {
         org.w3c.dom.Element ifElt = (org.w3c.dom.Element)
                 dynSql.appendChild(dynSql.getOwnerDocument().createElement("if"));
         ifElt.setAttribute("test", order.getSimpleName() + " != null");
@@ -962,6 +937,15 @@ class DDataMapBuilder {
         forElt.setAttribute("collection", order.getSimpleName() + ".order");
         forElt.setAttribute("separator", ", ");
         forElt.appendChild(dynSql.getOwnerDocument().createTextNode("${item.attribute.columnName} ${item.order}"));
+    }
+
+    private void addRowBounds(DDataMethodBuilder.DDataMethodParameter rbParameter, org.w3c.dom.Element dynSql) {
+        org.w3c.dom.Element ifElt = (org.w3c.dom.Element)
+                dynSql.appendChild(dynSql.getOwnerDocument().createElement("if"));
+        ifElt.setAttribute("test", rbParameter.name + " != null");
+        ifElt.appendChild(dynSql.getOwnerDocument().createTextNode(
+                "\nOFFSET #{" + rbParameter.name + ".offset,javaType=int,jdbcType=INTEGER}" +
+                        "\nLIMIT #{" + rbParameter.name + ".limit,javaType=int,jdbcType=INTEGER}"));
     }
 
     private void addJoins(Collection<MappedTable> joins, StringBuilder sql, DataRepositoryBuilder repository) {
