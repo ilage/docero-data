@@ -354,10 +354,20 @@ public class DDataTest {
         assertNotNull(bean.getInner());
         assertNotEquals(bean.getInner().getDateFrom(), dateModifyInnerRecord);
 
+        l = iVSample.listAt(2, dateModifyInnerRecord.minusDays(1));
+        assertNotNull(l);
+        assertEquals(1, l.size());
+        assertNotEquals(l.get(0).getInner().getDateFrom(), dateModifyInnerRecord);
+
         bean = iVSample.get(2, dateModifyInnerRecord);
         assertNotNull(bean);
         assertNotNull(bean.getInner());
         assertEquals(bean.getInner().getDateFrom(), dateModifyInnerRecord);
+
+        l = iVSample.listAt(2, dateModifyInnerRecord);
+        assertNotNull(l);
+        assertEquals(1, l.size());
+        assertEquals(l.get(0).getInner().getDateFrom(), dateModifyInnerRecord);
     }
 
 
@@ -421,25 +431,25 @@ public class DDataTest {
 
         List<Sample> sl;
         sl = iSampleRepository.list(null, null, null, null, null,
-                DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID), new RowBounds(0,10));
+                DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID), new RowBounds(0, 10));
         assertEquals(2, sl.size());
 
-        sl = iSampleRepository.list(null, null, null, null, 1002, new RowBounds(0,10));
+        sl = iSampleRepository.list(null, null, null, null, 1002, new RowBounds(0, 10));
         assertEquals(0, sl.size());
 
         sl = iSampleRepository.list(null, 1001, null, null, null, null);
         assertEquals(1, sl.size());
 
-        sl = iSampleRepository.list(null, null, null, "i1", null, new RowBounds(0,10));
+        sl = iSampleRepository.list(null, null, null, "i1", null, new RowBounds(0, 10));
         assertEquals(1, sl.size());
 
-        sl = iSampleRepository.list("s1", null, null, null, null, new RowBounds(0,10));
+        sl = iSampleRepository.list("s1", null, null, null, null, new RowBounds(0, 10));
         assertEquals(1, sl.size());
 
-        sl = iSampleRepository.list(null, null, "i2", null, null, new RowBounds(0,10));
+        sl = iSampleRepository.list(null, null, "i2", null, null, new RowBounds(0, 10));
         assertEquals(1, sl.size());
 
-        sl = iSampleRepository.list("s2", null, "i2", null, null, new RowBounds(0,10));
+        sl = iSampleRepository.list("s2", null, "i2", null, null, new RowBounds(0, 10));
         assertEquals(0, sl.size());
 
 
@@ -447,7 +457,7 @@ public class DDataTest {
         sample.setStrParameter("a");
         sample.setId(3);
         sample.setInner(iInnerRepository.get(1002));
-        sample.setHash(new byte[]{0,1,0,1,0});
+        sample.setHash(new byte[]{0, 1, 0, 1, 0});
         iSampleRepository.insert(sample);
 
         sl = iSampleRepository.list(null, null, null, null, 1002, null);

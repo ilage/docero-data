@@ -14,4 +14,12 @@ public interface VersionalSampleRepository extends DDataVersionalRepository<Hist
             @VersionalSampleRepository_Filter_(
                     HistSample_.ID
             ) int id);
+
+    List<HistSample> listAt(
+            @VersionalSampleRepository_Filter_(
+                    HistSample_.ID
+            ) int i,
+            @VersionalSampleRepository_Filter_(
+                    HistSample_.VERSION_
+            ) LocalDateTime atTime);
 }

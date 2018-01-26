@@ -16,10 +16,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.docero.data.processor.DDataMethodBuilder.MType.DELETE;
 import static org.docero.data.processor.DDataMethodBuilder.MType.GET;
+import static org.docero.data.processor.DDataMethodBuilder.MType.SELECT;
 
 class DDataMethodBuilder {
     final List<? extends TypeVariable> typeVariables;
@@ -242,12 +244,15 @@ class DDataMethodBuilder {
             } else {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
+                boolean hasVersionFilter = false;
                 for (DDataMethodParameter parameter : parameters) {
                     DDataMapBuilder.FilterOption filter = filters.stream()
                             .filter(f -> f.parameter != null && f.parameter.equals(parameter.name))
                             .findAny().orElse(null);
                     String parameterFunc = parameter.name;
                     if (filter != null) {
+                        if ("VERSION_".equals(filter.enumName)) hasVersionFilter = true;
+
                         switch (filter.option) {
                             case LIKE:
                                 parameterFunc = "org.docero.data.utils.DDataLike.in(" + parameter.name + ")";
@@ -270,6 +275,13 @@ class DDataMethodBuilder {
                         }
                     }
                     cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
+                }
+
+                if(repositoryBuilder.versionalType!=null && !hasVersionFilter && methodType==SELECT) {
+                    Optional<DataBeanPropertyBuilder> versionProp = bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny();
+                    cf.println("this.put(\"" + versionProp.get().name + "\", " +
+                            DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
+                            ");");
                 }
                 cf.endBlock("}}");
                 cf.endBlock();

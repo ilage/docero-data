@@ -38,7 +38,7 @@ abstract class MapElement {
             org.w3c.dom.Element id = (org.w3c.dom.Element)
                     map.appendChild(map.getOwnerDocument().createElement("result"));
             id.setAttribute("property", "dDataBeanActualAt_");
-            id.setAttribute("column", "t0_dDataBeanActualAt_");
+            id.setAttribute("column", "dDataBeanActualAt_");
             id.setAttribute("javaType", useVersionalProperty.toString());
         }
         for (MapElement association : mappedElements)

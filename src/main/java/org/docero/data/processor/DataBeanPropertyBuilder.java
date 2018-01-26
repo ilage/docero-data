@@ -212,6 +212,16 @@ class DataBeanPropertyBuilder {
                             environment.getTypeUtils().erasure(this.type)
                     ) + ".class,\"" + this.jdbcType + "\", false, false, " +
                     this.isCollection + "," + this.isId + "),");
+
+            if(this.isVersionFrom)
+                cf.println("VERSION_(\"" +
+                        this.columnName + "\",\"" +
+                        this.name + "\"," +
+                        (this.type.getKind().isPrimitive() ?
+                                environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
+                                environment.getTypeUtils().erasure(this.type)
+                        ) + ".class,\"" + this.jdbcType + "\", false, false, " +
+                        this.isCollection + "," + this.isId + "),");
         }
     }
 

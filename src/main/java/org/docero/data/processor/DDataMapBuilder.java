@@ -407,14 +407,19 @@ class DDataMapBuilder {
                     sql.append("\nSELECT\n");
                     if (bean.versionalType != null) {
                         bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().ifPresent(p -> {
+                            String codedParameter = filters.stream()
+                                    .filter(f->"VERSION_".equals(f.enumName))
+                                    .findAny().map(this::buildSqlParameter)
+                                    .orElse(buildSqlParameter(bean, p));
+
                             sql.append("  ");
                             if (environment.getTypeUtils().directSupertypes(p.type).stream()
                                     .anyMatch(c -> c.toString().equals(builder.temporalType.toString())) ||
                                     environment.getTypeUtils().isSubtype(p.type, builder.oldDateType))
-                                sql.append("CAST(").append(buildSqlParameter(bean, p)).append(" AS TIMESTAMP)");
+                                sql.append("CAST(").append(codedParameter).append(" AS TIMESTAMP)");
                             else
-                                sql.append(buildSqlParameter(bean, p));
-                            sql.append(" AS t0_dDataBeanActualAt_,\n");
+                                sql.append(codedParameter);
+                            sql.append(" AS dDataBeanActualAt_,\n");
                         });
                     }
                     HashMap<String, DataBeanPropertyBuilder> allProperties = new HashMap<>();
@@ -508,7 +513,7 @@ class DDataMapBuilder {
                             addFiltersToSql(domElement, sql, bean, method, mappedTables, filters, order, true);
                     } else {
                         if (method.methodType == DDataMethodBuilder.MType.GET)
-                            addJoins(mappedTables, sql, repository);
+                            addJoins(mappedTables, sql, null);
 
                         StringBuilder ssql;
                         if (method.methodType == DDataMethodBuilder.MType.GET && method.methodIndex == 0) {
@@ -527,7 +532,7 @@ class DDataMapBuilder {
                     domElement.appendChild(doc.createTextNode(sql.toString()));
 
                     StringBuilder psql = new StringBuilder();
-                    addFiltersToSql(domElement, psql, bean, method, mappedTables, filters, order, false);
+                    FilterOption versionParameter = addFiltersToSql(domElement, psql, bean, method, mappedTables, filters, order, false);
                     domElement.appendChild(doc.createTextNode(psql.toString()));
 
                     StringBuilder ssql = new StringBuilder();
@@ -544,7 +549,7 @@ class DDataMapBuilder {
                             .findAny().ifPresent(rbParam -> addRowBounds(rbParam, domElement));
 
                     ssql.append("\n) AS t0\n");
-                    addJoins(mappedTables, ssql, repository);
+                    addJoins(mappedTables, ssql, versionParameter);
                     domElement.appendChild(doc.createTextNode(ssql.toString()));
             }
         }
@@ -719,7 +724,7 @@ class DDataMapBuilder {
         sqli.setAttribute("refid", "get_select");
     }
 
-    private void addFiltersToSql(
+    private FilterOption addFiltersToSql(
             org.w3c.dom.Element domElement,
             StringBuilder sql,
             DataBeanBuilder bean,
@@ -738,6 +743,7 @@ class DDataMapBuilder {
 
         HashMap<String, IfExists> whereExists = new HashMap<>();
         org.w3c.dom.Element e;
+        FilterOption versionParameter = null;
         for (FilterOption filter : filters)
             if (filter.option != null && filter.property != null && filter.mappedBy != null) {
                 Optional<MappedTable> table = mappedTables.stream()
@@ -753,7 +759,23 @@ class DDataMapBuilder {
                 String filterParameter = filter.property.getColumnWriter(
                         jdbcTypeParameterFor(filter.parameter, filter.variableType));
 
-                switch (filter.option) {
+                if ("VERSION_".equals(filter.enumName)) {
+                    DataBeanPropertyBuilder versionToProperty = filter.property.dataBean.properties.values().stream()
+                            .filter(p -> p.isVersionTo).findAny().orElse(null);
+                    e = doc.createElement("if");
+                    e.setAttribute("test", filter.parameter + " != null");
+                    e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                            filter.property.getColumnRef() + " <= " + filterParameter +
+                            (versionToProperty != null ?
+                                    (" AND (t" + tIdx + "." +
+                                            versionToProperty.getColumnRef() + " > " + filterParameter +
+                                            " OR t" + tIdx + "." +
+                                            versionToProperty.getColumnRef() + " IS NULL)\n") :
+                                    ("")
+                            )
+                    ));
+                    versionParameter = filter;
+                } else switch (filter.option) {
                     case EQUALS:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
@@ -907,7 +929,7 @@ class DDataMapBuilder {
             elt.appendChild(ex.element);
             where.add(elt);
         });
-        if (addJoins) addJoins(mappedTables, sql, null);
+        if (addJoins) addJoins(mappedTables, sql, versionParameter);
 
         if (method.methodType == DDataMethodBuilder.MType.SELECT || method.methodType == DDataMethodBuilder.MType.GET) {
             domElement.appendChild(doc.createTextNode(sql.toString()));
@@ -923,6 +945,7 @@ class DDataMapBuilder {
             domElement.appendChild(doc.createTextNode(sql.toString()));
             where.forEach(domElement::appendChild);
         }
+        return versionParameter;
     }
 
     private void addOrder(VariableElement order, org.w3c.dom.Element dynSql) {
@@ -948,7 +971,7 @@ class DDataMapBuilder {
                         "\nLIMIT #{" + rbParameter.name + ".limit,javaType=int,jdbcType=INTEGER}"));
     }
 
-    private void addJoins(Collection<MappedTable> joins, StringBuilder sql, DataRepositoryBuilder repository) {
+    private void addJoins(Collection<MappedTable> joins, StringBuilder sql, FilterOption versionParameter) {
         joins.stream()
                 .filter(MappedTable::useInFieldsListOrFilters)
                 .sorted(Comparator.comparingInt(t -> t.tableIndex))
@@ -982,7 +1005,9 @@ class DDataMapBuilder {
 
                         if (thisVersionFrom != null && leftVersionFrom != null && leftVersionTo != null) {
                             String parameter;
-                            if (environment.getTypeUtils().directSupertypes(thisVersionFrom.type).stream()
+                            if (versionParameter != null)
+                                parameter = buildSqlParameter(versionParameter);
+                            else if (environment.getTypeUtils().directSupertypes(thisVersionFrom.type).stream()
                                     .anyMatch(c -> c.toString().equals(builder.temporalType.toString())) ||
                                     environment.getTypeUtils().isSubtype(thisVersionFrom.type, builder.oldDateType))
                                 parameter = "CAST(" + buildSqlParameter(thisBean, thisVersionFrom) + " AS TIMESTAMP)";
@@ -1027,6 +1052,10 @@ class DDataMapBuilder {
             return beanProperty.getColumnWriter(jdbcTypeParameterFor(beanProperty.name, mappedType));
         } else
             return beanProperty.getColumnWriter(jdbcTypeParameterFor(beanProperty.name, beanProperty.type));
+    }
+
+    private String buildSqlParameter(DDataMapBuilder.FilterOption option) {
+        return option.property.getColumnWriter(jdbcTypeParameterFor(option.parameter, option.property.type));
     }
 
     private String jdbcTypeParameterFor(String parameter, TypeMirror type) {
@@ -1199,9 +1228,8 @@ class DDataMapBuilder {
                         .collect(Collectors.joining(",")));
                 if (mappedBean.versionalType != null &&
                         environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType)) {
-
                     if (thisVersionFrom != null && mappedVersionFrom != null && mappedVersionTo != null) {
-                        columnsMapping.append(',').append(mappedVersionFrom.columnName).append("=").append("t0_dDataBeanActualAt_");
+                        columnsMapping.append(',').append(mappedVersionFrom.columnName).append("=").append("dDataBeanActualAt_");
                     }
                 }
                 managed.setAttribute("column", "{" + columnsMapping + "}");
@@ -1325,6 +1353,7 @@ class DDataMapBuilder {
         final String parameter;
         final DataBeanPropertyBuilder mappedBy;
         final TypeMirror variableType;
+        final String enumName;
 
         FilterOption(DataRepositoryBuilder repository, VariableElement variableElement) {
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName.toString());
@@ -1341,16 +1370,22 @@ class DDataMapBuilder {
                         environment.getElementUtils().getElementValuesWithDefaults(filterMirror);
                 //System.out.println("filterMapped: " + filterProps);
 
-                String value = filterProps.keySet().stream()
+                String key = filterProps.keySet().stream()
                         .filter(k -> "value".equals(k.getSimpleName().toString()))
                         .findAny()
                         .map(k -> filterProps.get(k).getValue().toString())
                         .orElse(null);
-                DataBeanPropertyBuilder localProperty = value == null ? null :
-                        bean.properties.values().stream()
-                                .filter(p -> p.enumName.equals(value))
-                                .findAny()
-                                .orElse(null);
+
+                DataBeanPropertyBuilder localProperty = key == null ? null : (
+                        "VERSION_".equals(key) ?
+                                bean.properties.values().stream()
+                                        .filter(p -> p.isVersionFrom)
+                                        .findAny()
+                                        .orElse(null) :
+                                bean.properties.values().stream()
+                                        .filter(p -> p.enumName.equals(key))
+                                        .findAny()
+                                        .orElse(null));
 
                 DataBeanPropertyBuilder mapped = null;
                 DataBeanPropertyBuilder mappedByProperty = null;
@@ -1372,6 +1407,7 @@ class DDataMapBuilder {
                     }
                 }
 
+                enumName = key;
                 property = mapped != null ? mapped : localProperty;
                 mappedBy = mapped != null ? mappedByProperty : localProperty;
                 option = filterProps.keySet().stream()
@@ -1385,6 +1421,7 @@ class DDataMapBuilder {
                 option = null;
                 property = null;
                 mappedBy = null;
+                enumName = null;
             }
         }
     }
