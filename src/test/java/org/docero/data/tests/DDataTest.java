@@ -1,6 +1,7 @@
 package org.docero.data.tests;
 
 import org.apache.ibatis.session.RowBounds;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.docero.data.*;
 import org.docero.data.beans.*;
 import org.docero.data.repositories.CompositeKeyRepository;
@@ -12,6 +13,7 @@ import org.docero.data.utils.DDataException;
 import org.docero.data.view.DDataFilter;
 import org.docero.data.view.DDataFilterOperator;
 import org.docero.data.view.DDataView;
+import org.docero.data.view.DDataViewBuilder;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -31,6 +33,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.*;
 import static org.junit.Assert.assertNotNull;
@@ -45,7 +48,9 @@ import static org.junit.Assert.assertNotNull;
 public class DDataTest {
     private static final Logger LOG = LoggerFactory.getLogger(DDataTest.class);
     @Autowired
-    DataSource dataSource;
+    private DataSource dataSource;
+    @Autowired
+    private SqlSessionFactory sqlSessionFactory;
     @Autowired
     private SampleRepository iSampleRepository;
     @Autowired
@@ -179,7 +184,8 @@ public class DDataTest {
     public void viewTest() throws SQLException, DDataException {
         setUp();
 
-        DDataView view = new DDataView(Sample_WB_.class, new ArrayList<DDataFilter>() {{
+        DDataViewBuilder viewBuilder = new DDataViewBuilder(sqlSessionFactory);
+        DDataView view = viewBuilder.build(Sample_WB_.class, new ArrayList<DDataFilter>() {{
             add(new DDataFilter(Sample_WB_.ID));
             add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             DDataFilter iCols = new DDataFilter(Sample_WB_.INNER);
@@ -198,9 +204,11 @@ public class DDataTest {
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
             }});
         }});
-        checkDDataView(view, 2);
+        assertEquals(2, view.select(0, 100).size());
+        assertEquals(2, view.count());
 
-        view = new DDataView(new ArrayList<Class<? extends DDataAttribute>>() {{
+        //DataViewBuilder viewBuilder = new DataViewBuilder(sqlSessionFactory);
+        view = viewBuilder.build(new ArrayList<Class<? extends DDataAttribute>>() {{
             add(ItemSample_WB_.class);
             add(ItemInner_WB_.class);
             add(ItemItemSample_WB_.class);
@@ -210,6 +218,9 @@ public class DDataTest {
             add(new DDataFilter(ItemSample_WB_.SM_ID));
             DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
             iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
+            iCols.add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
+                this.add(new DDataFilter(Inner_WB_.TEXT));
+            }});
             add(iCols);
             iCols = new DDataFilter(ItemInner_WB_.INNER);
             iCols.add(new DDataFilter(Inner_WB_.TEXT));
@@ -235,10 +246,22 @@ public class DDataTest {
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
             }});
         }});
-        checkDDataView(view, 3);
+        Map<Object, Object> viewResult = view.select(0, 100);
+        assertEquals(3, viewResult.size());
+        Map<Object, Object> map = null;
+        //noinspection unchecked
+        assertNotNull(map = (Map<Object, Object>) viewResult.get(3));
+        //noinspection unchecked
+        assertNotNull(map = (Map<Object, Object>) map.get("sample"));
+        //noinspection unchecked
+        assertNotNull(map = (Map<Object, Object>) map.get("listParameter"));
+        //noinspection unchecked
+        assertNotNull(map.get("text"));
+        assertEquals(2, ((List) map.get("text")).size());
+        assertEquals(3, view.count());
     }
 
-    private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
+    /*private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
         try (Connection conn = dataSource.getConnection()) {
             try (Statement st = conn.createStatement()) {
                 long c = 0;
@@ -256,7 +279,7 @@ public class DDataTest {
                 rs0.close();
             }
         }
-    }
+    }*/
 
     @Test
     @Transactional

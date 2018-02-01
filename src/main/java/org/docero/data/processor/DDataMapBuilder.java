@@ -145,6 +145,11 @@ class DDataMapBuilder {
                 cf.println("@org.springframework.context.annotation.Configuration");
                 cf.startBlock("public class DDataConfiguration {");
 
+                cf.println("@org.springframework.context.annotation.Bean");
+                cf.startBlock("public org.docero.data.view.DDataViewBuilder dataViewBuilder(org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory) {");
+                cf.println("return new org.docero.data.view.DDataViewBuilder(sqlSessionFactory);");
+                cf.endBlock("}");
+
                 for (DataRepositoryBuilder repository : builder.repositories) {
                     cf.println("@org.springframework.context.annotation.Bean");
                     cf.startBlock("public " + repository.daoClassName + " " + repository.repositoryVariableName +
@@ -171,6 +176,7 @@ class DDataMapBuilder {
                 cf.println("@org.springframework.context.annotation.Bean");
                 cf.startBlock("public org.docero.data.DDataResources dDataResources(org.springframework.context.ApplicationContext context) {");
                 cf.println("org.docero.data.DDataResources r = new org.docero.data.DDataResources();");
+                cf.println("r.add(context.getResource(\"classpath:/org/docero/data/simple_maps.xml\"));");
                 for (DataRepositoryBuilder repository : builder.repositories)
                     cf.println("r.add(context.getResource(\"classpath:" +
                             repository.mappingClassName.replaceAll("\\.", "/") +
@@ -408,7 +414,7 @@ class DDataMapBuilder {
                     if (bean.versionalType != null) {
                         bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().ifPresent(p -> {
                             String codedParameter = filters.stream()
-                                    .filter(f->"VERSION_".equals(f.enumName))
+                                    .filter(f -> "VERSION_".equals(f.enumName))
                                     .findAny().map(this::buildSqlParameter)
                                     .orElse(buildSqlParameter(bean, p));
 

@@ -2,15 +2,13 @@ package org.docero.data.view;
 
 import org.apache.ibatis.jdbc.SQL;
 import org.docero.data.utils.DDataAttribute;
+import org.docero.data.utils.DDataException;
 import org.docero.data.utils.DDataTypes;
 
 import java.lang.reflect.Field;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.Temporal;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -18,18 +16,64 @@ import java.util.stream.Collectors;
 abstract class AbstractDataView {
     private static final String PROP_PATCH_DELIMITER = ".";
     private final AtomicInteger tablesCounter = new AtomicInteger(0);
+    private final HashMap<DDataAttribute, CollectionColumn> subSelectsForColumns = new HashMap<>();
 
     abstract Temporal version();
 
+    private String rootTable;
+    private Class rootClass;
+    private String keyType;
+    private final HashMap<String, JoinedTable> usedCols = new HashMap();
+
+    SQL buildFrom(Class root) throws DDataException {
+        try {
+            rootTable = (String) root.getDeclaredField("TABLE_NAME").get(null);
+            rootClass = root;
+            usedCols.clear();
+            usedCols.put("", new JoinedTable(0, 0, null));
+            return new SQL() {{
+                FROM(rootTable + " as t0");
+            }};
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            throw new DDataException("select view not from *_WB_ enum: " + root.getCanonicalName());
+        }
+    }
+
+    String getKeySQL() {
+        ArrayList<DDataAttribute> beanKeys = new ArrayList<>();
+        String versionColumn = "";
+        try {
+            DDataAttribute versionAttribute = (DDataAttribute)
+                    rootClass.getDeclaredField("VERSION_FROM").get(null);
+            if (versionAttribute != null)
+                versionColumn = versionAttribute.getColumnName();
+        } catch (IllegalAccessException | NoSuchFieldException ignore) {
+        }
+        for (Field field : rootClass.getDeclaredFields())
+            if (field.isEnumConstant()) {
+                DDataAttribute a = (DDataAttribute) Enum.valueOf(rootClass, field.getName());
+                if (a.isPrimaryKey() && !versionColumn.equals(a.getColumnName())) beanKeys.add(a);
+            }
+        if(beanKeys.size()==1) {
+            keyType = beanKeys.get(0).getJdbcType();
+            return "t0.\"" + beanKeys.get(0).getColumnName() + "\"";
+        } else {
+            keyType = "VARCHAR";
+            return "concat(" + beanKeys.stream()
+                    .map(a -> "CAST(t0.\"" + a.getColumnName() + "\" TO VARCHAR)")
+                    .collect(Collectors.joining(",\":\",")) + ")";
+        }
+    }
+
     void addColumnToViewSql(
-            SQL sql, HashMap<String, Integer> usedCols, Class clazz,
+            SQL sql, Class clazz,
             DDataFilter column, String path, String uniqPath, int fromTableIndex
     ) {
         DDataAttribute attribute = null;
         for (Field field : clazz.getDeclaredFields())
             if (field.isEnumConstant()) {
                 DDataAttribute a = (DDataAttribute) Enum.valueOf(clazz, field.getName());
-                if (a.getPropertyName().equals(column.getName())) {
+                if (a.getPropertyName() != null && a.getPropertyName().equals(column.getName())) {
                     attribute = a;
                     break;
                 }
@@ -42,32 +86,49 @@ abstract class AbstractDataView {
                     attribute.getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
 
             if (attribute.isMappedBean()) {
-                Integer tableIndex = usedCols.get(uniqKey);
-                if (tableIndex == null) {
-                    tableIndex = tablesCounter.incrementAndGet();
-                    int finalN = tableIndex;
-                    String joinSql = attribute.joinTable() + " t" + finalN + " ON (" +
-                            attribute.joinMapping().entrySet().stream()
-                                    .map(m -> "t" + fromTableIndex + "." + m.getKey() +
-                                            "=t" + finalN + "." + m.getValue())
-                                    .collect(Collectors.joining(" AND "));
-                    String verSql = versionAndTypeConstraint(attribute.getJavaType(), finalN);
-                    sql.LEFT_OUTER_JOIN(joinSql + (verSql.length() > 0 ? " AND " + verSql : "") + ")");
-                    usedCols.put(uniqKey, tableIndex);
+                JoinedTable table = usedCols.get(uniqKey);
+                if (table == null) {
+                    table = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), attribute);
+                    sql.LEFT_OUTER_JOIN(table.joinSql);
+                    usedCols.put(uniqKey, table);
                 }
 
-                if (attribute.getJavaType().isEnum() && !attribute.isCollection() && column.hasFilters()) {
-
-                    for (DDataFilter col : column.getFilters()) {
-                        addColumnToViewSql(sql, usedCols, attribute.getJavaType(), col,
-                                pathAttributeKey, uniqKey, tableIndex);
+                if (attribute.getJavaType().isEnum() && column.hasFilters()) {
+                    if (!attribute.isCollection())
+                        for (DDataFilter col : column.getFilters()) {
+                            addColumnToViewSql(sql, attribute.getJavaType(), col,
+                                    pathAttributeKey, uniqKey, table.tableIndex);
+                        }
+                    else {
+                        subSelectsForColumns.put(attribute, new CollectionColumn(
+                                table, column.getFilters(), pathAttributeKey, uniqKey, attribute.getJavaType()));
                     }
-
                 }
             } else {
                 sql.SELECT("t" + fromTableIndex + "." + attribute.getColumnName() + " AS \"" + pathAttributeName + "\"");
             }
         }
+    }
+
+    List<SQL> getSubSelects() {
+        ArrayList<SQL> subSelects = new ArrayList();
+        for (CollectionColumn column : subSelectsForColumns.values()) {
+            SQL sql = new SQL();
+            sql.FROM(rootTable + " as t0");
+            addJoinForSubSelects(sql, column.table);
+            sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
+            for (DDataFilter col : column.filters)
+                addColumnToViewSql(sql, column.clazz, col, column.path, column.uniqPath, column.table.tableIndex);
+            subSelects.add(sql);
+        }
+        return subSelects;
+    }
+
+    private void addJoinForSubSelects(SQL csql, JoinedTable table) {
+        if (table.fromTableIndex != 0)
+            usedCols.values().stream().filter(t -> table.fromTableIndex == t.tableIndex).findAny()
+                    .ifPresent(t -> addJoinForSubSelects(csql, t));
+        csql.LEFT_OUTER_JOIN(table.joinSql);
     }
 
     /**
@@ -91,21 +152,14 @@ abstract class AbstractDataView {
         return false;
     }
 
-    void addFilterSql(SQL sql, DDataFilter rootFilter, Class rootClass, Map<String, Integer> usedCols, String path, final int fromTableIndex) {
+    void addFilterSql(SQL sql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex) {
         if (rootFilter == null) return;
 
-        Integer tableIndex = usedCols.get(path);
-        if (tableIndex == null) {
-            tableIndex = tablesCounter.incrementAndGet();
-            final int finalN = tableIndex;
-            String joinSql = rootFilter.getAttribute().joinTable() + " t" + tableIndex + " ON (" +
-                    rootFilter.getAttribute().joinMapping().entrySet().stream()
-                            .map(m -> "t" + fromTableIndex + "." + m.getKey() +
-                                    "=t" + finalN + "." + m.getValue())
-                            .collect(Collectors.joining(" AND "));
-            String verSql = versionAndTypeConstraint(rootFilter.getAttribute().getJavaType(), tableIndex);
-            sql.LEFT_OUTER_JOIN(joinSql + (verSql.length() > 0 ? " AND " + verSql : "") + ")");
-            usedCols.put(path, tableIndex);
+        JoinedTable table = usedCols.get(path);
+        if (table == null) {
+            table = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), rootFilter.getAttribute());
+            sql.LEFT_OUTER_JOIN(table.joinSql);
+            usedCols.put(path, table);
         }
 
         List<DDataFilter> appliedFilters = rootFilter.getFilters() == null ? Collections.emptyList() :
@@ -116,7 +170,7 @@ abstract class AbstractDataView {
         for (DDataFilter filter : appliedFilters) {
             if (!filter.getAttribute().isCollection()) {
                 if (filter.getOperator() != null && !filter.hasFilters()) {
-                    String columnReference = "t" + tableIndex + ".\"" +
+                    String columnReference = "t" + table.tableIndex + ".\"" +
                             filter.getAttribute().getColumnName() + "\" ";
                     String columnType = filter.getAttribute().getJdbcType();
                     String condition;
@@ -152,14 +206,14 @@ abstract class AbstractDataView {
                     Class innerClass = filter.getAttribute().getJavaType();
                     String key = path + filter.getAttribute().getPropertyName() + ":" +
                             innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
-                    addFilterSql(sql, filter, innerClass, usedCols, key, tableIndex);
+                    addFilterSql(sql, filter, innerClass, key, table.tableIndex);
                 }
             } else { // we can't use two separate filters by same table
                 Class innerClass = filter.getAttribute().getJavaType();
                 String key = path + filter.getAttribute().getPropertyName() + ":" +
                         innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                 int finalN = tablesCounter.incrementAndGet();
-                usedCols.put(key, finalN);
+                usedCols.put(key, new JoinedTable(fromTableIndex, finalN, filter.getAttribute()));
                 sql.WHERE("EXISTS(" + new SQL() {{
                     SELECT("*");
                     FROM(filter.getAttribute().joinTable() + " t" + finalN);
@@ -167,8 +221,8 @@ abstract class AbstractDataView {
                             .map(m -> "t" + fromTableIndex + "." + m.getKey() + "=t" + finalN + "." + m.getValue())
                             .collect(Collectors.joining(" AND ")));
                     String verSql = versionAndTypeConstraint(filter.getAttribute().getJavaType(), finalN);
-                    if(verSql.length()>0) WHERE(verSql);
-                    addFilterSql(this, filter, innerClass, usedCols, key, finalN);
+                    if (verSql.length() > 0) WHERE(verSql);
+                    addFilterSql(this, filter, innerClass, key, finalN);
                 }}.toString() + ")");
             }
         }
@@ -211,5 +265,46 @@ abstract class AbstractDataView {
                             discriminantValue);
 
         return sql;
+    }
+
+    public String getKeyType() {
+        return keyType;
+    }
+
+    private class JoinedTable {
+        private final int fromTableIndex;
+        private final int tableIndex;
+        private final String joinSql;
+
+        private JoinedTable(int fromTableIndex, int tableIndex, DDataAttribute attribute) {
+            this.fromTableIndex = fromTableIndex;
+            this.tableIndex = tableIndex;
+            if (attribute != null) {
+                String joinSql = attribute.joinTable() + " t" + tableIndex + " ON (" +
+                        attribute.joinMapping().entrySet().stream()
+                                .map(m -> "t" + fromTableIndex + "." + m.getKey() +
+                                        "=t" + tableIndex + "." + m.getValue())
+                                .collect(Collectors.joining(" AND "));
+                String verSql = versionAndTypeConstraint(attribute.getJavaType(), tableIndex);
+                this.joinSql = joinSql + (verSql.length() > 0 ? " AND " + verSql : "") + ")";
+            } else
+                this.joinSql = null;
+        }
+    }
+
+    private class CollectionColumn {
+        private final JoinedTable table;
+        private final List<DDataFilter> filters;
+        private final String path;
+        private final String uniqPath;
+        private final Class clazz;
+
+        private CollectionColumn(JoinedTable table, List<DDataFilter> filters, String path, String uniqPath, Class javaType) {
+            this.table = table;
+            this.filters = filters;
+            this.path = path;
+            this.uniqPath = uniqPath;
+            this.clazz = javaType;
+        }
     }
 }
