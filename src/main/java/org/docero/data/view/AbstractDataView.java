@@ -4,6 +4,8 @@ import org.apache.ibatis.jdbc.SQL;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
 import org.docero.data.utils.DDataTypes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Field;
 import java.time.format.DateTimeFormatter;
@@ -14,6 +16,7 @@ import java.util.stream.Collectors;
 
 @SuppressWarnings("unchecked")
 abstract class AbstractDataView {
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractDataView.class);
     private static final String PROP_PATCH_DELIMITER = ".";
     private final AtomicInteger tablesCounter = new AtomicInteger(0);
     private final HashMap<DDataAttribute, CollectionColumn> subSelectsForColumns = new HashMap<>();
@@ -54,7 +57,7 @@ abstract class AbstractDataView {
                 DDataAttribute a = (DDataAttribute) Enum.valueOf(rootClass, field.getName());
                 if (a.isPrimaryKey() && !versionColumn.equals(a.getColumnName())) beanKeys.add(a);
             }
-        if(beanKeys.size()==1) {
+        if (beanKeys.size() == 1) {
             keyType = beanKeys.get(0).getJdbcType();
             return "t0.\"" + beanKeys.get(0).getColumnName() + "\"";
         } else {
@@ -80,9 +83,10 @@ abstract class AbstractDataView {
             }
 
         if (attribute != null && attribute.getColumnName() != null) {
-            String pathAttributeName = path + attribute.getPropertyName();
+            String pathAttributeName = path + (column.mapToName() == null ?
+                    attribute.getPropertyName() : column.mapToName());
             String pathAttributeKey = pathAttributeName + PROP_PATCH_DELIMITER;
-            String uniqKey = uniqPath + attribute.getPropertyName() + ":" +
+            String uniqKey = uniqPath + attribute.getPropertyName() + ":" + column.mapToName() + ":" +
                     attribute.getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
 
             if (attribute.isMappedBean()) {
@@ -104,6 +108,8 @@ abstract class AbstractDataView {
                                 table, column.getFilters(), pathAttributeKey, uniqKey, attribute.getJavaType()));
                     }
                 }
+            } else if (column.getOperator() != null) {
+                addFilterSql(sql, column, clazz, uniqPath, fromTableIndex);
             } else {
                 sql.SELECT("t" + fromTableIndex + "." + attribute.getColumnName() + " AS \"" + pathAttributeName + "\"");
             }
@@ -162,7 +168,8 @@ abstract class AbstractDataView {
             usedCols.put(path, table);
         }
 
-        List<DDataFilter> appliedFilters = rootFilter.getFilters() == null ? Collections.emptyList() :
+        List<DDataFilter> appliedFilters = rootFilter.getFilters() == null ?
+                Collections.singletonList(rootFilter) :
                 rootFilter.getFilters().stream()
                         .filter(f -> isApplicable(rootClass, f))
                         .collect(Collectors.toList());
@@ -204,13 +211,13 @@ abstract class AbstractDataView {
                     }
                 } else if (filter.hasFilters()) {
                     Class innerClass = filter.getAttribute().getJavaType();
-                    String key = path + filter.getAttribute().getPropertyName() + ":" +
+                    String key = path + filter.getAttribute().getPropertyName() + ":" + filter.mapToName() + ":" +
                             innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                     addFilterSql(sql, filter, innerClass, key, table.tableIndex);
                 }
             } else { // we can't use two separate filters by same table
                 Class innerClass = filter.getAttribute().getJavaType();
-                String key = path + filter.getAttribute().getPropertyName() + ":" +
+                String key = path + filter.getAttribute().getPropertyName() + ":" + filter.mapToName() + ":" +
                         innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                 int finalN = tablesCounter.incrementAndGet();
                 usedCols.put(key, new JoinedTable(fromTableIndex, finalN, filter.getAttribute()));

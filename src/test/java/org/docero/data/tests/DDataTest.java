@@ -219,7 +219,8 @@ public class DDataTest {
             DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
             iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             iCols.add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
-                this.add(new DDataFilter(Inner_WB_.TEXT));
+                this.add(new DDataFilter(Inner_WB_.TEXT, "myNameForProperty"));
+                this.add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 5555));
             }});
             add(iCols);
             iCols = new DDataFilter(ItemInner_WB_.INNER);
@@ -252,12 +253,13 @@ public class DDataTest {
         //noinspection unchecked
         assertNotNull(map = (Map<Object, Object>) viewResult.get(3));
         //noinspection unchecked
-        assertNotNull(map = (Map<Object, Object>) map.get("sample"));
+        assertNotNull(map = (Map<Object, Object>) map.get(ItemSample_WB_.SAMPLE.getPropertyName()));
         //noinspection unchecked
-        assertNotNull(map = (Map<Object, Object>) map.get("listParameter"));
+        assertNotNull(map = (Map<Object, Object>) map.get(Sample_WB_.LIST_PARAMETER.getPropertyName()));
         //noinspection unchecked
-        assertNotNull(map.get("text"));
-        assertEquals(2, ((List) map.get("text")).size());
+        assertNull(map.get(Inner_WB_.TEXT.getPropertyName()));
+        assertNotNull(map.get("myNameForProperty"));
+        assertEquals(2, ((List) map.get("myNameForProperty")).size());
         assertEquals(3, view.count());
     }
 
