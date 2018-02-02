@@ -216,13 +216,19 @@ public class DDataTest {
             add(new DDataFilter(ItemSample_WB_.ID));
             add(new DDataFilter(ItemSample_WB_.ELEM_TYPE));
             add(new DDataFilter(ItemSample_WB_.SM_ID));
+
             DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
             iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             iCols.add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
                 this.add(new DDataFilter(Inner_WB_.TEXT, "myNameForProperty"));
+                this.add(new DDataFilter(Inner_WB_.ID, "myIdProperty"));
                 this.add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 5555));
             }});
+            iCols.add(new DDataFilter(Sample_WB_.LIST_PARAMETER, "listParameterEx") {{
+                this.add(new DDataFilter(Inner_WB_.TEXT, "!"));
+            }});
             add(iCols);
+
             iCols = new DDataFilter(ItemInner_WB_.INNER);
             iCols.add(new DDataFilter(Inner_WB_.TEXT));
             add(iCols);
@@ -249,17 +255,24 @@ public class DDataTest {
         }});
         Map<Object, Object> viewResult = view.select(0, 100);
         assertEquals(3, viewResult.size());
-        Map<Object, Object> map = null;
+        Map<Object, Object> map;
         //noinspection unchecked
         assertNotNull(map = (Map<Object, Object>) viewResult.get(3));
         //noinspection unchecked
         assertNotNull(map = (Map<Object, Object>) map.get(ItemSample_WB_.SAMPLE.getPropertyName()));
         //noinspection unchecked
-        assertNotNull(map = (Map<Object, Object>) map.get(Sample_WB_.LIST_PARAMETER.getPropertyName()));
+        List<Object> list;
+        //noinspection unchecked
+        assertNotNull(list = (List<Object>) map.get("listParameterEx"));
+        assertEquals(2, list.size());
+        //noinspection unchecked
+        assertNotNull(list = (List<Object>) map.get(Sample_WB_.LIST_PARAMETER.getPropertyName()));
+        assertEquals(2, list.size());
+        //noinspection unchecked
+        assertNotNull(map = (Map<Object, Object>) list.get(0));
         //noinspection unchecked
         assertNull(map.get(Inner_WB_.TEXT.getPropertyName()));
         assertNotNull(map.get("myNameForProperty"));
-        assertEquals(2, ((List) map.get("myNameForProperty")).size());
         assertEquals(3, view.count());
     }
 

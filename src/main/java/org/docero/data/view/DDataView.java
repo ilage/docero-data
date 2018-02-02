@@ -81,35 +81,36 @@ public class DDataView extends AbstractDataView {
             //if(LOG.isDebugEnabled()) LOG.debug("Total: "+subResult.size());
             for (Map<Object, Object> row : subResult) {
                 Object key = row.get("dDataBeanKey_");
-                mergeResultMaps(resultMap.get(key), row);
+                mergeResultMaps(key, resultMap, row);
             }
         }
         return resultMap;
     }
 
     @SuppressWarnings("unchecked")
-    private void mergeResultMaps(Object to, Object from) {
-        if (from == null || to == null) return;
-        if (!(from instanceof Map && to instanceof Map)) return;
-        Map<Object, Object> target = (Map<Object, Object>) to;
-        Map<Object, Object> source = (Map<Object, Object>) from;
-        for (Object key : source.keySet()) {
-            Object trgVal = target.get(key);
-            Object srcVal = source.get(key);
-            if (trgVal != null && srcVal != null) {
-                if (trgVal instanceof Map) {
-                    mergeResultMaps(trgVal, srcVal);
-                } else {
-                    if (trgVal instanceof List)
-                        ((List) trgVal).add(srcVal);
-                    else if (!(srcVal instanceof List)) {
-                        ArrayList<Object> newListValue = new ArrayList<>();
-                        newListValue.add(trgVal);
-                        newListValue.add(srcVal);
-                        target.put(key, newListValue);
-                    }
+    private void mergeResultMaps(Object to_key, Map<Object, Object> to, Object leaf) {
+        if (leaf == null || to_key == null) return;
+        if(leaf instanceof Map && ((Map) leaf).containsKey("!")) {
+            leaf = ((Map) leaf).get("!");
+        }
+        final Object finalLeaf = leaf;
+        Object val = to.get(to_key);
+        if (val == null) {
+            to.put(to_key, new ArrayList<Object>() {{
+                this.add(finalLeaf);
+            }});
+        } else if (val instanceof List) {
+            ((List) val).add(finalLeaf);
+        } else if (val instanceof Map && finalLeaf instanceof Map) {
+            for (Object vk : ((Map) finalLeaf).keySet())
+                if (!"dDataBeanKey_".equals(vk)) {
+                    mergeResultMaps(vk, (Map<Object, Object>) val, ((Map) finalLeaf).get(vk));
                 }
-            } else target.put(key, srcVal);
+        } else {
+            to.put(to_key, new ArrayList<Object>() {{
+                this.add(val);
+                this.add(finalLeaf);
+            }});
         }
     }
 

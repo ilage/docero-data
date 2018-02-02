@@ -19,7 +19,7 @@ abstract class AbstractDataView {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractDataView.class);
     private static final String PROP_PATCH_DELIMITER = ".";
     private final AtomicInteger tablesCounter = new AtomicInteger(0);
-    private final HashMap<DDataAttribute, CollectionColumn> subSelectsForColumns = new HashMap<>();
+    private final List<CollectionColumn> subSelectsForColumns = new ArrayList<>();
 
     abstract Temporal version();
 
@@ -104,7 +104,7 @@ abstract class AbstractDataView {
                                     pathAttributeKey, uniqKey, table.tableIndex);
                         }
                     else {
-                        subSelectsForColumns.put(attribute, new CollectionColumn(
+                        subSelectsForColumns.add(new CollectionColumn(
                                 table, column.getFilters(), pathAttributeKey, uniqKey, attribute.getJavaType()));
                     }
                 }
@@ -118,7 +118,7 @@ abstract class AbstractDataView {
 
     List<SQL> getSubSelects() {
         ArrayList<SQL> subSelects = new ArrayList();
-        for (CollectionColumn column : subSelectsForColumns.values()) {
+        for (CollectionColumn column : subSelectsForColumns) {
             SQL sql = new SQL();
             sql.FROM(rootTable + " as t0");
             addJoinForSubSelects(sql, column.table);
