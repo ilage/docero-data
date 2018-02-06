@@ -68,20 +68,22 @@ public class DDataView extends AbstractDataView {
                 Collections.singletonMap("sqlStatement", sql.toString()), "dDataBeanKey_",
                 new RowBounds(offset, limit));
         //if(LOG.isDebugEnabled()) LOG.debug("Total: "+resultMap.size());
-        String in_condition = keySql + " IN (" + resultMap.keySet().stream()
-                .map(k -> DDataTypes.maskedValue(getKeyType(), k.toString()))
-                .collect(Collectors.joining(",")) +
-                ")";
-        for (SQL subSelect : getSubSelects()) {
-            subSelect.WHERE(in_condition);
-            //if(LOG.isDebugEnabled()) LOG.debug("Preparing: "+subSelect.toString());
-            List<Map<Object, Object>> subResult = sqlSession.selectList(
-                    "org.docero.data.selectView",
-                    Collections.singletonMap("sqlStatement", subSelect.toString()));
-            //if(LOG.isDebugEnabled()) LOG.debug("Total: "+subResult.size());
-            for (Map<Object, Object> row : subResult) {
-                Object key = row.get("dDataBeanKey_");
-                mergeResultMaps(key, resultMap, row);
+        if (resultMap.size() > 0) {
+            String in_condition = keySql + " IN (" + resultMap.keySet().stream()
+                    .map(k -> DDataTypes.maskedValue(getKeyType(), k.toString()))
+                    .collect(Collectors.joining(",")) +
+                    ")";
+            for (SQL subSelect : getSubSelects()) {
+                subSelect.WHERE(in_condition);
+                //if(LOG.isDebugEnabled()) LOG.debug("Preparing: "+subSelect.toString());
+                List<Map<Object, Object>> subResult = sqlSession.selectList(
+                        "org.docero.data.selectView",
+                        Collections.singletonMap("sqlStatement", subSelect.toString()));
+                //if(LOG.isDebugEnabled()) LOG.debug("Total: "+subResult.size());
+                for (Map<Object, Object> row : subResult) {
+                    Object key = row.get("dDataBeanKey_");
+                    mergeResultMaps(key, resultMap, row);
+                }
             }
         }
         return resultMap;
@@ -90,7 +92,7 @@ public class DDataView extends AbstractDataView {
     @SuppressWarnings("unchecked")
     private void mergeResultMaps(Object to_key, Map<Object, Object> to, Object leaf) {
         if (leaf == null || to_key == null) return;
-        if(leaf instanceof Map && ((Map) leaf).containsKey("!")) {
+        if (leaf instanceof Map && ((Map) leaf).containsKey("!")) {
             leaf = ((Map) leaf).get("!");
         }
         final Object finalLeaf = leaf;
