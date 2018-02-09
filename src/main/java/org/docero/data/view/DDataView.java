@@ -1,7 +1,6 @@
 package org.docero.data.view;
 
 import org.apache.ibatis.jdbc.SQL;
-import org.apache.ibatis.session.RowBounds;
 import org.apache.ibatis.session.SqlSession;
 import org.docero.data.utils.DDataException;
 import org.docero.data.utils.DDataTypes;
@@ -61,12 +60,12 @@ public class DDataView extends AbstractDataView {
                     break;
                 }
         buildFilters(sql);
+        String limitedSql = addBounds(sql.toString(), offset, limit);
 
         //if(LOG.isDebugEnabled()) LOG.debug("Preparing: "+sql.toString());
         Map<Object, Object> resultMap = sqlSession.selectMap(
                 "org.docero.data.selectView",
-                Collections.singletonMap("sqlStatement", sql.toString()), "dDataBeanKey_",
-                new RowBounds(offset, limit));
+                Collections.singletonMap("sqlStatement", limitedSql), "dDataBeanKey_");
         //if(LOG.isDebugEnabled()) LOG.debug("Total: "+resultMap.size());
         if (resultMap.size() > 0) {
             String in_condition = keySql + " IN (" + resultMap.keySet().stream()
@@ -87,6 +86,16 @@ public class DDataView extends AbstractDataView {
             }
         }
         return resultMap;
+    }
+
+    private String addBounds(String s, int offset, int limit) {
+        String limits = (offset > 0 ? " OFFSET " + offset : "") +
+                (limit > 0 ? " LIMIT " + limit : "");
+        if (s.endsWith(";")) {
+            return s.substring(0, s.length() - 1) + limits + ";";
+        } else {
+            return s + limits;
+        }
     }
 
     @SuppressWarnings("unchecked")
