@@ -93,17 +93,17 @@ abstract class AbstractDataView {
                 JoinedTable table = usedCols.get(uniqKey);
                 if (table == null) {
                     table = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), attribute);
-                    sql.LEFT_OUTER_JOIN(table.joinSql);
                     usedCols.put(uniqKey, table);
                 }
 
                 if (attribute.getJavaType().isEnum() && column.hasFilters()) {
-                    if (!attribute.isCollection())
+                    if (!attribute.isCollection()) {
+                        sql.LEFT_OUTER_JOIN(table.joinSql);
                         for (DDataFilter col : column.getFilters()) {
                             addColumnToViewSql(sql, attribute.getJavaType(), col,
                                     pathAttributeKey, uniqKey, table.tableIndex);
                         }
-                    else {
+                    } else {
                         subSelectsForColumns.add(new CollectionColumn(
                                 table, column.getFilters(), pathAttributeKey, uniqKey, attribute.getJavaType()));
                     }
