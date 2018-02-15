@@ -70,6 +70,7 @@ public class DDataFilter {
             return null;
         }
     };
+    private Boolean sortAscending;
 
     /**
      * Find attribute for property name in given attribute
@@ -261,5 +262,13 @@ public class DDataFilter {
 
     public String mapToName() {
         return mapToName;
+    }
+
+    public Boolean isSortAscending() {
+        return sortAscending;
+    }
+
+    public void setSortAscending(Boolean sortAscending) {
+        this.sortAscending = sortAscending;
     }
 }

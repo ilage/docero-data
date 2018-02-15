@@ -25,6 +25,8 @@ public class DDataView extends AbstractDataView {
         this.sqlSession = sqlSession;
         this.roots = roots;
         this.columns = columns;
+        if (Arrays.stream(columns).noneMatch(c -> c.isSortAscending() != null))
+            columns[0].setSortAscending(true);
         this.version = version;
     }
 

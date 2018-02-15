@@ -111,7 +111,9 @@ abstract class AbstractDataView {
             } else if (column.getOperator() != null) {
                 addFilterSql(sql, column, clazz, uniqPath, fromTableIndex);
             } else {
-                sql.SELECT("t" + fromTableIndex + "." + attribute.getColumnName() + " AS \"" + pathAttributeName + "\"");
+                sql.SELECT("t" + fromTableIndex + ".\"" + attribute.getColumnName() + "\" AS \"" + pathAttributeName + "\"");
+                if (column.isSortAscending() != null)
+                    sql.ORDER_BY("t" + fromTableIndex + ".\"" + attribute.getColumnName() + (column.isSortAscending() ? "\" ASC" : " DESC"));
             }
         }
     }
@@ -252,21 +254,21 @@ abstract class AbstractDataView {
         String sql;
         if (versionFrom != null && versionTo != null) {
             if (version() == null) {
-                sql = "t" + toTableIndex + "." + versionTo.getColumnName() + " IS NULL";
+                sql = "t" + toTableIndex + ".\"" + versionTo.getColumnName() + "\" IS NULL";
             } else {
                 String timeSql = "CAST ('" + sqlTimestamp.format(version()) + "' AS TIMESTAMP)";
-                sql = "(t" + toTableIndex + "." +
-                        versionFrom.getColumnName() + " <= " + timeSql +
-                        " AND (t" + toTableIndex + "." + versionTo.getColumnName() +
-                        " > " + timeSql + " OR " +
-                        "t" + toTableIndex + "." + versionTo.getColumnName() + " IS NULL))";
+                sql = "(t" + toTableIndex + ".\"" +
+                        versionFrom.getColumnName() + "\" <= " + timeSql +
+                        " AND (t" + toTableIndex + ".\"" + versionTo.getColumnName() +
+                        "\" > " + timeSql + " OR " +
+                        "t" + toTableIndex + ".\"" + versionTo.getColumnName() + "\" IS NULL))";
             }
         } else
             sql = "";
 
         if (discriminant != null)
             sql = sql + (sql.length() > 0 ? " AND " : "") + "t" +
-                    toTableIndex + "." + discriminant.getColumnName() + "=" +
+                    toTableIndex + ".\"" + discriminant.getColumnName() + "\"=" +
                     (String.class.isInstance(discriminant.getJavaType()) ?
                             "'" + discriminantValue + "'" :
                             discriminantValue);
