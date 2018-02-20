@@ -119,29 +119,8 @@ public class DDataProcessor extends AbstractProcessor {
                         mapping = new Mapping(annotationMirror, bean);
                         if (!mapping.mappedProperties.isEmpty())
                             builder.mappings.put(mappingKey, mapping);
-
-                        /*System.out.println(annotationMirror.getAnnotationType() + " tail:");
-                        System.out.println(mappingKey + "\n   " +
-                                beanElement.asType().toString() + "." + mapping.property.name +
-                                (mapping.manyToOne ? " <- " : " -> ") +
-                                mapping.mappedProperty.dataBean.interfaceType + "." +
-                                mapping.mappedProperty.name);*/
                         break;
                     }
-
-                if (mapping == null && method.getReturnType() != null) {
-                    DataBeanBuilder mappedBean = builder.beansByInterface
-                            .get(builder.environment.getTypeUtils().erasure(
-                                    method.getReturnType()
-                            ).toString());
-                    if (mappedBean != null) {
-                        // надо ли это?
-                        DataBeanPropertyBuilder property = propertyName4Method(bean, method);
-                        mapping = new Mapping(property, mappedBean);
-                        if (!mapping.mappedProperties.isEmpty())
-                            builder.mappings.put(mappingKey, mapping);
-                    }
-                }
             }
         }
     }
