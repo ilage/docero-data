@@ -269,7 +269,7 @@ abstract class AbstractDataView {
         if (discriminant != null)
             sql = sql + (sql.length() > 0 ? " AND " : "") + "t" +
                     toTableIndex + ".\"" + discriminant.getColumnName() + "\"=" +
-                    (String.class.isInstance(discriminant.getJavaType()) ?
+                    (String.class.isAssignableFrom(discriminant.getJavaType()) ?
                             "'" + discriminantValue + "'" :
                             discriminantValue);
 

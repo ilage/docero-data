@@ -1325,10 +1325,19 @@ class DDataMapBuilder {
     ) {
         DataBeanBuilder mapped2Bean = builder.beansByInterface.get(mappedBean.mappedType.toString());
         if (mapped2Bean != null) {
-            MappedTable mapped2Table = new MappedTable(mappedTable.tableIndex, mappedTables.size() + 1,
-                    mappedBean, mapped2Bean, fetchOptions, filters);
+            int nextIndex = mappedTables.size() + 1;
+            MappedTable mapped2Table = mappedTables.stream()
+                    // fetchOptions & filters equals in call hierarchy
+                    .filter(mt -> mappedTable.tableIndex == mt.mappedFromTableIndex
+                            && mt.mappedBean == mapped2Bean && mt.property == mappedBean)
+                    .findAny()
+                    .orElse(new MappedTable(
+                            mappedTable.tableIndex, nextIndex,
+                            mappedBean, mapped2Bean, fetchOptions, filters)
+                    );
+
             if (mapped2Table.notSingleSmallDictionaryValue()) {
-                mappedTables.add(mapped2Table);
+                if (mapped2Table.tableIndex == nextIndex) mappedTables.add(mapped2Table);
 
                 addManagedBeanToResultMap(doc, managed, mapped2Table, fetchOptions, repository, mappedTables,
                         trunkLevel, filters, false);
