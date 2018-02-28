@@ -139,6 +139,11 @@ class DataBeanPropertyBuilder {
     }
 
     void buildProperty(JavaClassWriter cf) throws IOException {
+        DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
+        if (mappedBean != null) {
+                cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
+                        mappedBean.getImplementationName() + ".class)");
+        }
         cf.println("private " + type.toString() + " " + name + ";");
     }
 
@@ -213,7 +218,7 @@ class DataBeanPropertyBuilder {
                     ) + ".class,\"" + this.jdbcType + "\", false, false, " +
                     this.isCollection + "," + this.isId + "),");
 
-            if(this.isVersionFrom)
+            if (this.isVersionFrom)
                 cf.println("VERSION_(\"" +
                         this.columnName + "\",\"" +
                         this.name + "\"," +

@@ -26,8 +26,11 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
+import javax.xml.bind.*;
 
 import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -563,5 +566,51 @@ public class DDataTest {
         iInnerRepository.insert(ni);
 
         assertNotNull(iInnerRepository.get(1010));
+    }
+
+    @Test
+    @Transactional
+    public void TestJAXB() throws SQLException, IOException, JAXBException {
+        setUp();
+
+        Sample smpl = iSampleRepository.get(1);
+        assertNotNull(smpl);
+        Inner inr = smpl.getInner();
+        assertNotNull(inr);
+
+        JAXBContext ctx = JAXBContext.newInstance(
+                Sample.class.getPackage().getName()
+        );
+        Unmarshaller unmarshaller = ctx.createUnmarshaller();
+        Marshaller marshaller = ctx.createMarshaller();
+        marshaller.setProperty(javax.xml.bind.Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
+        marshaller.setProperty(javax.xml.bind.Marshaller.JAXB_FRAGMENT, Boolean.TRUE);
+        StringWriter sw = new StringWriter();
+
+        final String TEST_FOR_TEXT = "ttttttttt";
+        smpl.setListParameter(new ArrayList<InnerImpl>() {{
+            this.add(new InnerImpl() {{
+                this.setId(10000);
+                this.setText(TEST_FOR_TEXT);
+            }});
+            this.add(new InnerImpl() {{
+                this.setId(10001);
+                this.setText(TEST_FOR_TEXT);
+            }});
+        }});
+
+        marshaller.marshal(smpl, sw);
+        Sample deserialized = (Sample) unmarshaller.unmarshal(new StringReader(sw.toString()));
+        assertNotNull(deserialized);
+        //before creating package-info.java with @XmlSchema
+        //XMLElement deserialized = (XMLElement) unmarshaller.unmarshal(new StringReader(sw.toString()));
+        //assertEquals("Sample", deserialized.getName().getLocalPart());
+        //assertTrue(deserialized.getValue() instanceof Sample);
+        //Sample smpl1 = (Sample) deserialized.getValue();
+        assertEquals(smpl, deserialized);
+        assertEquals(inr, deserialized.getInner());
+        assertEquals(TEST_FOR_TEXT, deserialized.getListParameter().get(0).getText());
+        assertEquals(TEST_FOR_TEXT, deserialized.getListParameter().get(1).getText());
+        //System.out.println(sw.toString());
     }
 }

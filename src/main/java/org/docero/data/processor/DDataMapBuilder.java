@@ -22,6 +22,7 @@ import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -215,7 +216,55 @@ class DDataMapBuilder {
             }
         }
 
+        Set<String> setOfJaxbEnabledPackages = builder.beansByInterface.values().stream()
+                .map(b -> b.interfaceType.toString())
+                .map(bi -> bi.substring(0, bi.lastIndexOf('.')))
+                .collect(Collectors.toSet());
+        for (String packageName : setOfJaxbEnabledPackages)
+            buildObjectFactoryForPackage(packageName);
+
         return true;
+    }
+
+    private void buildObjectFactoryForPackage(String packageName) throws IOException {
+        List<DataBeanBuilder> pkgBeans = builder.beansByInterface.values().stream()
+                .filter(b -> b.interfaceType.toString().startsWith(packageName))
+                .collect(Collectors.toList());
+
+        try (JavaClassWriter cf = new JavaClassWriter(environment, packageName + ".ObjectFactory")) {
+            cf.println("package " + packageName + ";");
+            cf.println("");
+            cf.println("import javax.xml.bind.JAXBElement;");
+            cf.println("import javax.xml.bind.annotation.XmlElementDecl;");
+            cf.println("import javax.xml.bind.annotation.XmlRegistry;");
+            cf.println("import javax.xml.namespace.QName;");
+            cf.println("");
+
+            cf.println("@XmlRegistry");
+            cf.startBlock("public class ObjectFactory {");
+            for (DataBeanBuilder bean : pkgBeans) {
+                String shortName = bean.interfaceType.toString();
+                shortName = shortName.substring(shortName.lastIndexOf('.') + 1);
+                String namespace = bean.xmlNamespace == null ? "" : bean.xmlNamespace;
+
+                cf.println("");
+                cf.println("private final static QName _" + shortName +
+                        "_QNAME = new QName(\"" + namespace + "\", \"" + shortName + "\");");
+                cf.println("");
+                cf.startBlock("public " + bean.getImplementationName() + " create" + shortName + "() {");
+                cf.println("return new " + bean.getImplementationName() + "();");
+                cf.endBlock("}");
+                cf.println("");
+                cf.println("@XmlElementDecl(namespace = \"\", name = \"" + shortName + "\")");
+                cf.startBlock("public JAXBElement<" + bean.getImplementationName() + "> create" + shortName +
+                        " (" + bean.getImplementationName() + " value) {");
+                cf.println("return new JAXBElement<>(_" + shortName + "_QNAME, " +
+                        bean.getImplementationName() + ".class, null, value);");
+                cf.endBlock("}");
+            }
+
+            cf.endBlock("}");
+        }
     }
 
     private DDataMethodBuilder findMethodBuilder(ExecutableElement methodElement, DataRepositoryBuilder repository) {
