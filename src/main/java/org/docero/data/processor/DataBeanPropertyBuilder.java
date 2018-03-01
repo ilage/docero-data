@@ -141,10 +141,26 @@ class DataBeanPropertyBuilder {
     void buildProperty(JavaClassWriter cf) throws IOException {
         DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
         if (mappedBean != null) {
-                cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
-                        mappedBean.getImplementationName() + ".class)");
-        }
+            cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
+                    mappedBean.getImplementationName() + ".class)");
+        } else printKnownXmlAdapters(cf, type);
+
         cf.println("private " + type.toString() + " " + name + ";");
+    }
+
+    static void printKnownXmlAdapters(JavaClassWriter cf, TypeMirror type) throws IOException {
+        if ("java.time.LocalDate".equals(type.toString()))
+            cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.time.LocalDate.class, " +
+                    "value = org.docero.data.utils.LocalDateAdapter.class)");
+        else if ("java.time.LocalTime".equals(type.toString()))
+            cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.time.LocalTime.class, " +
+                    "value = org.docero.data.utils.LocalTimeAdapter.class)");
+        else if ("java.time.LocalDateTime".equals(type.toString()))
+            cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.time.LocalDateTime.class, " +
+                    "value = org.docero.data.utils.LocalDateTimeAdapter.class)");
+        else if ("java.time.OffsetDateTime".equals(type.toString()))
+            cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.time.OffsetDateTime.class, " +
+                    "value = org.docero.data.utils.OffsetDateTimeAdapter.class)");
     }
 
     void buildGetter(JavaClassWriter cf) throws IOException {

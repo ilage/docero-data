@@ -612,5 +612,16 @@ public class DDataTest {
         assertEquals(TEST_FOR_TEXT, deserialized.getListParameter().get(0).getText());
         assertEquals(TEST_FOR_TEXT, deserialized.getListParameter().get(1).getText());
         //System.out.println(sw.toString());
+
+        HistSample hs = iVSample.get(1);
+        assertNotNull(hs);
+        HistInner hi = hs.getInner();
+        assertNotNull(hi);
+
+        sw = new StringWriter();
+        marshaller.marshal(hs, sw);
+        HistSample hs_d = (HistSample) unmarshaller.unmarshal(new StringReader(sw.toString()));
+        assertNotNull(hs_d);
+        assertEquals(hi.getDateFrom(), hs_d.getInner().getDateFrom());
     }
 }

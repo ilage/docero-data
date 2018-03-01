@@ -256,6 +256,7 @@ class DataBeanBuilder {
                         cf.endBlock("}");
                     }
                     cf.println("");
+                    DataBeanPropertyBuilder.printKnownXmlAdapters(cf,versionalType);
                     cf.println("private " + versionalType + " dDataBeanActualAt_;");
                     cf.println("");
                     cf.println("public " + versionalType + " getDDataBeanActualAt_() {return dDataBeanActualAt_;}");
