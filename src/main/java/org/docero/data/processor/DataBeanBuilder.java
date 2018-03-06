@@ -224,9 +224,8 @@ class DataBeanBuilder {
                 cf.println("@com.fasterxml.jackson.annotation.JsonIgnoreProperties({\"handler\",\"ddataBeanKey_\"})");
             cf.startBlock("public class " +
                     className.substring(simpNameDel + 1)
-                    + " extends org.docero.data.AbstractBean"
-                    + " implements " + interfaceType + ", java.lang.Comparable<" +
-                    interfaceType + "> {");
+                    + " extends org.docero.data.AbstractBean<" +
+                    interfaceType + "> implements " + interfaceType + " {");
 
             for (DataBeanPropertyBuilder property : properties.values()) {
                 property.buildProperty(cf);
@@ -256,7 +255,7 @@ class DataBeanBuilder {
                         cf.endBlock("}");
                     }
                     cf.println("");
-                    DataBeanPropertyBuilder.printKnownXmlAdapters(cf,versionalType);
+                    DataBeanPropertyBuilder.printKnownXmlAdapters(cf, versionalType);
                     cf.println("private " + versionalType + " dDataBeanActualAt_;");
                     cf.println("");
                     cf.println("public " + versionalType + " getDDataBeanActualAt_() {return dDataBeanActualAt_;}");
@@ -307,23 +306,43 @@ class DataBeanBuilder {
             boolean notFirst = false;
             for (DataBeanPropertyBuilder property : properties.values())
                 if (!(property.isId || property.isVersionFrom)) {
-                    String getter = "get" +
-                            Character.toUpperCase(property.name.charAt(0)) +
-                            property.name.substring(1);
-                    if (notFirst) {
-                        cf.println("if(r != 0) return r;");
-                        cf.println("else r = compare(this." +
-                                getter + "(), o." + getter + "());");
-                    } else {
-                        cf.println("int r = compare(this." +
-                                getter + "(), o." + getter + "());");
-                        notFirst = true;
-                    }
+                    notFirst = printCompareBlock(cf, property, notFirst);
                 }
             cf.println(notFirst ? "return r;" : "return 0;");
             cf.endBlock("}");
+
+            cf.println("");
+            cf.startBlock("public int compareSimpleTypes(" + interfaceType + " o) {");
+            cf.println("if (o == null) throw new NullPointerException();");
+            notFirst = false;
+            for (DataBeanPropertyBuilder property : properties.values())
+                if (!(property.isId || property.isVersionFrom) &&
+                        rootBuilder.beansByInterface.get(property.mappedType.toString()) == null
+                        ) {
+                    notFirst = printCompareBlock(cf, property, notFirst);
+                }
+            cf.println(notFirst ? "return r;" : "return 0;");
+            cf.endBlock("}");
+
             cf.endBlock("}");
         }
+    }
+
+    private boolean printCompareBlock(
+            JavaClassWriter cf, DataBeanPropertyBuilder property, boolean notFirst
+    ) throws IOException {
+        String getter = "get" +
+                Character.toUpperCase(property.name.charAt(0)) +
+                property.name.substring(1);
+        if (notFirst) {
+            cf.println("if(r != 0) return r;");
+            cf.println("else r = compare(this." +
+                    getter + "(), o." + getter + "());");
+        } else {
+            cf.println("int r = compare(this." +
+                    getter + "(), o." + getter + "());");
+        }
+        return true;
     }
 
     void buildDataReferenceEnum(
