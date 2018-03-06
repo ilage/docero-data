@@ -202,18 +202,18 @@ class DataBeanPropertyBuilder {
             Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
             if (mapping != null) mapping.stream()
                     .forEach(m -> {
-                        try {
-                            String setter = "this.set" +
-                                    Character.toUpperCase(m.property.name.charAt(0)) + m.property.name.substring(1);
-                            String getter = name + ".get" +
-                                    Character.toUpperCase(m.mappedProperty.name.charAt(0)) +
-                                    m.mappedProperty.name.substring(1);
-                            cf.println((m.property.isVersionFrom ? "//" : "") +
-                                    setter + "(" + name + " == null ? " +
-                                    (m.property.type.getKind().isPrimitive() ? "0" : "null") +
-                                    " : " + getter + "());");
-                        } catch (IOException ignore) {
-                        }
+                        if (!(m.property.isVersionFrom || m.property.isId))
+                            try {
+                                String setter = "this.set" +
+                                        Character.toUpperCase(m.property.name.charAt(0)) + m.property.name.substring(1);
+                                String getter = name + ".get" +
+                                        Character.toUpperCase(m.mappedProperty.name.charAt(0)) +
+                                        m.mappedProperty.name.substring(1);
+                                cf.println(setter + "(" + name + " == null ? " +
+                                        (m.property.type.getKind().isPrimitive() ? "0" : "null") +
+                                        " : " + getter + "());");
+                            } catch (IOException ignore) {
+                            }
                     });
         }
         cf.endBlock("}");
