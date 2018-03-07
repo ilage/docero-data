@@ -25,7 +25,7 @@ public class DDataView extends AbstractDataView {
         this.sqlSession = sqlSession;
         this.roots = roots;
         this.columns = columns;
-        if (Arrays.stream(columns).noneMatch(c -> c.isSortAscending() != null))
+        if (columns.length > 0 && Arrays.stream(columns).noneMatch(c -> c.isSortAscending() != null))
             columns[0].setSortAscending(true);
         this.version = version;
     }
@@ -88,6 +88,37 @@ public class DDataView extends AbstractDataView {
             }
         }
         return resultMap;
+    }
+
+    @SuppressWarnings("unchecked")
+    public int[] aggregateInt(DDataFilterOperator operator) throws DDataException {
+        SQL agSql = new SQL();
+        agSql.SELECT("'group' as \"dDataBeanKey_\"");
+        SQL sql = buildFrom(roots[0]);
+        String keySql = getKeySQL();
+        sql.SELECT(keySql + " as \"dDataBeanKey_\"");
+        for (DDataFilter column : columns)
+            for (Class root : roots)
+                if (super.isApplicable(root, column)) {
+                    super.addColumnToViewSql(sql, root, column, "", "", 0);
+                    String pathName = column.mapToName() != null ? column.mapToName() : column.getName();
+                    agSql.SELECT(operator + "(t.\"" + pathName + "\") AS \"" + pathName + "\"");
+                    break;
+                }
+        buildFilters(sql);
+        sql.GROUP_BY(keySql);
+        agSql.FROM("(" + sql.toString() + ") AS t");
+        Map<Object, Object> result = sqlSession.selectMap(
+                "org.docero.data.selectView",
+                Collections.singletonMap("sqlStatement", agSql.toString()), "dDataBeanKey_");
+        Map<Object, Object> row = (Map<Object, Object>) result.get("group");
+        if (row == null) return new int[0];
+        int[] ret = new int[row.size() - 1];
+        for (int i = 0; i < columns.length; i++) {
+            Object ro = row.get(columns[i].mapToName() != null ? columns[i].mapToName() : columns[i].getName());
+            if (ro instanceof Number) ret[i] = ((Number) ro).intValue();
+        }
+        return ret;
     }
 
     private String addBounds(String s, int offset, int limit) {

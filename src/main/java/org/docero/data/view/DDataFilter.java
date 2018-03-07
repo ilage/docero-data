@@ -146,6 +146,17 @@ public class DDataFilter {
     }
 
     /**
+     * Create element in filters patch (tree branch) for aggregating view column
+     *
+     * @param column attribute of mapped bean or collection of beans
+     * @param mapToName string to use as property name if object map
+     * @throws DDataException if DDataAttribute is null or NONE_
+     */
+    public DDataFilter(DDataAttribute column, String mapToName, DDataFilterOperator operator) throws DDataException {
+        this(column, operator, null, null, mapToName);
+    }
+
+    /**
      * Create concrete filter (tree leaf) for value
      *
      * @param column   attribute to filter

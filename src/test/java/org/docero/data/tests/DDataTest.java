@@ -277,6 +277,14 @@ public class DDataTest {
         assertNull(map.get(Inner_WB_.TEXT.getPropertyName()));
         assertNotNull(map.get("myNameForProperty"));
         assertEquals(3, view.count());
+
+        view = viewBuilder.build(Sample_WB_.class, new ArrayList<DDataFilter>() {{
+            add(new DDataFilter(Sample_WB_.LIST_PARAMETER, "list1", DDataFilterOperator.COUNT));
+        }});
+        int[] maxCount = view.aggregateInt(DDataFilterOperator.MAX);
+        assertNotNull(maxCount);
+        assertEquals(1, maxCount.length);
+        assertEquals(2, maxCount[0]);
     }
 
     /*private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
