@@ -59,6 +59,13 @@ public class TestsConfig {
             TransactionFactory transactionManager
     ) throws IOException {
         SqlSessionFactoryBean bean = new SqlSessionFactoryBean();
+        bean.setConfiguration(new org.apache.ibatis.session.Configuration() {{
+            this.setLazyLoadingEnabled(true);
+            this.setAggressiveLazyLoading(false);
+            this.setMultipleResultSetsEnabled(true);
+            this.getLazyLoadTriggerMethods().clear();
+            //this.getLazyLoadTriggerMethods().add("toString");
+        }});
         bean.setDataSource(dataSource);
         bean.setMapperLocations(dDataResources.asArray());
         bean.setTransactionFactory(transactionManager);

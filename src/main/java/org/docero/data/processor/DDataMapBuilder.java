@@ -378,6 +378,26 @@ class DDataMapBuilder {
                     select.setAttribute("resultMap", fetchOptions.resultMap);
                     userMappingFiles.add(fetchOptions.resultMap.substring(0, fetchOptions.resultMap.lastIndexOf('.')));
                 }
+
+                if (bean.versionalType != null) {
+                    StringBuilder sql = new StringBuilder();
+                    bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().ifPresent(p -> {
+                        String codedParameter = filters.stream()
+                                .filter(f -> "VERSION_".equals(f.enumName))
+                                .findAny().map(this::buildSqlParameter)
+                                .orElse(buildSqlParameter(bean, p));
+
+                        sql.append("\nWITH tt AS (SELECT ");
+                        if (environment.getTypeUtils().directSupertypes(p.type).stream()
+                                .anyMatch(c -> c.toString().equals(builder.temporalType.toString())) ||
+                                environment.getTypeUtils().isSubtype(p.type, builder.oldDateType))
+                            sql.append("CAST(").append(codedParameter).append(" AS TIMESTAMP)");
+                        else
+                            sql.append(codedParameter);
+                        sql.append(" AS t)");
+                    });
+                    select.appendChild(doc.createTextNode(sql.toString()));
+                }
                 buildSql(repository, method, bean, fetchOptions, mappedTables, select, filters, order);
                 break;
             case INSERT:
@@ -460,23 +480,8 @@ class DDataMapBuilder {
                 case SELECT:
                 case GET:
                     sql.append("\nSELECT\n");
-                    if (bean.versionalType != null) {
-                        bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().ifPresent(p -> {
-                            String codedParameter = filters.stream()
-                                    .filter(f -> "VERSION_".equals(f.enumName))
-                                    .findAny().map(this::buildSqlParameter)
-                                    .orElse(buildSqlParameter(bean, p));
+                    if (bean.versionalType != null) sql.append("  tt.t AS dDataBeanActualAt_,\n");
 
-                            sql.append("  ");
-                            if (environment.getTypeUtils().directSupertypes(p.type).stream()
-                                    .anyMatch(c -> c.toString().equals(builder.temporalType.toString())) ||
-                                    environment.getTypeUtils().isSubtype(p.type, builder.oldDateType))
-                                sql.append("CAST(").append(codedParameter).append(" AS TIMESTAMP)");
-                            else
-                                sql.append(codedParameter);
-                            sql.append(" AS dDataBeanActualAt_,\n");
-                        });
-                    }
                     HashMap<String, DataBeanPropertyBuilder> allProperties = new HashMap<>();
                     allProperties.putAll(bean.properties);
                     if (repository.discriminator != null) {
@@ -552,6 +557,7 @@ class DDataMapBuilder {
                     break;
                 case GET:
                     sql.append("\nFROM ").append(bean.getTableRef()).append(" AS t0\n");
+                    if (bean.versionalType != null) sql.append("CROSS JOIN tt\n");
                 case UPDATE:
                 case DELETE:
                     if (filters != null && filters.size() > 0) {
@@ -584,6 +590,8 @@ class DDataMapBuilder {
                     break;
                 default: //LIST
                     sql.append("\nFROM (SELECT * FROM ").append(bean.getTableRef()).append(" AS t0\n");
+                    if (bean.versionalType != null) sql.append("CROSS JOIN tt\n");
+
                     domElement.appendChild(doc.createTextNode(sql.toString()));
 
                     StringBuilder psql = new StringBuilder();
@@ -604,6 +612,7 @@ class DDataMapBuilder {
                             .findAny().ifPresent(rbParam -> addRowBounds(rbParam, domElement));
 
                     ssql.append("\n) AS t0\n");
+                    if (bean.versionalType != null) ssql.append("CROSS JOIN tt\n");
                     addJoins(mappedTables, ssql, versionParameter);
                     domElement.appendChild(doc.createTextNode(ssql.toString()));
             }
@@ -1062,12 +1071,8 @@ class DDataMapBuilder {
                             String parameter;
                             if (versionParameter != null)
                                 parameter = buildSqlParameter(versionParameter);
-                            else if (environment.getTypeUtils().directSupertypes(thisVersionFrom.type).stream()
-                                    .anyMatch(c -> c.toString().equals(builder.temporalType.toString())) ||
-                                    environment.getTypeUtils().isSubtype(thisVersionFrom.type, builder.oldDateType))
-                                parameter = "CAST(" + buildSqlParameter(thisBean, thisVersionFrom) + " AS TIMESTAMP)";
                             else
-                                parameter = buildSqlParameter(thisBean, thisVersionFrom);
+                                parameter = "tt.t";
                             sql
                                     .append("\n   AND t").append(join.tableIndex).append('.')
                                     .append(leftVersionFrom.columnName).append(" <= ").append(parameter)
@@ -1283,8 +1288,8 @@ class DDataMapBuilder {
                         .collect(Collectors.joining(",")));
                 if (mappedBean.versionalType != null &&
                         environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType)) {
-                    if (thisVersionFrom != null && mappedVersionFrom != null && mappedVersionTo != null) {
-                        columnsMapping.append(',').append(mappedVersionFrom.columnName).append("=").append("dDataBeanActualAt_");
+                    if (thisVersionFrom != null && mappedVersionFrom != null) {
+                        columnsMapping.append(',').append(mappedVersionFrom.name).append("=").append("dDataBeanActualAt_");
                     }
                 }
                 managed.setAttribute("column", "{" + columnsMapping + "}");
@@ -1303,6 +1308,13 @@ class DDataMapBuilder {
                     ll.setAttribute("id", lazyLoadSelectId);
                     ll.setAttribute("resultMap", repository == beanRep ?
                             "get_ResultMap" : beanRep.mappingClassName + ".get_ResultMap");
+
+                    if (mappedBean.versionalType != null) ll.appendChild(doc.createTextNode(
+                            thisVersionFrom != null && mappedVersionFrom != null ?
+                                    ("\nWITH tt AS (SELECT CAST(#{" + mappedVersionFrom.name + "} AS TIMESTAMP) AS t)\n") :
+                                    "\nWITH tt AS (SELECT NULL AS t)\n"
+                    ));
+
                     org.w3c.dom.Element il = (org.w3c.dom.Element)
                             ll.appendChild(doc.createElement("include"));
                     il.setAttribute("refid", repository == beanRep ?
@@ -1320,10 +1332,9 @@ class DDataMapBuilder {
                     if (mappedBean.versionalType != null &&
                             environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType))
                         if (thisVersionFrom != null && mappedVersionFrom != null && mappedVersionTo != null) {
-                            String parameter = "#{" + mappedVersionFrom.columnName + "}";
-                            sql.append("   AND t0.\"").append(mappedVersionFrom.columnName).append("\" <= ").append(parameter)
+                            sql.append("   AND t0.\"").append(mappedVersionFrom.columnName).append("\" <= tt.t")
                                     .append("\n   AND (t0.\"")
-                                    .append(mappedVersionTo.columnName).append("\" > ").append(parameter)
+                                    .append(mappedVersionTo.columnName).append("\" > tt.t")
                                     .append(" OR t0.\"")
                                     .append(mappedVersionTo.columnName).append("\" IS NULL)\n");
                         }
