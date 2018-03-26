@@ -1,9 +1,9 @@
 package org.docero.data.view;
 
-import org.apache.ibatis.jdbc.SQL;
 import org.apache.ibatis.session.SqlSession;
 import org.docero.data.utils.DDataException;
 import org.docero.data.utils.DDataTypes;
+import org.docero.data.utils.DSQL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +43,7 @@ public class DDataView extends AbstractDataView {
     }
 
     public long count() throws DDataException {
-        SQL sql = buildFrom(roots[0]);
+        DSQL sql = buildFrom(roots[0]);
         sql.SELECT("COUNT(*)");
         buildFilters(sql);
 
@@ -52,7 +52,7 @@ public class DDataView extends AbstractDataView {
     }
 
     public Map<Object, Object> select(int offset, int limit) throws DDataException {
-        SQL sql = buildFrom(roots[0]);
+        DSQL sql = buildFrom(roots[0]);
         String keySql = getKeySQL();
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
         for (DDataFilter column : columns)
@@ -74,7 +74,7 @@ public class DDataView extends AbstractDataView {
                     .map(k -> DDataTypes.maskedValue(getKeyType(), k.toString()))
                     .collect(Collectors.joining(",")) +
                     ")";
-            for (SQL subSelect : getSubSelects()) {
+            for (DSQL subSelect : getSubSelects()) {
                 subSelect.WHERE(in_condition);
                 //if(LOG.isDebugEnabled()) LOG.debug("Preparing: "+subSelect.toString());
                 List<Map<Object, Object>> subResult = sqlSession.selectList(
@@ -92,9 +92,9 @@ public class DDataView extends AbstractDataView {
 
     @SuppressWarnings("unchecked")
     public int[] aggregateInt(DDataFilterOperator operator) throws DDataException {
-        SQL agSql = new SQL();
+        DSQL agSql = new DSQL();
         agSql.SELECT("'group' as \"dDataBeanKey_\"");
-        SQL sql = buildFrom(roots[0]);
+        DSQL sql = buildFrom(roots[0]);
         String keySql = getKeySQL();
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
         for (DDataFilter column : columns)
@@ -158,15 +158,34 @@ public class DDataView extends AbstractDataView {
         }
     }
 
-    private void buildFilters(SQL sql) throws DDataException {
+    private void buildFilters(DSQL sql) throws DDataException {
+        DDataFilter allTypesFilter = new DDataFilter();
+        allTypesFilter.getFilters().addAll(
+                filter.getFilters().stream().filter(f ->
+                        Arrays.stream(roots).allMatch(r -> isApplicable(r, f))
+                ).collect(Collectors.toList())
+        );
+        DDataFilter someTypesFilter = new DDataFilter();
+        someTypesFilter.getFilters().addAll(
+                filter.getFilters().stream().filter(
+                        f -> !allTypesFilter.getFilters().contains(f)
+                ).collect(Collectors.toList())
+        );
+
+        super.addFilterSql(sql, allTypesFilter, roots[0], "", 0);
+        String vc = versionConstraint(roots[0], 0);
+        if (vc.length() > 0) sql.WHERE(vc);
+
+        DSQL ssql = new DSQL();
         for (int i = 0; i < roots.length; i++) {
-            if (i > 0) sql.OR();
+            if (i > 0) ssql.OR();
 
             Class multiTypeClass = roots[i];
-            String verSql = versionAndTypeConstraint(multiTypeClass, 0);
-            if (verSql.length() > 0) sql.WHERE(verSql);
+            String tc = typeConstraint(multiTypeClass, 0);
+            if (tc.length() > 0) ssql.WHERE(tc);
 
-            super.addFilterSql(sql, filter, multiTypeClass, "", 0);
+            super.addFilterSql(ssql, someTypesFilter, multiTypeClass, "", 0);
         }
+        sql.WHERE(ssql);
     }
 }

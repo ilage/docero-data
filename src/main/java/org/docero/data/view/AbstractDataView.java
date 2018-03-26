@@ -1,6 +1,6 @@
 package org.docero.data.view;
 
-import org.apache.ibatis.jdbc.SQL;
+import org.docero.data.utils.DSQL;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
 import org.docero.data.utils.DDataTypes;
@@ -10,10 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Field;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.Temporal;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -31,13 +28,13 @@ abstract class AbstractDataView {
     private String keyType;
     private final HashMap<String, JoinedTable> usedCols = new HashMap();
 
-    SQL buildFrom(Class root) throws DDataException {
+    DSQL buildFrom(Class root) throws DDataException {
         try {
             rootTable = (String) root.getDeclaredField("TABLE_NAME").get(null);
             rootClass = root;
             usedCols.clear();
             usedCols.put("", new JoinedTable(0, 0, null));
-            return new SQL() {{
+            return new DSQL() {{
                 FROM(rootTable + " as t0");
             }};
         } catch (IllegalAccessException | NoSuchFieldException e) {
@@ -72,7 +69,7 @@ abstract class AbstractDataView {
     }
 
     void addColumnToViewSql(
-            SQL sql, Class clazz,
+            DSQL sql, Class clazz,
             DDataFilter column, String path, String uniqPath, int fromTableIndex
     ) {
         DDataAttribute attribute = null;
@@ -126,10 +123,10 @@ abstract class AbstractDataView {
         }
     }
 
-    List<SQL> getSubSelects() {
-        ArrayList<SQL> subSelects = new ArrayList();
+    List<DSQL> getSubSelects() {
+        ArrayList<DSQL> subSelects = new ArrayList();
         for (CollectionColumn column : subSelectsForColumns) {
-            SQL sql = new SQL();
+            DSQL sql = new DSQL();
             sql.FROM(rootTable + " as t0");
             addJoinForSubSelects(sql, column.table);
             if (column.groupOperator == null && column.filters != null) {
@@ -148,7 +145,7 @@ abstract class AbstractDataView {
         return subSelects;
     }
 
-    private void addJoinForSubSelects(SQL csql, JoinedTable table) {
+    private void addJoinForSubSelects(DSQL csql, JoinedTable table) {
         if (table.fromTableIndex != 0)
             usedCols.values().stream().filter(t -> table.fromTableIndex == t.tableIndex).findAny()
                     .ifPresent(t -> addJoinForSubSelects(csql, t));
@@ -176,7 +173,7 @@ abstract class AbstractDataView {
         return false;
     }
 
-    void addFilterSql(SQL sql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex) {
+    void addFilterSql(DSQL sql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex) {
         if (rootFilter == null) return;
 
         JoinedTable table = usedCols.get(path);
@@ -204,11 +201,28 @@ abstract class AbstractDataView {
                             condition = columnReference + filter.getOperator().toString();
                             break;
                         case 1:
-                            String value = filter.getValue().toString();
-                            if (filter.getOperator() == DDataFilterOperator.LIKE) value = "%" + value + "%";
-                            else if (filter.getOperator() == DDataFilterOperator.NOT_LIKE) value = "%" + value + "%";
-                            else if (filter.getOperator() == DDataFilterOperator.STARTS) value = value + "%";
-                            else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS) value = value + "%";
+                            String value;
+                            if (filter.getOperator() == DDataFilterOperator.IN) {
+                                if (filter.getValue().getClass().isArray()) {
+                                    value = "(" + Arrays.stream((Object[]) filter.getValue())
+                                            .map(Object::toString)
+                                            .map(v -> DDataTypes.maskedValue(columnType, v))
+                                            .collect(Collectors.joining(",")) + ")";
+                                } else if (filter.getValue() instanceof Collection) {
+                                    value = "(" + ((Collection<Object>) filter.getValue()).stream()
+                                            .map(Object::toString)
+                                            .map(v -> DDataTypes.maskedValue(columnType, v))
+                                            .collect(Collectors.joining(",")) + ")";
+                                } else
+                                    value = "(" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + ")";
+                            } else {
+                                value = filter.getValue().toString();
+                                if (filter.getOperator() == DDataFilterOperator.LIKE) value = "%" + value + "%";
+                                else if (filter.getOperator() == DDataFilterOperator.NOT_LIKE)
+                                    value = "%" + value + "%";
+                                else if (filter.getOperator() == DDataFilterOperator.STARTS) value = value + "%";
+                                else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS) value = value + "%";
+                            }
                             condition = columnReference + filter.getOperator().toString() + " " +
                                     DDataTypes.maskedValue(columnType, value);
                             break;
@@ -239,7 +253,7 @@ abstract class AbstractDataView {
                         innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                 int finalN = tablesCounter.incrementAndGet();
                 usedCols.put(key, new JoinedTable(fromTableIndex, finalN, filter.getAttribute()));
-                sql.WHERE("EXISTS(" + new SQL() {{
+                sql.WHERE("EXISTS(" + new DSQL() {{
                     SELECT("*");
                     FROM(filter.getAttribute().joinTable() + " t" + finalN);
                     WHERE(filter.getAttribute().joinMapping().entrySet().stream()
@@ -255,16 +269,12 @@ abstract class AbstractDataView {
 
     private final static DateTimeFormatter sqlTimestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss");
 
-    String versionAndTypeConstraint(Class clazz, int toTableIndex) {
+    String versionConstraint(Class clazz, int toTableIndex) {
         DDataAttribute versionFrom = null;
         DDataAttribute versionTo = null;
-        DDataAttribute discriminant = null;
-        String discriminantValue = null;
         try {
             versionFrom = (DDataAttribute) clazz.getDeclaredField("VERSION_FROM").get(null);
             versionTo = (DDataAttribute) clazz.getDeclaredField("VERSION_TO").get(null);
-            discriminant = (DDataAttribute) clazz.getDeclaredField("DISCR_ATTR").get(null);
-            discriminantValue = (String) clazz.getDeclaredField("DISCR_VAL").get(null);
         } catch (IllegalAccessException | NoSuchFieldException ignore) {
         }
         String sql;
@@ -282,13 +292,31 @@ abstract class AbstractDataView {
         } else
             sql = "";
 
+        return sql;
+    }
+
+    String typeConstraint(Class clazz, int toTableIndex) {
+        DDataAttribute discriminant = null;
+        String discriminantValue = null;
+        try {
+            discriminant = (DDataAttribute) clazz.getDeclaredField("DISCR_ATTR").get(null);
+            discriminantValue = (String) clazz.getDeclaredField("DISCR_VAL").get(null);
+        } catch (IllegalAccessException | NoSuchFieldException ignore) {
+        }
+
         if (discriminant != null)
-            sql = sql + (sql.length() > 0 ? " AND " : "") + "t" +
-                    toTableIndex + ".\"" + discriminant.getColumnName() + "\"=" +
+            return "t" + toTableIndex + ".\"" + discriminant.getColumnName() + "\"=" +
                     (String.class.isAssignableFrom(discriminant.getJavaType()) ?
                             "'" + discriminantValue + "'" :
                             discriminantValue);
+        else
+            return "";
+    }
 
+    private String versionAndTypeConstraint(Class clazz, int toTableIndex) {
+        String sql = versionConstraint(clazz, toTableIndex);
+        String tsql = typeConstraint(clazz, toTableIndex);
+        sql = sql + (sql.length() > 0 && tsql.length() > 0 ? " AND " : "") + tsql;
         return sql;
     }
 

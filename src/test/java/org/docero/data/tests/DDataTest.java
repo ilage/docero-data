@@ -1,5 +1,6 @@
 package org.docero.data.tests;
 
+import org.apache.ibatis.jdbc.SQL;
 import org.apache.ibatis.session.RowBounds;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.docero.data.*;
@@ -10,6 +11,7 @@ import org.docero.data.repositories.SampleRepository;
 import org.docero.data.repositories.VersionalSampleRepository;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
+import org.docero.data.utils.DSQL;
 import org.docero.data.view.DDataFilter;
 import org.docero.data.view.DDataFilterOperator;
 import org.docero.data.view.DDataView;
@@ -180,6 +182,18 @@ public class DDataTest {
                 st.execute();
             }
         }
+    }
+
+    @Test
+    public void sqlTest() {
+        DSQL sql = new DSQL();
+        DSQL whereGroup = new DSQL();
+        whereGroup.WHERE("c1")
+                .OR().WHERE("c2")
+                .OR().WHERE("c3");
+        sql.SELECT("*").FROM("t")
+                .WHERE(whereGroup).AND().WHERE("c4");
+        assertEquals("SELECT *\nFROM t\nWHERE (( (c1) \nOR (c2) \nOR (c3))) \nAND (c4)",sql.toString());
     }
 
     @Test
