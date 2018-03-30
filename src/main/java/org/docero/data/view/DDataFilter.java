@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @SuppressWarnings({"unused", "WeakerAccess"})
 public class DDataFilter {
@@ -137,7 +138,7 @@ public class DDataFilter {
     /**
      * Create element in filters patch (tree branch) for view column
      *
-     * @param column attribute of mapped bean or collection of beans
+     * @param column    attribute of mapped bean or collection of beans
      * @param mapToName string to use as property name if object map
      * @throws DDataException if DDataAttribute is null or NONE_
      */
@@ -148,7 +149,7 @@ public class DDataFilter {
     /**
      * Create element in filters patch (tree branch) for aggregating view column
      *
-     * @param column attribute of mapped bean or collection of beans
+     * @param column    attribute of mapped bean or collection of beans
      * @param mapToName string to use as property name if object map
      * @throws DDataException if DDataAttribute is null or NONE_
      */
@@ -200,6 +201,19 @@ public class DDataFilter {
         }
     }
 
+    @SuppressWarnings("MethodDoesntCallSuperMethod")
+    public DDataFilter clone() {
+        try {
+            DDataFilter c = new DDataFilter(this.attribute, this.operator, this.value, this.valueTo, this.mapToName);
+            if (this.filters != null) {
+                c.filters.addAll(this.filters.stream().map(DDataFilter::clone).collect(Collectors.toList()));
+            }
+            return c;
+        } catch (DDataException e) {
+            return null;
+        }
+    }
+
     /**
      * add child for filter element (branch of leaf)
      *
@@ -246,6 +260,10 @@ public class DDataFilter {
         return filters;
     }
 
+    /**
+     * getFilters not returns null if attribute is mapped bean
+     * @return is filter attribute is mapped bean
+     */
     public boolean hasFilters() {
         return filters != null && !filters.isEmpty();
     }

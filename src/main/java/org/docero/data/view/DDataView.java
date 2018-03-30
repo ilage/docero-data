@@ -43,9 +43,10 @@ public class DDataView extends AbstractDataView {
     }
 
     public long count() throws DDataException {
+        HashSet<Integer> alreadyJoined = new HashSet<>();
         DSQL sql = buildFrom(roots[0]);
         sql.SELECT("COUNT(*)");
-        buildFilters(sql);
+        buildFilters(sql, alreadyJoined);
 
         return sqlSession.selectOne("org.docero.data.selectCount",
                 Collections.singletonMap("sqlStatement", sql.toString()));
@@ -55,13 +56,14 @@ public class DDataView extends AbstractDataView {
         DSQL sql = buildFrom(roots[0]);
         String keySql = getKeySQL();
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
+        HashSet<Integer> alreadyJoined = new HashSet<>();
         for (DDataFilter column : columns)
             for (Class root : roots)
                 if (super.isApplicable(root, column)) {
-                    super.addColumnToViewSql(sql, root, column, "", "", 0);
+                    super.addColumnToViewSql(sql, root, column, "", "", 0, alreadyJoined);
                     break;
                 }
-        buildFilters(sql);
+        buildFilters(sql, alreadyJoined);
         String limitedSql = addBounds(sql.toString(), offset, limit);
 
         //if(LOG.isDebugEnabled()) LOG.debug("Preparing: "+sql.toString());
@@ -94,18 +96,19 @@ public class DDataView extends AbstractDataView {
     public int[] aggregateInt(DDataFilterOperator operator) throws DDataException {
         DSQL agSql = new DSQL();
         agSql.SELECT("'group' as \"dDataBeanKey_\"");
+        HashSet<Integer> alreadyJoined = new HashSet<>();
         DSQL sql = buildFrom(roots[0]);
         String keySql = getKeySQL();
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
         for (DDataFilter column : columns)
             for (Class root : roots)
                 if (super.isApplicable(root, column)) {
-                    super.addColumnToViewSql(sql, root, column, "", "", 0);
+                    super.addColumnToViewSql(sql, root, column, "", "", 0, alreadyJoined);
                     String pathName = column.mapToName() != null ? column.mapToName() : column.getName();
                     agSql.SELECT(operator + "(t.\"" + pathName + "\") AS \"" + pathName + "\"");
                     break;
                 }
-        buildFilters(sql);
+        buildFilters(sql, alreadyJoined);
         sql.GROUP_BY(keySql);
         agSql.FROM("(" + sql.toString() + ") AS t");
         Map<Object, Object> result = sqlSession.selectMap(
@@ -158,7 +161,7 @@ public class DDataView extends AbstractDataView {
         }
     }
 
-    private void buildFilters(DSQL sql) throws DDataException {
+    private void buildFilters(DSQL sql, HashSet<Integer> alreadyJoined) throws DDataException {
         DDataFilter allTypesFilter = new DDataFilter();
         allTypesFilter.getFilters().addAll(
                 filter.getFilters().stream().filter(f ->
@@ -172,7 +175,7 @@ public class DDataView extends AbstractDataView {
                 ).collect(Collectors.toList())
         );
 
-        super.addFilterSql(sql, allTypesFilter, roots[0], "", 0);
+        super.addFilterSql(sql, allTypesFilter, roots[0], "", 0, alreadyJoined);
         String vc = versionConstraint(roots[0], 0);
         if (vc.length() > 0) sql.WHERE(vc);
 
@@ -184,7 +187,7 @@ public class DDataView extends AbstractDataView {
             String tc = typeConstraint(multiTypeClass, 0);
             if (tc.length() > 0) ssql.WHERE(tc);
 
-            super.addFilterSql(ssql, someTypesFilter, multiTypeClass, "", 0);
+            super.addFilterSql(ssql, someTypesFilter, multiTypeClass, "", 0, alreadyJoined);
         }
         sql.WHERE(ssql);
     }

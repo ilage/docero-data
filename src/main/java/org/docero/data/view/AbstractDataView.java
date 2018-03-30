@@ -19,7 +19,7 @@ abstract class AbstractDataView {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractDataView.class);
     private static final String PROP_PATCH_DELIMITER = ".";
     private final AtomicInteger tablesCounter = new AtomicInteger(0);
-    private final List<CollectionColumn> subSelectsForColumns = new ArrayList<>();
+    private final Map<String, CollectionColumn> subSelectsForColumns = new HashMap<>();
 
     abstract Temporal version();
 
@@ -70,7 +70,7 @@ abstract class AbstractDataView {
 
     void addColumnToViewSql(
             DSQL sql, Class clazz,
-            DDataFilter column, String path, String uniqPath, int fromTableIndex
+            DDataFilter column, String path, String uniqPath, int fromTableIndex, HashSet<Integer> alreadyJoined
     ) {
         DDataAttribute attribute = null;
         for (Field field : clazz.getDeclaredFields())
@@ -98,22 +98,32 @@ abstract class AbstractDataView {
 
                 if (attribute.getJavaType().isEnum()) {
                     if (!attribute.isCollection() && column.hasFilters()) {
-                        sql.LEFT_OUTER_JOIN(table.joinSql);
+                        if (!alreadyJoined.contains(table.tableIndex)) {
+                            sql.LEFT_OUTER_JOIN(table.joinSql);
+                            alreadyJoined.add(table.tableIndex);
+                        }
                         for (DDataFilter col : column.getFilters()) {
                             addColumnToViewSql(sql, attribute.getJavaType(), col,
-                                    pathAttributeKey, uniqKey, table.tableIndex);
+                                    pathAttributeKey, uniqKey, table.tableIndex, alreadyJoined);
                         }
                     } else if (column.getOperator() != null && column.getOperator().isAggregation()) {
-                        sql.LEFT_OUTER_JOIN(table.joinSql);
+                        if (!alreadyJoined.contains(table.tableIndex)) {
+                            sql.LEFT_OUTER_JOIN(table.joinSql);
+                            alreadyJoined.add(table.tableIndex);
+                        }
                         sql.SELECT(column.getOperator() + "(t" + table.tableIndex + ".*)" +
                                 " AS \"" + pathAttributeName + "\"");
-                    } else if (column.hasFilters()) {
-                        subSelectsForColumns.add(new CollectionColumn(
-                                table, column.getFilters(), pathAttributeKey, uniqKey, attribute.getJavaType()));
+                    } else if (column.hasFilters()) { // is collection without aggregation
+                        CollectionColumn cc = subSelectsForColumns.get(uniqKey);
+                        if (cc == null) {
+                            subSelectsForColumns.put(uniqKey, cc = new CollectionColumn(
+                                    table, pathAttributeKey, uniqKey, attribute.getJavaType()));
+                        }
+                        cc.filters.addAll(column.getFilters());
                     }
                 }
             } else if (column.getOperator() != null) {
-                addFilterSql(sql, column, clazz, uniqPath, fromTableIndex);
+                addFilterSql(sql, column, clazz, uniqPath, fromTableIndex, alreadyJoined);
             } else {
                 String val = "t" + fromTableIndex + ".\"" + attribute.getColumnName() + "\"";
                 sql.SELECT(val + " AS \"" + pathAttributeName + "\"");
@@ -125,31 +135,58 @@ abstract class AbstractDataView {
 
     List<DSQL> getSubSelects() {
         ArrayList<DSQL> subSelects = new ArrayList();
-        for (CollectionColumn column : subSelectsForColumns) {
+        for (CollectionColumn column : subSelectsForColumns.values()) {
             DSQL sql = new DSQL();
             sql.FROM(rootTable + " as t0");
-            addJoinForSubSelects(sql, column.table);
-            if (column.groupOperator == null && column.filters != null) {
-                sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
-                for (DDataFilter col : column.filters)
-                    addColumnToViewSql(sql, column.clazz, col, column.path, column.uniqPath, column.table.tableIndex);
-            } else if (column.groupOperator != null) {
-                sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
-                sql.SELECT(column.groupOperator.toString() + "(" +
-                        (column.filters == null ? "*" : column.filters.get(0).getAttribute().getColumnName()) +
-                        ") as \"" + column.path + "\"");
-                sql.GROUP_BY(getKeySQL());
+            HashSet<Integer> alreadyJoined = new HashSet<>();
+            addJoinForSubSelects(sql, column.table, alreadyJoined);
+
+            sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
+            boolean sorted = false;
+            for (DDataFilter col : column.filters) {
+                String uniqKey = column.uniqPath + col.getAttribute().getPropertyName() + ":" + col.mapToName() + ":" +
+                        col.getAttribute().getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
+                JoinedTable jt = usedCols.get(uniqKey);
+                if (jt != null) addJoinForSubSelects(sql, jt, alreadyJoined);
+                sorted = sorted | (
+                        col.getAttribute().isPrimaryKey() &&
+                                col.isSortAscending() != null
+                );
+
+                addColumnToViewSql(sql, column.clazz, col, column.path, column.uniqPath, column.table.tableIndex, alreadyJoined);
+            }
+            if (!sorted) {
+                for (Field a : column.clazz.getDeclaredFields())
+                    if (a.isEnumConstant()) {
+                        DDataAttribute idAttribute = (DDataAttribute)
+                                Enum.valueOf(column.clazz, a.getName());
+                        if (idAttribute.isPrimaryKey())
+                            try {
+                                addColumnToViewSql(sql, column.clazz, new DDataFilter(idAttribute) {{
+                                    this.setSortAscending(true);
+                                }}, column.path, column.uniqPath, column.table.tableIndex, alreadyJoined);
+                            } catch (DDataException ignore) {
+                            }
+                    }
             }
             subSelects.add(sql);
         }
         return subSelects;
     }
 
-    private void addJoinForSubSelects(DSQL csql, JoinedTable table) {
-        if (table.fromTableIndex != 0)
-            usedCols.values().stream().filter(t -> table.fromTableIndex == t.tableIndex).findAny()
-                    .ifPresent(t -> addJoinForSubSelects(csql, t));
-        csql.LEFT_OUTER_JOIN(table.joinSql);
+    private void addJoinForSubSelects(DSQL csql, JoinedTable table, HashSet<Integer> alreadyJoined) {
+        if (table.fromTableIndex != 0) {
+            for (JoinedTable joinedTable : usedCols.values())
+                if (table.fromTableIndex == joinedTable.tableIndex) {
+                    if (!alreadyJoined.contains(joinedTable.tableIndex))
+                        addJoinForSubSelects(csql, joinedTable, alreadyJoined);
+                    break;
+                }
+        }
+        if (!alreadyJoined.contains(table.tableIndex)) {
+            alreadyJoined.add(table.tableIndex);
+            csql.LEFT_OUTER_JOIN(table.joinSql);
+        }
     }
 
     /**
@@ -173,13 +210,16 @@ abstract class AbstractDataView {
         return false;
     }
 
-    void addFilterSql(DSQL sql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex) {
+    void addFilterSql(DSQL sql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex, HashSet<Integer> alreadyJoined) {
         if (rootFilter == null) return;
 
         JoinedTable table = usedCols.get(path);
         if (table == null) {
             table = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), rootFilter.getAttribute());
-            sql.LEFT_OUTER_JOIN(table.joinSql);
+            if (!alreadyJoined.contains(table.tableIndex)) {
+                sql.LEFT_OUTER_JOIN(table.joinSql);
+                alreadyJoined.add(table.tableIndex);
+            }
             usedCols.put(path, table);
         }
 
@@ -245,7 +285,7 @@ abstract class AbstractDataView {
                     Class innerClass = filter.getAttribute().getJavaType();
                     String key = path + filter.getAttribute().getPropertyName() + ":" + filter.mapToName() + ":" +
                             innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
-                    addFilterSql(sql, filter, innerClass, key, table.tableIndex);
+                    addFilterSql(sql, filter, innerClass, key, table.tableIndex, alreadyJoined);
                 }
             } else { // we can't use two separate filters by same table
                 Class innerClass = filter.getAttribute().getJavaType();
@@ -261,7 +301,7 @@ abstract class AbstractDataView {
                             .collect(Collectors.joining(" AND ")));
                     String verSql = versionAndTypeConstraint(filter.getAttribute().getJavaType(), finalN);
                     if (verSql.length() > 0) WHERE(verSql);
-                    addFilterSql(this, filter, innerClass, key, finalN);
+                    addFilterSql(this, filter, innerClass, key, finalN, alreadyJoined);
                 }}.toString() + ")");
             }
         }
@@ -347,25 +387,13 @@ abstract class AbstractDataView {
 
     private class CollectionColumn {
         private final JoinedTable table;
-        private final List<DDataFilter> filters;
+        private final List<DDataFilter> filters = new ArrayList<>();
         private final String path;
         private final String uniqPath;
         private final Class clazz;
-        private final DDataFilterOperator groupOperator;
 
-        private CollectionColumn(JoinedTable table, List<DDataFilter> filters, String path, String uniqPath, Class javaType) {
+        private CollectionColumn(JoinedTable table, String path, String uniqPath, Class javaType) {
             this.table = table;
-            this.filters = filters;
-            this.groupOperator = null;
-            this.path = path;
-            this.uniqPath = uniqPath;
-            this.clazz = javaType;
-        }
-
-        private CollectionColumn(JoinedTable table, DDataFilterOperator groupOperator, String path, String uniqPath, Class javaType) {
-            this.table = table;
-            this.filters = null;
-            this.groupOperator = groupOperator;
             this.path = path;
             this.uniqPath = uniqPath;
             this.clazz = javaType;
