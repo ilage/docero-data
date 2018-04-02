@@ -86,7 +86,7 @@ public class DDataFilter {
                 if (field.isEnumConstant()) {
                     @SuppressWarnings("unchecked")
                     DDataAttribute atr = (DDataAttribute) Enum.valueOf((Class<? extends Enum>) in.getJavaType(), field.getName());
-                    if (propertyName.equalsIgnoreCase(atr.getPropertyName())) {
+                    if (propertyName.equals(atr.getPropertyName())) {
                         return atr;
                     }
                 }
