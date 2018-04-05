@@ -26,14 +26,18 @@ abstract class AbstractDataView {
     private String rootTable;
     private Class rootClass;
     private String keyType;
-    private final HashMap<String, JoinedTable> usedCols = new HashMap();
+    private HashSet<Integer> joinedInRootQuery;
+    private HashSet<String> columnsInRoot;
+    private final HashMap<String, JoinedTable> allJoins = new HashMap();
 
     DSQL buildFrom(Class root) throws DDataException {
         try {
             rootTable = (String) root.getDeclaredField("TABLE_NAME").get(null);
             rootClass = root;
-            usedCols.clear();
-            usedCols.put("", new JoinedTable(0, 0, null));
+            allJoins.clear();
+            allJoins.put("", new JoinedTable(0, 0, null));
+            joinedInRootQuery = new HashSet<>();
+            columnsInRoot = new HashSet<>();
             return new DSQL() {{
                 FROM(rootTable + " as t0");
             }};
@@ -70,7 +74,15 @@ abstract class AbstractDataView {
 
     void addColumnToViewSql(
             DSQL sql, Class clazz,
-            DDataFilter column, String path, String uniqPath, int fromTableIndex, HashSet<Integer> alreadyJoined
+            DDataFilter column
+    ) {
+        addColumnToViewSql(sql, clazz, column, "", "", 0, joinedInRootQuery, columnsInRoot);
+    }
+
+    private void addColumnToViewSql(
+            DSQL sql, Class clazz,
+            DDataFilter column, String path, String uniqPath, int fromTableIndex,
+            HashSet<Integer> alreadyJoined, HashSet<String> columnsInSelect
     ) {
         DDataAttribute attribute = null;
         for (Field field : clazz.getDeclaredFields())
@@ -90,10 +102,10 @@ abstract class AbstractDataView {
                     attribute.getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
 
             if (attribute.isMappedBean()) {
-                JoinedTable table = usedCols.get(uniqKey);
+                JoinedTable table = allJoins.get(uniqKey);
                 if (table == null) {
                     table = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), attribute);
-                    usedCols.put(uniqKey, table);
+                    allJoins.put(uniqKey, table);
                 }
 
                 if (attribute.getJavaType().isEnum()) {
@@ -104,8 +116,26 @@ abstract class AbstractDataView {
                         }
                         for (DDataFilter col : column.getFilters()) {
                             addColumnToViewSql(sql, attribute.getJavaType(), col,
-                                    pathAttributeKey, uniqKey, table.tableIndex, alreadyJoined);
+                                    pathAttributeKey, uniqKey, table.tableIndex, alreadyJoined, columnsInSelect);
                         }
+                        //add ids if not present in columnsInSelect
+                        for (Field a : attribute.getJavaType().getDeclaredFields())
+                            if (a.isEnumConstant()) {
+                                DDataAttribute idAttribute = (DDataAttribute)
+                                        Enum.valueOf(attribute.getJavaType(), a.getName());
+                                if (idAttribute.isPrimaryKey()) {
+                                    String idKey = pathAttributeKey + idAttribute.getPropertyName();
+                                    if (!columnsInSelect.contains(idKey))
+                                        try {
+                                            addColumnToViewSql(sql, attribute.getJavaType(),
+                                                    new DDataFilter(idAttribute),
+                                                    pathAttributeKey, uniqKey, table.tableIndex,
+                                                    alreadyJoined, columnsInSelect);
+                                            columnsInSelect.add(idKey);
+                                        } catch (DDataException ignore) {
+                                        }
+                                }
+                            }
                     } else if (column.getOperator() != null && column.getOperator().isAggregation()) {
                         if (!alreadyJoined.contains(table.tableIndex)) {
                             sql.LEFT_OUTER_JOIN(table.joinSql);
@@ -125,10 +155,13 @@ abstract class AbstractDataView {
             } else if (column.getOperator() != null) {
                 addFilterSql(sql, column, clazz, uniqPath, fromTableIndex, alreadyJoined);
             } else {
-                String val = "t" + fromTableIndex + ".\"" + attribute.getColumnName() + "\"";
-                sql.SELECT(val + " AS \"" + pathAttributeName + "\"");
-                if (column.isSortAscending() != null)
-                    sql.ORDER_BY(val + (column.isSortAscending() ? " ASC" : " DESC"));
+                if (!columnsInSelect.contains(pathAttributeName)) {
+                    columnsInSelect.add(pathAttributeName);
+                    String val = "t" + fromTableIndex + ".\"" + attribute.getColumnName() + "\"";
+                    sql.SELECT(val + " AS \"" + pathAttributeName + "\"");
+                    if (column.isSortAscending() != null)
+                        sql.ORDER_BY(val + (column.isSortAscending() ? " ASC" : " DESC"));
+                }
             }
         }
     }
@@ -138,37 +171,38 @@ abstract class AbstractDataView {
         for (CollectionColumn column : subSelectsForColumns.values()) {
             DSQL sql = new DSQL();
             sql.FROM(rootTable + " as t0");
-            HashSet<Integer> alreadyJoined = new HashSet<>();
-            addJoinForSubSelects(sql, column.table, alreadyJoined);
+            HashSet<Integer> joinedInSubQuery = new HashSet<>();
+            HashSet<String> columnsInSubQuery = new HashSet<>();
+            addJoinForSubSelects(sql, column.table, joinedInSubQuery);
 
             sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
-            boolean sorted = false;
             for (DDataFilter col : column.filters) {
                 String uniqKey = column.uniqPath + col.getAttribute().getPropertyName() + ":" + col.mapToName() + ":" +
                         col.getAttribute().getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
-                JoinedTable jt = usedCols.get(uniqKey);
-                if (jt != null) addJoinForSubSelects(sql, jt, alreadyJoined);
-                sorted = sorted | (
-                        col.getAttribute().isPrimaryKey() &&
-                                col.isSortAscending() != null
-                );
+                JoinedTable jt = allJoins.get(uniqKey);
+                if (jt != null) addJoinForSubSelects(sql, jt, joinedInSubQuery);
 
-                addColumnToViewSql(sql, column.clazz, col, column.path, column.uniqPath, column.table.tableIndex, alreadyJoined);
+                addColumnToViewSql(sql, column.clazz, col, column.path, column.uniqPath, column.table.tableIndex,
+                        joinedInSubQuery, columnsInSubQuery);
             }
-            if (!sorted) {
-                for (Field a : column.clazz.getDeclaredFields())
-                    if (a.isEnumConstant()) {
-                        DDataAttribute idAttribute = (DDataAttribute)
-                                Enum.valueOf(column.clazz, a.getName());
-                        if (idAttribute.isPrimaryKey())
+            //add ids if not present in columnsInSubQuery (setSortAscending(true))
+            for (Field a : column.clazz.getDeclaredFields())
+                if (a.isEnumConstant()) {
+                    DDataAttribute idAttribute = (DDataAttribute)
+                            Enum.valueOf(column.clazz, a.getName());
+                    if (idAttribute.isPrimaryKey()) {
+                        String idKey = column.path + idAttribute.getPropertyName();
+                        if (!columnsInSubQuery.contains(idKey))
                             try {
                                 addColumnToViewSql(sql, column.clazz, new DDataFilter(idAttribute) {{
-                                    this.setSortAscending(true);
-                                }}, column.path, column.uniqPath, column.table.tableIndex, alreadyJoined);
+                                            this.setSortAscending(true);
+                                        }}, column.path, column.uniqPath, column.table.tableIndex,
+                                        joinedInSubQuery, columnsInSubQuery);
+                                columnsInSubQuery.add(idKey);
                             } catch (DDataException ignore) {
                             }
                     }
-            }
+                }
             subSelects.add(sql);
         }
         return subSelects;
@@ -176,7 +210,7 @@ abstract class AbstractDataView {
 
     private void addJoinForSubSelects(DSQL csql, JoinedTable table, HashSet<Integer> alreadyJoined) {
         if (table.fromTableIndex != 0) {
-            for (JoinedTable joinedTable : usedCols.values())
+            for (JoinedTable joinedTable : allJoins.values())
                 if (table.fromTableIndex == joinedTable.tableIndex) {
                     if (!alreadyJoined.contains(joinedTable.tableIndex))
                         addJoinForSubSelects(csql, joinedTable, alreadyJoined);
@@ -210,17 +244,21 @@ abstract class AbstractDataView {
         return false;
     }
 
-    void addFilterSql(DSQL sql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex, HashSet<Integer> alreadyJoined) {
+    void addFilterSql(DSQL sql, DDataFilter rootFilter, Class rootClass) {
+        addFilterSql(sql, rootFilter, rootClass, "", 0, joinedInRootQuery);
+    }
+
+    private void addFilterSql(DSQL sql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex, HashSet<Integer> alreadyJoined) {
         if (rootFilter == null) return;
 
-        JoinedTable table = usedCols.get(path);
+        JoinedTable table = allJoins.get(path);
         if (table == null) {
             table = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), rootFilter.getAttribute());
             if (!alreadyJoined.contains(table.tableIndex)) {
                 sql.LEFT_OUTER_JOIN(table.joinSql);
                 alreadyJoined.add(table.tableIndex);
             }
-            usedCols.put(path, table);
+            allJoins.put(path, table);
         }
 
         List<DDataFilter> appliedFilters = rootFilter.getFilters() == null ?
@@ -292,7 +330,7 @@ abstract class AbstractDataView {
                 String key = path + filter.getAttribute().getPropertyName() + ":" + filter.mapToName() + ":" +
                         innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                 int finalN = tablesCounter.incrementAndGet();
-                usedCols.put(key, new JoinedTable(fromTableIndex, finalN, filter.getAttribute()));
+                allJoins.put(key, new JoinedTable(fromTableIndex, finalN, filter.getAttribute()));
                 sql.WHERE("EXISTS(" + new DSQL() {{
                     SELECT("*");
                     FROM(filter.getAttribute().joinTable() + " t" + finalN);
@@ -362,6 +400,26 @@ abstract class AbstractDataView {
 
     public String getKeyType() {
         return keyType;
+    }
+
+    void addRootIdsToViewSql(DSQL sql) {
+        for (Field a : rootClass.getDeclaredFields())
+            if (a.isEnumConstant()) {
+                DDataAttribute idAttribute = (DDataAttribute)
+                        Enum.valueOf(rootClass, a.getName());
+                if (idAttribute.isPrimaryKey()) {
+                    String idKey = idAttribute.getPropertyName();
+                    if (!columnsInRoot.contains(idKey))
+                        try {
+                            addColumnToViewSql(sql, rootClass, new DDataFilter(idAttribute) {{
+                                        this.setSortAscending(true);
+                                    }}, "", "", 0,
+                                    joinedInRootQuery, columnsInRoot);
+                            columnsInRoot.add(idKey);
+                        } catch (DDataException ignore) {
+                        }
+                }
+            }
     }
 
     private class JoinedTable {

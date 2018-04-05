@@ -31,7 +31,7 @@ public class DDataOrder<T extends DDataAttribute> {
     private final ArrayList<OrderEntry> order = new ArrayList<>();
 
     public static <T extends DDataAttribute> DDataOrder<T> asc(T attribute) {
-        DDataOrder<T> dor = new DDataOrder<T>();
+        DDataOrder<T> dor = new DDataOrder<>();
         dor.order.add(new OrderEntry(attribute, true));
         return dor;
     }

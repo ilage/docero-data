@@ -1042,6 +1042,8 @@ class DDataMapBuilder {
                 .forEach(join -> {
                     Mapping joinMap = builder.mappings.get(
                             join.property.dataBean.interfaceType.toString() + "." + join.property.name);
+                    if(joinMap==null) return;
+
                     sql.append("LEFT JOIN ")
                             .append(join.mappedBean.getTableRef())
                             .append(" AS t").append(join.tableIndex)

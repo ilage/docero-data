@@ -55,4 +55,9 @@ public interface BuildingHE extends DDataVersionalBean<LocalDateTime> {
     default void setCreatedLocalDate(LocalDate value) {
         setDateCreated(value.atStartOfDay());
     }
+
+    //do not add Mapping - check compilation errors
+    BuildingHE getParent();
+
+    void setParent(BuildingHE val);
 }

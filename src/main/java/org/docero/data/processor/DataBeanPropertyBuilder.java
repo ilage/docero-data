@@ -267,15 +267,16 @@ class DataBeanPropertyBuilder {
                     ", null, null," + this.isId + "),");
         } else {
             cf.println("/** Value of column " + this.columnName + "*/");
+            Mapping map = mappings.get(dataBean.interfaceType.toString() + "." + this.name);
             cf.println(this.enumName + "(\"" +
                     this.columnName + "\",\"" +
                     this.name + "\"," +
                     manType.interfaceType + "_WB_.class,\"" + (this.isSimple() ? "" : "ARRAY") +
                     "\"," + manType.isDictionary() + ", true" + ", " + this.isCollection +
                     ",\"" + manType.getTableRef().replace("\"", "\\\"") + "\", new java.util.HashMap<String, String>(){{" +
-                    mappings.get(dataBean.interfaceType.toString() + "." + this.name).stream()
+                    (map == null ? "" : map.stream()
                             .map(m -> "put(\"" + m.property.columnName + "\",\"" + m.mappedProperty.columnName + "\");")
-                            .collect(Collectors.joining(" ")) +
+                            .collect(Collectors.joining(" "))) +
                     "}}" + ", false),");
         }
     }

@@ -12,10 +12,7 @@ import org.docero.data.repositories.VersionalSampleRepository;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
 import org.docero.data.utils.DSQL;
-import org.docero.data.view.DDataFilter;
-import org.docero.data.view.DDataFilterOperator;
-import org.docero.data.view.DDataView;
-import org.docero.data.view.DDataViewBuilder;
+import org.docero.data.view.*;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -193,7 +190,7 @@ public class DDataTest {
                 .OR().WHERE("c3");
         sql.SELECT("*").FROM("t")
                 .WHERE(whereGroup).AND().WHERE("c4");
-        assertEquals("SELECT *\nFROM t\nWHERE (( (c1) \nOR (c2) \nOR (c3))) \nAND (c4)",sql.toString());
+        assertEquals("SELECT *\nFROM t\nWHERE (( (c1) \nOR (c2) \nOR (c3))) \nAND (c4)", sql.toString());
     }
 
     @Test
@@ -270,12 +267,20 @@ public class DDataTest {
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
             }});
         }});
-        Map<Object, Object> viewResult = view.select(0, 100);
+        DDataViewRows viewResult = view.select(0, 100);
         assertEquals(3, viewResult.size());
+        DDataViewRow row;
         Map<Object, Object> map;
-        //noinspection unchecked
-        assertNotNull(map = (Map<Object, Object>) viewResult.get(3));
-        //noinspection unchecked
+        assertNotNull(row = viewResult.getRow((Object) 3));
+        Object[] v = row.getColumn(ItemSample_WB_.SAMPLE.getPropertyName() + "." +
+                "listParameterEx");
+        assertEquals(2, v.length);
+        String myNameForProperty = ItemSample_WB_.SAMPLE.getPropertyName() + "." +
+                Sample_WB_.LIST_PARAMETER.getPropertyName() + "." +
+                "myNameForProperty";
+        v = row.getColumn(myNameForProperty);
+        assertEquals(2, v.length);
+/*        //noinspection unchecked
         assertNotNull(map = (Map<Object, Object>) map.get(ItemSample_WB_.SAMPLE.getPropertyName()));
         //noinspection unchecked
         List<Object> list;
@@ -289,7 +294,19 @@ public class DDataTest {
         assertNotNull(map = (Map<Object, Object>) list.get(0));
         //noinspection unchecked
         assertNull(map.get(Inner_WB_.TEXT.getPropertyName()));
-        assertNotNull(map.get("myNameForProperty"));
+        assertNotNull(map.get("myNameForProperty"));*/
+
+        row.setColumnValue("updated text value", 1, myNameForProperty);
+
+        assertEquals("updated text value", row.getColumnValue(1, myNameForProperty));
+
+        Integer updated_id = (Integer) row.getColumnValue(1,
+                ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.ID);
+
+        view.flushUpdates();
+
+        assertEquals("updated text value", iInnerRepository.get(updated_id).getText());
+
         assertEquals(3, view.count());
 
         view = viewBuilder.build(Sample_WB_.class, new ArrayList<DDataFilter>() {{
