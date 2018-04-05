@@ -28,13 +28,15 @@ public class DDataView extends AbstractDataView {
     private DDataFilter filter = new DDataFilter();
     private final Temporal version;
 
+    private final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
+    private final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
     private final HashMap<String, DDataAttribute> viewEntities = new HashMap<>();
     private final IdentityHashMap<DDataFilter, String> viewPaths = new IdentityHashMap<>();
+    final List<Sort> sortedPaths = new ArrayList<>();
+
     private final IdentityHashMap<DDataAttribute, Set<DDataAttribute>> viewEIds = new IdentityHashMap<>();
     private final IdentityHashMap<DDataAttribute, Set<DDataFilter>> viewProperties = new IdentityHashMap<>();
     private final IdentityHashMap<DDataAttribute, Set<DDataAttribute>> unmodifiedBeanProperties = new IdentityHashMap<>();
-    private final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
-    private final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
 
     DDataView(SqlSession sqlSession, Class[] roots, DDataFilter[] columns, Temporal version) {
         this.sqlSession = sqlSession;
@@ -78,6 +80,8 @@ public class DDataView extends AbstractDataView {
                         } catch (IllegalAccessException ignore) {
                         }
             } else if (!attribute.isPrimaryKey() && attribute.getColumnName() != null) {
+                if (column.isSortAscending() != null)
+                    sortedPaths.add(new Sort(cp, column.isSortAscending()));
                 viewProperties.computeIfAbsent(parent, k -> new TreeSet<>(columnsComparator)).add(column);
             }
 
@@ -569,6 +573,16 @@ public class DDataView extends AbstractDataView {
                 ps.setBinaryStream(pIdx, (InputStream) v);
             else
                 ps.setNull(pIdx, Types.BINARY);
+        }
+    }
+
+    static class Sort {
+        final String path;
+        final boolean asc;
+
+        Sort(String path, boolean asc) {
+            this.path = path;
+            this.asc = asc;
         }
     }
 }

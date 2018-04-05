@@ -305,6 +305,8 @@ public class DDataTest {
 
         view.flushUpdates();
 
+        assertEquals(viewResult.size(), viewResult.toList().size());
+
         assertEquals("updated text value", iInnerRepository.get(updated_id).getText());
 
         assertEquals(3, view.count());

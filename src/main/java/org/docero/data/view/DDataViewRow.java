@@ -66,6 +66,12 @@ public class DDataViewRow {
         return a.length <= index || index < 0 ? null : a[index];
     }
 
+    static Object getColumnValue(Map<Object,Object> map, int index, String path) {
+        if (map == null) return null;
+        Object[] a = columnValue(map, path.split("\\."), 0);
+        return a.length <= index || index < 0 ? null : a[index];
+    }
+
     @SuppressWarnings("unchecked")
     private static Object[] columnValue(Map<Object, Object> om, String[] path, int offset) {
         if (offset >= path.length) return new Object[]{om};

@@ -3,6 +3,7 @@ package org.docero.data.view;
 import org.docero.data.DDataOrder;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class DDataViewRows {
     private final DDataView view;
@@ -13,8 +14,21 @@ public class DDataViewRows {
         this.map = map;
     }
 
+    @SuppressWarnings("unchecked")
     public List<Object> toList() {
-        return new ArrayList<>(map.values());
+        return map.values().stream().sorted((o1, o2) -> {
+            for (DDataView.Sort sort : view.sortedPaths) {
+                Object v1 = DDataViewRow.getColumnValue((Map<Object, Object>) o1, 0, sort.path);
+                Object v2 = DDataViewRow.getColumnValue((Map<Object, Object>) o2, 0, sort.path);
+                if (v1 == null) {
+                    if (v2 != null) return sort.asc ? 1 : 0;
+                } else if (v1 instanceof Comparable) {
+                    int cmp = ((Comparable) v1).compareTo(v2);
+                    if (cmp != 0) return sort.asc ? cmp : -cmp;
+                }
+            }
+            return 0;
+        }).collect(Collectors.toList());
     }
 
     public Set<Object> keySet() {
