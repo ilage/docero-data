@@ -36,7 +36,6 @@ public class DDataView extends AbstractDataView {
 
     private final IdentityHashMap<DDataAttribute, Set<DDataAttribute>> viewEIds = new IdentityHashMap<>();
     private final IdentityHashMap<DDataAttribute, Set<DDataFilter>> viewProperties = new IdentityHashMap<>();
-    private final IdentityHashMap<DDataAttribute, Set<DDataAttribute>> unmodifiedBeanProperties = new IdentityHashMap<>();
 
     DDataView(SqlSession sqlSession, Class[] roots, DDataFilter[] columns, Temporal version) {
         this.sqlSession = sqlSession;
@@ -45,22 +44,21 @@ public class DDataView extends AbstractDataView {
         if (columns.length > 0 && Arrays.stream(columns).noneMatch(c -> c.isSortAscending() != null))
             columns[0].setSortAscending(true);
         this.version = version;
+
+        for (Field field : roots[0].getDeclaredFields())
+            if (field.isEnumConstant())
+                try {
+                    DDataAttribute idAtr = (DDataAttribute) field.get(null);
+                    if (idAtr.isPrimaryKey()) {
+                        viewEIds.computeIfAbsent(null, k -> new TreeSet<>(propertiesComparator))
+                                .add(idAtr);
+                    }
+                } catch (IllegalAccessException ignore) {
+                }
         for (DDataFilter column : columns) fillViewEntities(column, null, null);
     }
 
     private void fillViewEntities(DDataFilter column, String path, DDataAttribute parent) {
-        if (parent == null)
-            for (Field field : roots[0].getDeclaredFields())
-                if (field.isEnumConstant())
-                    try {
-                        DDataAttribute idAtr = (DDataAttribute) field.get(null);
-                        if (idAtr.isPrimaryKey()) {
-                            viewEIds.computeIfAbsent(null, k -> new TreeSet<>(propertiesComparator))
-                                    .add(idAtr);
-                        }
-                    } catch (IllegalAccessException ignore) {
-                    }
-
         DDataAttribute attribute = column.getAttribute();
         if (attribute != null) {
             String nameInPath = column.mapToName() == null ? attribute.getPropertyName() : column.mapToName();
@@ -82,30 +80,15 @@ public class DDataView extends AbstractDataView {
             } else if (!attribute.isPrimaryKey() && attribute.getColumnName() != null) {
                 if (column.isSortAscending() != null)
                     sortedPaths.add(new Sort(cp, column.isSortAscending()));
+
                 viewProperties.computeIfAbsent(parent, k -> new TreeSet<>(columnsComparator)).add(column);
             }
 
             if (column.getFilters() != null) column.getFilters()
                     .forEach(f -> fillViewEntities(f, cp, attribute));
-        } else if (column.getFilters() != null) column.getFilters()
+        } else
+            if (column.getFilters() != null) column.getFilters()
                 .forEach(f -> fillViewEntities(f, path, parent));
-
-        if (attribute != null && attribute.isMappedBean()) {
-            Set<DDataFilter> inViewColumns = viewProperties.get(attribute);
-            for (Field field : attribute.getJavaType().getDeclaredFields())
-                if (field.isEnumConstant())
-                    try {
-                        DDataAttribute beanAtr = (DDataAttribute) field.get(null);
-                        if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
-                            if (inViewColumns == null || inViewColumns.stream()
-                                    .noneMatch(c -> c.getAttribute() == beanAtr))
-                                unmodifiedBeanProperties.computeIfAbsent(attribute, k ->
-                                        new TreeSet<>(propertiesComparator))
-                                        .add(beanAtr);
-                        }
-                    } catch (IllegalAccessException ignore) {
-                    }
-        }
     }
 
     Temporal version() {
@@ -305,8 +288,19 @@ public class DDataView extends AbstractDataView {
             beanAttribute = viewEntities.get(entityPropertyPath);
             ids = viewEIds.get(beanAttribute);
             props = viewProperties.get(beanAttribute);
-            unModified = unmodifiedBeanProperties.get(beanAttribute);
+
             beanClass = beanAttribute != null ? beanAttribute.getJavaType() : roots[0];
+            unModified = new TreeSet<>(propertiesComparator);
+                for (Field field : beanClass.getDeclaredFields())
+                    if (field.isEnumConstant())
+                        try {
+                            DDataAttribute beanAtr = (DDataAttribute) field.get(null);
+                            if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
+                                if (props == null || props.stream().noneMatch(c -> c.getAttribute() == beanAtr))
+                                    unModified.add(beanAtr);
+                            }
+                        } catch (IllegalAccessException ignore) {
+                        }
             try {
                 tableName = (String) beanClass.getField("TABLE_NAME").get(null);
                 versionFrom = (DDataAttribute) beanClass.getField("VERSION_FROM").get(null);
@@ -355,7 +349,9 @@ public class DDataView extends AbstractDataView {
                             for (DDataFilter prop : pk.props)
                                 setColumnValue(pk.ps, pIdx++, prop.getAttribute(),
                                         row.getColumnValue(updatedIndex, viewPaths.get(prop)));
+
                             setColumnValue(pk.ps, pIdx++, pk.versionFrom, dateNow);
+
                             for (DDataAttribute id : pk.ids)
                                 setColumnValue(pk.ps, pIdx++, id,
                                         row.getColumnValue(updatedIndex,
@@ -370,7 +366,8 @@ public class DDataView extends AbstractDataView {
                                                                 .toString()
                                                 ).collect(Collectors.joining(",")) + ",") :
                                         "") + pk.props.stream()
-                                        .map(prop -> row.getColumnValue(updatedIndex, viewPaths.get(prop)).toString())
+                                        .map(prop -> row.getColumnValue(updatedIndex, viewPaths.get(prop)))
+                                        .map(val -> val == null ? "NULL" : val.toString())
                                         .collect(Collectors.joining(",")) +
                                         "," + dateNow.toString() + "," +
                                         pk.ids.stream().map(id ->
