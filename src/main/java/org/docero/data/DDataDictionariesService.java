@@ -15,7 +15,7 @@ public class DDataDictionariesService {
     private final ConcurrentHashMap<Class, DDataDictionary> dictionaries =
             new ConcurrentHashMap<>();
 
-    DDataDictionariesService() {
+    public DDataDictionariesService() {
     }
 
     /**
@@ -37,7 +37,7 @@ public class DDataDictionariesService {
      * @param type       - class of bean interface or implementation
      * @param repository - dictionary repository
      */
-    <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRepository<T, C> repository) {
+    public <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRepository<T, C> repository) {
         if (repository instanceof DDataDictionary) dictionaries.put(type, (DDataDictionary) repository);
     }
 

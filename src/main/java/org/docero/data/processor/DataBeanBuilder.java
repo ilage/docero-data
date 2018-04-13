@@ -224,7 +224,7 @@ class DataBeanBuilder {
                 cf.println("@com.fasterxml.jackson.annotation.JsonIgnoreProperties({\"handler\",\"ddataBeanKey_\"})");
             cf.startBlock("public class " +
                     className.substring(simpNameDel + 1)
-                    + " extends org.docero.data.AbstractBean<" +
+                    + " extends " + rootBuilder.basePackage + ".AbstractBean<" +
                     interfaceType + "> implements " + interfaceType + " {");
 
             for (DataBeanPropertyBuilder property : properties.values()) {

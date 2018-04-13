@@ -194,7 +194,7 @@ class DataRepositoryBuilder {
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
             cf.startBlock("public final class " +
                     daoClassName.substring(simpNameDel + 1) +
-                    " extends org.docero.data.AbstractRepository<" + bean.interfaceType + "," + bean.inversionalKey + ">" +
+                    " extends " + rootBuilder.basePackage + ".AbstractRepository<" + bean.interfaceType + "," + bean.inversionalKey + ">" +
                     " implements " + repositoryInterface + (bean.isDictionary() ?
                     ", org.docero.data.utils.DDataDictionary<" +
                             bean.interfaceType + "," + bean.inversionalKey + ">" :

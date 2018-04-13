@@ -49,6 +49,8 @@ public class DDataProcessor extends AbstractProcessor {
             Set<? extends Element> repositories;
             switch (stage) {
                 case STEP1_ENUM_GEN:
+                    builder.checkBasePackage(roundEnv);
+
                     Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
                     for (Element beanElement : entities)
                         if (beanElement.getEnclosingElement().getKind() != ElementKind.PACKAGE)

@@ -4,7 +4,7 @@ import org.apache.ibatis.reflection.factory.ObjectFactory;
 import java.util.*;
 
 public abstract class DDataAbstractObjectFactory implements ObjectFactory {
-    abstract <T> Class<? extends T> getImplementation(Class<T> type);
+    public abstract <T> Class<? extends T> getImplementation(Class<T> type);
 
     @SuppressWarnings("unchecked")
     @Override

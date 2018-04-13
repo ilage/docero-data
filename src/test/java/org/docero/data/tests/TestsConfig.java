@@ -23,6 +23,7 @@ import java.io.IOException;
 @Import({DDataConfiguration.class})
 @EnableTransactionManagement
 @EnableCaching
+@EnableDDataConfiguration(packageClass = TestsConfig.class)
 public class TestsConfig {
     @Bean
     CacheManager cacheManager() {
