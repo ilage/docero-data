@@ -607,9 +607,14 @@ class DDataMapBuilder {
                                     .map(o -> o.getColumnRef() + " " + fetchOptions.order.get(o))
                                     .collect(Collectors.joining(", ")));
 
-                    method.parameters.stream()
+                    DDataMethodBuilder.DDataMethodParameter rbParam = method.parameters.stream()
                             .filter(p -> environment.getTypeUtils().isSameType(builder.rowBoundsType, p.type))
-                            .findAny().ifPresent(rbParam -> addRowBounds(rbParam, domElement));
+                            .findAny().orElse(null);//
+                    if (rbParam != null) {
+                        domElement.appendChild(doc.createTextNode(ssql.toString()));
+                        ssql = new StringBuilder();
+                        addRowBounds(rbParam, domElement);
+                    }
 
                     ssql.append("\n) AS t0\n");
                     if (bean.versionalType != null) ssql.append("CROSS JOIN tt\n");

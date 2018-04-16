@@ -367,7 +367,7 @@ public class DDataTest {
         assertEquals(((ItemInner) i).getLgId(), ((ItemSample) s).getLgId());
         assertEquals(((ItemInner) multiTypesRepository.get(2)).getLgId(), ((ItemSample) s).getLgId());
 
-        List<ItemAbstraction> l = multiTypesRepository.list();
+        List<ItemAbstraction> l = multiTypesRepository.list(new RowBounds(0, 100));
         assertNotNull(l);
         for (ItemAbstraction a : l)
             if (a.getId() == s.getId()) assertTrue(a instanceof ItemSample);
