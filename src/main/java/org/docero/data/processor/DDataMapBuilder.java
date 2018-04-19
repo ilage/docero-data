@@ -828,6 +828,7 @@ class DDataMapBuilder {
                 String filterParameter = filter.property.getColumnWriter(
                         jdbcTypeParameterFor(filter.parameter, filter.variableType));
 
+                boolean isCaseIndependentLike = false;
                 if ("VERSION_".equals(filter.enumName)) {
                     DataBeanPropertyBuilder versionToProperty = filter.property.dataBean.properties.values().stream()
                             .filter(p -> p.isVersionTo).findAny().orElse(null);
@@ -915,6 +916,8 @@ class DDataMapBuilder {
                         e_in.setAttribute("separator", ",");
                         e_in.appendChild(doc.createTextNode(jdbcTypeParameterFor("item", itemType)));
                         break;
+                    case ILIKE_HAS:
+                        isCaseIndependentLike = true;
                     case LIKE_HAS:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
@@ -928,8 +931,12 @@ class DDataMapBuilder {
                         e_like.setAttribute("separator", " OR ");
                         e_like.appendChild(doc.createTextNode("t" +
                                 tIdx + "." + filter.property.getColumnRef() +
-                                " LIKE " + jdbcTypeParameterFor("item", filter.variableType)));
+                                (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
+                                jdbcTypeParameterFor("item", filter.variableType)));
                         break;
+                    case ILIKE_ALL_STARTS:
+                    case ILIKE_ALL_HAS:
+                        isCaseIndependentLike = true;
                     case LIKE_ALL_STARTS:
                     case LIKE_ALL_HAS:
                         e = doc.createElement("if");
@@ -943,21 +950,23 @@ class DDataMapBuilder {
                         e_like.setAttribute("separator", " AND ");
                         e_like.appendChild(doc.createTextNode("t" +
                                 tIdx + "." + filter.property.getColumnRef() +
-                                " LIKE " + jdbcTypeParameterFor("item", filter.variableType)));
+                                (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
+                                jdbcTypeParameterFor("item", filter.variableType)));
                         break;
+                    case ILIKE:
+                    case ILIKE_STARTS:
+                    case ILIKE_ENDS:
+                        isCaseIndependentLike = true;
                     case LIKE:
                     case LIKE_STARTS:
                     case LIKE_ENDS:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
                         e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " LIKE " + filterParameter + "\n"));
+                                filter.property.getColumnRef() +
+                                (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
+                                filterParameter + "\n"));
                         break;
-                    case ILIKE:
-                        e = doc.createElement("if");
-                        e.setAttribute("test", filter.parameter + " != null");
-                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " ILIKE " + filterParameter + "\n"));
                     default:
                         e = null;
                 }

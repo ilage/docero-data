@@ -255,21 +255,27 @@ class DDataMethodBuilder {
 
                         switch (filter.option) {
                             case LIKE:
+                            case ILIKE:
                                 parameterFunc = "org.docero.data.utils.DDataLike.in(" + parameter.name + ")";
                                 break;
                             case LIKE_HAS:
+                            case ILIKE_HAS:
                                 parameterFunc = "org.docero.data.utils.DDataLike.has(" + parameter.name + ")";
                                 break;
                             case LIKE_ENDS:
+                            case ILIKE_ENDS:
                                 parameterFunc = "org.docero.data.utils.DDataLike.ends(" + parameter.name + ")";
                                 break;
                             case LIKE_STARTS:
+                            case ILIKE_STARTS:
                                 parameterFunc = "org.docero.data.utils.DDataLike.starts(" + parameter.name + ")";
                                 break;
                             case LIKE_ALL_STARTS:
+                            case ILIKE_ALL_STARTS:
                                 parameterFunc = "org.docero.data.utils.DDataLike.allStarts(" + parameter.name + ")";
                                 break;
                             case LIKE_ALL_HAS:
+                            case ILIKE_ALL_HAS:
                                 parameterFunc = "org.docero.data.utils.DDataLike.allHas(" + parameter.name + ")";
                                 break;
                         }
