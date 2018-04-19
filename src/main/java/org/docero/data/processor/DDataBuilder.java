@@ -12,6 +12,7 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
+import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -68,11 +69,21 @@ class DDataBuilder {
         rowBoundsType = environment.getElementUtils().getTypeElement(RowBounds.class.getCanonicalName()).asType();
     }
 
+    void logError(String message) {
+        environment.getMessager().printMessage(Diagnostic.Kind.ERROR, message);
+        System.err.println("DDataProcessor Exception: " + message);
+    }
+
     void checkInterface(TypeElement beanElement) {
-        String typeName = beanElement.asType().toString();
-        packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-        DataBeanBuilder value = new DataBeanBuilder(beanElement, this);
-        beansByInterface.put(value.interfaceType.toString(), value);
+        try {
+            String typeName = beanElement.asType().toString();
+            packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
+            DataBeanBuilder value = new DataBeanBuilder(beanElement, this);
+            beansByInterface.put(value.interfaceType.toString(), value);
+        } catch (Exception e) {
+            logError("error processing " + beanElement);
+            throw e;
+        }
     }
 
     void checkDGenInterface(TypeElement beanElement) {
@@ -81,33 +92,48 @@ class DDataBuilder {
     }
 
     void checkRepository(TypeElement repositoryElement, TypeMirror versionalType) throws Exception {
-        String typeName = repositoryElement.asType().toString();
-        packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-        if (repositoryElement.getInterfaces().stream()
-                .anyMatch(i -> i.toString().contains("org.docero.data.DDataBatchOpsRepository"))) {
-            BatchRepositoryBuilder builder =
-                    new BatchRepositoryBuilder(this, repositoryElement);
-            batchRepositories.add(builder);
-        } else {
-            DataRepositoryBuilder builder =
-                    new DataRepositoryBuilder(this, repositoryElement);
-            repositoriesByBean.put(builder.forInterfaceName(), builder);
-            repositories.add(builder);
+        try {
+            String typeName = repositoryElement.asType().toString();
+            packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
+            if (repositoryElement.getInterfaces().stream()
+                    .anyMatch(i -> i.toString().contains("org.docero.data.DDataBatchOpsRepository"))) {
+                BatchRepositoryBuilder builder =
+                        new BatchRepositoryBuilder(this, repositoryElement);
+                batchRepositories.add(builder);
+            } else {
+                DataRepositoryBuilder builder =
+                        new DataRepositoryBuilder(this, repositoryElement);
+                repositoriesByBean.put(builder.forInterfaceName(), builder);
+                repositories.add(builder);
 
-            for (DataBeanBuilder beanBuilder : unimplementedBeans)
-                beanBuilder.buildAnnotationsAndEnums(environment, beansByInterface);
-            unimplementedBeans.clear();
+                for (DataBeanBuilder beanBuilder : unimplementedBeans)
+                    beanBuilder.buildAnnotationsAndEnums(environment, beansByInterface);
+                unimplementedBeans.clear();
+            }
+        } catch (Exception e) {
+            logError("error processing " + repositoryElement);
+            throw e;
         }
     }
 
     void generateBeansAnnotations() throws IOException {
         for (DataBeanBuilder bean : beansByInterface.values())
-            bean.buildAnnotationsAndEnums(environment, beansByInterface);
+            try {
+                bean.buildAnnotationsAndEnums(environment, beansByInterface);
+            } catch (Exception e) {
+                logError("error build annotations for " + bean.interfaceType);
+                throw e;
+            }
     }
 
     void generateRepositoriesAnnotations() throws IOException {
         for (DataRepositoryBuilder repository : repositories)
-            repository.buildAnnotations(environment, spring);
+            try {
+                repository.buildAnnotations(environment, spring);
+            } catch (Exception e) {
+                logError("error build annotations for " + repository.repositoryInterface);
+                throw e;
+            }
     }
 
     void generateImplementation() throws IOException {
@@ -351,26 +377,35 @@ class DDataBuilder {
     }
 
     void buildDataReferenceEnums() throws IOException {
-        for (DataBeanBuilder dataBeanBuilder : beansByInterface.values()) {
-            dataBeanBuilder.buildDataReferenceEnum(environment, beansByInterface, mappings);
-        }
+        for (DataBeanBuilder dataBeanBuilder : beansByInterface.values())
+            try {
+                dataBeanBuilder.buildDataReferenceEnum(environment, beansByInterface, mappings);
+            } catch (Exception e) {
+                logError("error build enums for " + dataBeanBuilder.interfaceType);
+                throw e;
+            }
     }
 
     List<TypeMirror> readBeansFromBeanElement(TypeElement repositoryElement) {
         ArrayList<TypeMirror> beans = new ArrayList<>();
-        Optional<Object> beansOpt = repositoryElement.getAnnotationMirrors().stream()
-                .filter(m -> m.getAnnotationType().toString().endsWith("DDataRep"))
-                .findAny()
-                .map(m -> m.getElementValues().entrySet().stream()
-                        .filter(e -> e.getKey().toString().equals("beans()"))
-                        .findAny().map(e -> e.getValue().getValue()).orElse(""));
-        if (beansOpt.isPresent()) {
-            List b = beansOpt.get() instanceof List ? (List) beansOpt.get() : Collections.singletonList(beansOpt.get());
-            for (Object v : b) {
-                String classValue = v.toString();
-                if (classValue.length() > 0) beans.add(environment.getElementUtils()
-                        .getTypeElement(classValue.substring(0, classValue.lastIndexOf('.'))).asType());
+        try {
+            Optional<Object> beansOpt = repositoryElement.getAnnotationMirrors().stream()
+                    .filter(m -> m.getAnnotationType().toString().endsWith("DDataRep"))
+                    .findAny()
+                    .map(m -> m.getElementValues().entrySet().stream()
+                            .filter(e -> e.getKey().toString().equals("beans()"))
+                            .findAny().map(e -> e.getValue().getValue()).orElse(""));
+            if (beansOpt.isPresent()) {
+                List b = beansOpt.get() instanceof List ? (List) beansOpt.get() : Collections.singletonList(beansOpt.get());
+                for (Object v : b) {
+                    String classValue = v.toString();
+                    if (classValue.length() > 0) beans.add(environment.getElementUtils()
+                            .getTypeElement(classValue.substring(0, classValue.lastIndexOf('.'))).asType());
+                }
             }
+        } catch (Exception e) {
+            logError("error build beans from DDataRep annotation on " + repositoryElement);
+            throw e;
         }
         return beans;
     }

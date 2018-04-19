@@ -111,19 +111,25 @@ public class DDataProcessor extends AbstractProcessor {
 
     private void buildMappingFor(TypeElement beanElement, DataBeanBuilder bean) {
         for (Element element : builder.environment.getElementUtils().getAllMembers(beanElement)) {
-            if (element.getKind() == ElementKind.METHOD) {
-                ExecutableElement method = (ExecutableElement) element;
-                String mappingKey = beanElement.asType().toString() + "." +
-                        propertyName4Method(method.getSimpleName().toString());
-                Mapping mapping = null;
-                for (AnnotationMirror annotationMirror : method.getAnnotationMirrors())
-                    if (annotationMirror.getAnnotationType().toString().contains("_Map_")) {
-                        mapping = new Mapping(annotationMirror, bean);
-                        if (!mapping.mappedProperties.isEmpty())
-                            builder.mappings.put(mappingKey, mapping);
-                        break;
-                    }
-            }
+            if (element.getKind() == ElementKind.METHOD && !(
+                    element.getModifiers().contains(Modifier.DEFAULT) || element.getModifiers().contains(Modifier.STATIC)
+            ))
+                try {
+                    ExecutableElement method = (ExecutableElement) element;
+                    String mappingKey = beanElement.asType().toString() + "." +
+                            propertyName4Method(method.getSimpleName().toString());
+                    Mapping mapping = null;
+                    for (AnnotationMirror annotationMirror : method.getAnnotationMirrors())
+                        if (annotationMirror.getAnnotationType().toString().contains("_Map_")) {
+                            mapping = new Mapping(annotationMirror, bean);
+                            if (!mapping.mappedProperties.isEmpty())
+                                builder.mappings.put(mappingKey, mapping);
+                            break;
+                        }
+                } catch (Exception e) {
+                    builder.logError("can't build mappings for " + element + " in " + beanElement);
+                    throw e;
+                }
         }
     }
 
