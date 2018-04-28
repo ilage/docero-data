@@ -398,6 +398,9 @@ public class DDataTest {
 
         sampleBatchOps.flushStatements();
         assertEquals(s1id, s1.getId());
+
+        Sample s3 = sampleBatchOps.getOneBy("s%", 1001);
+        assertNotNull(s3);
     }
 
     @Test

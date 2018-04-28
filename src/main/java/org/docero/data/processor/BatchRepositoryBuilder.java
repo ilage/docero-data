@@ -1,9 +1,10 @@
 package org.docero.data.processor;
 
-import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @SuppressWarnings("WeakerAccess")
 class BatchRepositoryBuilder {
@@ -11,12 +12,19 @@ class BatchRepositoryBuilder {
     final TypeMirror repositoryInterface;
     final DDataBuilder dataBuilder;
     final String implClassName;
+    final List<MethodBehindFacade> methods = new ArrayList<>();
 
     BatchRepositoryBuilder(DDataBuilder dDataBuilder, TypeElement repositoryElement) {
         dataBuilder = dDataBuilder;
         repositoryInterface = repositoryElement.asType();
         implClassName = repositoryInterface + "_Impl_";
         beans = dDataBuilder.readBeansFromBeanElement(repositoryElement);
+
+        for (Element element : repositoryElement.getEnclosedElements())
+            if (element.getKind() == ElementKind.METHOD && !(
+                    element.getModifiers().contains(Modifier.DEFAULT) ||
+                            element.getModifiers().contains(Modifier.STATIC)
+            )) methods.add(new MethodBehindFacade((ExecutableElement) element));
     }
 
     void createSpringBean(JavaClassWriter cf) throws IOException {
@@ -151,7 +159,56 @@ class BatchRepositoryBuilder {
             cf.println("else throw new IllegalArgumentException(\"unknown class for repository: \"+bean.getClass().getCanonicalName());");
             cf.endBlock("}");
 
+            methods.forEach(m -> m.write(cf));
+
             cf.endBlock("}");
+        }
+    }
+
+    private class ParamPair {
+        final String name;
+        final TypeMirror type;
+
+        private ParamPair(String name, TypeMirror type) {
+            this.name = name;
+            this.type = type;
+        }
+    }
+
+    private class MethodBehindFacade {
+        final String name;
+        final TypeMirror type;
+        final List<? extends TypeMirror> thrown;
+        private final List<ParamPair> parameters;
+
+        MethodBehindFacade(ExecutableElement method) {
+            name = method.getSimpleName().toString();
+            type = method.getReturnType();
+            parameters = method.getParameters().stream()
+                    .map(pe -> new ParamPair(pe.getSimpleName().toString(), pe.asType()))
+                    .collect(Collectors.toList());
+            thrown = method.getThrownTypes();
+        }
+
+        public void write(JavaClassWriter cf) {
+            try {
+                //DataBeanBuilder beanBuilder = dataBuilder.beansByInterface.get(type.toString());
+                DataRepositoryBuilder beanRepository = dataBuilder.repositoriesByBean.get(type.toString());
+
+                cf.println("");
+                cf.startBlock("@Override public " + type + " " + name + "(" +
+                        parameters.stream()
+                                .map(pp -> pp.type + " " + pp.name)
+                                .collect(Collectors.joining(",")) + ") {");
+                cf.println("return ((" + beanRepository.repositoryInterface +
+                        ") " + beanRepository.repositoryVariableName + ")." + name + "(" +
+                        parameters.stream()
+                                .map(pp -> pp.name)
+                                .collect(Collectors.joining(",")) + ");");
+                cf.endBlock("}");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 }
