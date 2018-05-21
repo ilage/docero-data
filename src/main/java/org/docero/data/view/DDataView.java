@@ -413,6 +413,7 @@ public class DDataView extends AbstractDataView {
         if (pk.versionFrom != null) {
             String valuesExceptModified = pk.unModified.isEmpty() ? "" :
                     pk.unModified.stream()
+                            .filter(c-> pk.versionTo == null || !pk.versionTo.getColumnName().equals(c.getColumnName()))
                             .map(DDataAttribute::getColumnName)
                             .collect(Collectors.joining(",")) + ",";
             String sql = (pk.versionTo != null ?
