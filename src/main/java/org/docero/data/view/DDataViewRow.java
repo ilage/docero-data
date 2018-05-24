@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 
 @SuppressWarnings("WeakerAccess")
 public class DDataViewRow {
-    private final DDataView view;
+    final DDataView view;
     private final Map<Object, Object> map;
 
     @SuppressWarnings("unchecked")
@@ -62,11 +62,23 @@ public class DDataViewRow {
      */
     public Object getColumnValue(int index, String path) {
         if (map == null) return null;
-        Object[] a = columnValue(map, path.split("\\."), 0);
+        int idx = path.lastIndexOf('.');
+        String parName = idx < 0 ? path : path.substring(idx + 1);
+        String parPath = idx < 0 ? "" : path.substring(0, idx + 1);
+        DDataFilter column = view.viewPaths.entrySet().stream()
+                .filter(pair ->
+                        pair.getValue().startsWith(parPath) &&
+                                pair.getKey().getAttribute().getPropertyName().equals(parName))
+                .map(Map.Entry::getKey).findAny().orElse(null);
+        String[] aPath = path.split("\\.");
+        if (column != null && column.mapToName() != null)
+            aPath[aPath.length - 1] = column.mapToName();
+        Object[] a = columnValue(map, aPath, 0);
+        if (a.length < index) a = getColumn(path);
         return a.length <= index || index < 0 ? null : a[index];
     }
 
-    static Object getColumnValue(Map<Object,Object> map, int index, String path) {
+    static Object getColumnValue(Map<Object, Object> map, int index, String path) {
         if (map == null) return null;
         Object[] a = columnValue(map, path.split("\\."), 0);
         return a.length <= index || index < 0 ? null : a[index];
@@ -102,7 +114,7 @@ public class DDataViewRow {
      *
      * @param value new value
      * @param index index of value in column values
-     * @param path  path to column
+     * @param path  entityPropertyPath to column
      */
     public void setColumnValue(Object value, int index, DDataAttribute... path) {
         setColumnValue(value, index, Arrays.stream(path)
@@ -116,25 +128,29 @@ public class DDataViewRow {
      *
      * @param value          new value
      * @param index          index of value in column values
-     * @param path2Parameter path to column
+     * @param path2Parameter entityPropertyPath to column
      */
     @SuppressWarnings("unchecked")
     public void setColumnValue(Object value, int index, String path2Parameter) {
+        setColumnValue(value, index, path2Parameter, true);
+    }
+
+    void setColumnValue(Object value, int index, String path2Parameter, boolean addViewUpdate) {
         if (map == null) return;
 
         Map<Object, Object> innerMap = map;
         String[] path = path2Parameter.split("\\.");
         int currPathLen = 0;
         for (int offset = 0; offset < path.length; offset++) {
-            boolean lastElement = offset == path.length - 1;
-            currPathLen = currPathLen + path[offset].length() + offset - 1;
-            DDataAttribute attribute = view.getAttributeForPath(path2Parameter.substring(0, currPathLen));
+            boolean lastElement = (offset == path.length - 1);
+            currPathLen = currPathLen + path[offset].length() + (lastElement ? 0 : 1);
+            DDataAttribute attribute = view.getEntityForPath(path2Parameter.substring(0, currPathLen));
 
             Object o = innerMap.get(path[offset]);
 
             if (o == null) {
                 if (lastElement) innerMap.put(path[offset], value);
-                else if (attribute.isCollection()) {
+                else if (attribute != null && attribute.isCollection()) {
                     HashMap<Object, Object> innerInList = new HashMap<>();
                     innerMap.put(path[offset], new ArrayList<Object>() {{
                         for (int i = 0; i < index; i++) this.add(null);
@@ -157,6 +173,6 @@ public class DDataViewRow {
                 innerMap.put(path[offset], value);
         }
 
-        view.addUpdate(this, index, path2Parameter);
+        if(addViewUpdate) view.addUpdate(this, index, path2Parameter);
     }
 }

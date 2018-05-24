@@ -3,6 +3,7 @@ package org.docero.data.view;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
 
+import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -68,6 +69,11 @@ public class DDataFilter {
 
         @Override
         public Map<String, String> joinMapping() {
+            return null;
+        }
+
+        @Override
+        public Class<? extends Serializable> getBeanInterface() {
             return null;
         }
     };

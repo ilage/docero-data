@@ -1,5 +1,6 @@
 package org.docero.data.utils;
 
+import java.io.Serializable;
 import java.util.Map;
 
 public interface DDataAttribute {
@@ -13,4 +14,5 @@ public interface DDataAttribute {
     boolean isPrimaryKey();
     String joinTable();
     Map<String,String> joinMapping();
+    Class<? extends Serializable> getBeanInterface();
 }

@@ -11,6 +11,7 @@ import org.docero.data.repositories.SampleRepository;
 import org.docero.data.repositories.VersionalSampleRepository;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
+import org.docero.data.utils.DDataExceptionHandler;
 import org.docero.data.utils.DSQL;
 import org.docero.data.view.*;
 import org.junit.Test;
@@ -296,6 +297,25 @@ public class DDataTest {
         assertNull(map.get(Inner_WB_.TEXT.getPropertyName()));
         assertNotNull(map.get("myNameForProperty"));*/
 
+        view.addUpdateService(Inner.class, new DDataBeanUpdateService<Inner>(Inner.class) {
+            @Override
+            protected Inner createBean() {
+                return iInnerRepository.create();
+            }
+
+            @Override
+            protected Inner updateBean(Inner bean) {
+                return bean;
+            }
+
+            @Override
+            public boolean serviceDoesNotMakeUpdates() {
+                return true;
+            }
+        });
+        row.setColumnValue("test for", 0,
+                ItemInner_WB_.INNER, Inner_WB_.TEXT);
+
         row.setColumnValue("updated text value", 1, myNameForProperty);
 
         assertEquals("updated text value", row.getColumnValue(1, myNameForProperty));
@@ -303,7 +323,9 @@ public class DDataTest {
         Integer updated_id = (Integer) row.getColumnValue(1,
                 ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.ID);
 
-        view.flushUpdates();
+        view.flushUpdates(t -> {
+            throw new RuntimeException("Too many errors", t);
+        });
 
         assertEquals(viewResult.size(), viewResult.toList().size());
 

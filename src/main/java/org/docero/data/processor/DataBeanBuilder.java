@@ -365,7 +365,7 @@ class DataBeanBuilder {
             for (DataBeanPropertyBuilder property : properties.values())
                 property.buildEnumElementWithBeans(cf, beansByInterface, mappings, environment);
 
-            cf.println("NONE_(null,null,null,null,false,false,false,null,null,false);");
+            cf.println("NONE_(null,null,null,null,false,false,false,null,null,false,null);");
             cf.println("");
             cf.println("public final static String TABLE_NAME = \"" + schema + "." + table + "\";");
             cf.println("public final static Class<" + interfaceType + "> BEAN_INTERFACE = " + interfaceType + ".class;");
@@ -387,6 +387,7 @@ class DataBeanBuilder {
             cf.println("private final String columnName;");
             cf.println("private final String propertyName;");
             cf.println("private final Class javaType;");
+            cf.println("private final Class<? extends java.io.Serializable> interfaceType;");
             cf.println("private final String jdbcType;");
             cf.println("private final boolean dictionary;");
             cf.println("private final boolean mapped;");
@@ -394,7 +395,7 @@ class DataBeanBuilder {
             cf.println("private final String joinTable;");
             cf.println("private final java.util.Map<String,String> joinMap;");
             cf.println("private final boolean isPrimaryKey;");
-            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, String joinTable, java.util.Map<String,String> joinMap, boolean isPrimaryKey) {");
+            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, String joinTable, java.util.Map<String,String> joinMap, boolean isPrimaryKey, Class<? extends java.io.Serializable> interfaceType) {");
             cf.println("this.columnName = columnName;");
             cf.println("this.propertyName = propertyName;");
             cf.println("this.javaType = javaType;");
@@ -405,6 +406,7 @@ class DataBeanBuilder {
             cf.println("this.joinTable = joinTable;");
             cf.println("this.joinMap = joinMap;");
             cf.println("this.isPrimaryKey = isPrimaryKey;");
+            cf.println("this.interfaceType = interfaceType;");
             cf.endBlock("}");
             cf.println("@Override public String getColumnName() {return columnName;}");
             cf.println("@Override public String getPropertyName() {return propertyName;}");
@@ -416,7 +418,7 @@ class DataBeanBuilder {
             cf.println("@Override public String joinTable() {return joinTable;}");
             cf.println("@Override public java.util.Map<String,String> joinMapping() {return joinMap;}");
             cf.println("@Override public boolean isPrimaryKey() {return isPrimaryKey;}");
-
+            cf.println("@Override public Class<? extends java.io.Serializable> getBeanInterface() {return interfaceType;}");
             cf.endBlock("}");
         }
     }
@@ -559,6 +561,8 @@ class DataBeanBuilder {
                 property.buildEnumElement(cf, beansByInterface, environment);
 
             cf.println("NONE_(null,null,null,null,false,false,false,false);");
+            cf.println("public final static String TABLE_NAME = \"" + schema + "." + table + "\";");
+            cf.println("public final static Class<" + interfaceType + "> BEAN_INTERFACE = " + interfaceType + ".class;");
             cf.println("private final String columnName;");
             cf.println("private final String propertyName;");
             cf.println("private final Class javaType;");
@@ -587,6 +591,7 @@ class DataBeanBuilder {
             cf.println("@Override public String joinTable() {return null;}");
             cf.println("@Override public java.util.Map<String,String> joinMapping() {return null;}");
             cf.println("@Override public boolean isPrimaryKey() {return isPrimaryKey;}");
+            cf.println("@Override public Class<? extends java.io.Serializable> getBeanInterface() {return null;}");
             cf.endBlock("}");
         }
         /*

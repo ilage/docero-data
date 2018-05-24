@@ -38,7 +38,7 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
             @SampleRepository_Filter_(
                     inner = Inner_.TEXT,
                     option = DDataFilterOption.LIKE_ALL_STARTS
-            ) String innerText, //TODO inner text is
+            ) String innerText, //inner text is
             @SampleRepository_Filter_(
                     Sample_.INNER_ID
             ) Integer inner, //inner_id is
@@ -61,7 +61,7 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
             @SampleRepository_Filter_(
                     inner = Inner_.TEXT,
                     option = DDataFilterOption.LIKE_STARTS
-            ) String innerText, //TODO inner text is
+            ) String innerText, //inner text is
             @SampleRepository_Filter_(
                     Sample_.INNER_ID
             ) Integer inner, //inner_id is

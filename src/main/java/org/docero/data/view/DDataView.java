@@ -1,18 +1,13 @@
 package org.docero.data.view;
 
 import org.apache.ibatis.session.SqlSession;
-import org.docero.data.utils.DDataAttribute;
-import org.docero.data.utils.DDataException;
-import org.docero.data.utils.DDataTypes;
-import org.docero.data.utils.DSQL;
+import org.docero.data.utils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.InputStream;
+import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.math.BigDecimal;
 import java.sql.*;
-import java.time.*;
 import java.time.temporal.Temporal;
 import java.util.*;
 import java.util.Date;
@@ -23,19 +18,19 @@ public class DDataView extends AbstractDataView {
     private final static Logger LOG = LoggerFactory.getLogger(DDataView.class);
 
     private final SqlSession sqlSession;
-    private final Class[] roots;
-    private final DDataFilter[] columns;
+    final Class[] roots;
+    final DDataFilter[] columns;
     private DDataFilter filter = new DDataFilter();
     private final Temporal version;
 
-    private final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
-    private final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
+    final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
+    final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
     private final HashMap<String, DDataAttribute> viewEntities = new HashMap<>();
-    private final IdentityHashMap<DDataFilter, String> viewPaths = new IdentityHashMap<>();
+    final IdentityHashMap<DDataFilter, String> viewPaths = new IdentityHashMap<>();
     final List<Sort> sortedPaths = new ArrayList<>();
 
-    private final IdentityHashMap<DDataAttribute, Set<DDataAttribute>> viewEIds = new IdentityHashMap<>();
-    private final IdentityHashMap<DDataAttribute, Set<DDataFilter>> viewProperties = new IdentityHashMap<>();
+    final HashMap<DDataAttribute, Set<DDataAttribute>> viewEIds = new HashMap<>();
+    final HashMap<DDataAttribute, Set<DDataFilter>> viewProperties = new HashMap<>();
 
     DDataView(SqlSession sqlSession, Class[] roots, DDataFilter[] columns, Temporal version) {
         this.sqlSession = sqlSession;
@@ -81,13 +76,13 @@ public class DDataView extends AbstractDataView {
                 if (column.isSortAscending() != null)
                     sortedPaths.add(new Sort(cp, column.isSortAscending()));
 
-                viewProperties.computeIfAbsent(parent, k -> new TreeSet<>(columnsComparator)).add(column);
+                viewProperties.computeIfAbsent(parent,
+                        k -> new TreeSet<>(columnsComparator)).add(column);
             }
 
             if (column.getFilters() != null) column.getFilters()
                     .forEach(f -> fillViewEntities(f, cp, attribute));
-        } else
-            if (column.getFilters() != null) column.getFilters()
+        } else if (column.getFilters() != null) column.getFilters()
                 .forEach(f -> fillViewEntities(f, path, parent));
     }
 
@@ -253,12 +248,16 @@ public class DDataView extends AbstractDataView {
     }
 
     /**
-     * row -> beanPath -> index -> parameter path
+     * row -> beanPath -> index -> parameter entityPropertyPath
      */
     private HashMap<DDataViewRow, HashMap<String, Set<Integer>>> updates;
 
-    DDataAttribute getAttributeForPath(String s) {
+    DDataAttribute getEntityForPath(String s) {
         return viewEntities.get(s);
+    }
+
+    String getPathForColumn(DDataFilter column) {
+        return viewPaths.get(column);
     }
 
     void addUpdate(DDataViewRow dDataViewRow, int index, String path) {
@@ -269,309 +268,79 @@ public class DDataView extends AbstractDataView {
         update.computeIfAbsent(beanPath, k -> new HashSet<>()).add(index);
     }
 
-    private class PreparedUpdates {
-        final String path;
-        final DDataAttribute beanAttribute;
-        final Set<DDataAttribute> ids;
-        final Set<DDataFilter> props;
-        final Set<DDataAttribute> unModified;
-        final Class beanClass;
-        final String tableName;
-        final DDataAttribute versionFrom;
-        final DDataAttribute versionTo;
-
-        PreparedStatement ps;
-        boolean batchOperation;
-
-        PreparedUpdates(String entityPropertyPath) throws DDataException {
-            this.path = entityPropertyPath;
-            beanAttribute = viewEntities.get(entityPropertyPath);
-            ids = viewEIds.get(beanAttribute);
-            props = viewProperties.get(beanAttribute);
-
-            beanClass = beanAttribute != null ? beanAttribute.getJavaType() : roots[0];
-            unModified = new TreeSet<>(propertiesComparator);
-                for (Field field : beanClass.getDeclaredFields())
-                    if (field.isEnumConstant())
-                        try {
-                            DDataAttribute beanAtr = (DDataAttribute) field.get(null);
-                            if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
-                                if (props == null || props.stream().noneMatch(c -> c.getAttribute() == beanAtr))
-                                    unModified.add(beanAtr);
-                            }
-                        } catch (IllegalAccessException ignore) {
-                        }
-            try {
-                tableName = (String) beanClass.getField("TABLE_NAME").get(null);
-                versionFrom = (DDataAttribute) beanClass.getField("VERSION_FROM").get(null);
-                versionTo = (DDataAttribute) beanClass.getField("VERSION_TO").get(null);
-            } catch (IllegalAccessException | NoSuchFieldException e) {
-                throw new DDataException("incorrect enumeration used for filter");
-            }
-            if (props == null || ids == null || tableName == null)
-                throw new DDataException("props==null || ids==null || tableName==null");
-        }
-    }
-
-    public void flushUpdates() throws SQLException, DDataException {
+    public void flushUpdates(DDataExceptionHandler exceptionHandler) throws SQLException, DDataException {
         if (updates == null || updates.size() == 0) return;
         Date dateNow = new Date();
 
         Connection connection = sqlSession.getConnection();
-        Set<PreparedUpdates> prepared = new TreeSet<>(Comparator.comparingInt(k -> k.path.length()));
+        Set<PreparedUpdates> prepared = new TreeSet<>(Comparator.comparingInt(k -> k.entityPropertyPath.length()));
         try {
-            for (DDataViewRow row : updates.keySet()) {
-                for (String entityPropertyPath : updates.get(row).keySet()) {
-                    PreparedUpdates pk = prepared.stream()
-                            .filter(k -> entityPropertyPath.equals(k.path))
-                            .findAny().orElse(null);
+            // at first, process rows data by known bean update services (DDataBeanUpdateService)
+            // they must do real updates in database and may replace ids of managed bean
+            for (DDataViewRow row : updates.keySet())
+                try {
+                    HashMap<String, Set<Integer>> updatedEntities = updates.get(row);
+                    for (String entityPropertyPath : updatedEntities.keySet()) {
+                        DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
+                        if (beanService != null)
+                            for (Integer updatedIndex : updatedEntities.get(entityPropertyPath))
+                                beanService.update(row, updatedIndex, entityPropertyPath);
+                    }
+                } catch (Exception e) {
+                    exceptionHandler.handle(e);
+                }
+            // next, write updated rows to database
+            for (DDataViewRow row : updates.keySet())
+                try {
+                    HashMap<String, Set<Integer>> updatedEntities = updates.get(row);
+                    for (String entityPropertyPath : updatedEntities.keySet()) {
+                        DDataAttribute entityBeanAttribute = this.getEntityForPath(entityPropertyPath);
+                        DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
+                        if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
+                            PreparedUpdates pk = prepared.stream()
+                                    .filter(k -> entityPropertyPath.equals(k.entityPropertyPath))
+                                    .findAny().orElse(null);
+                            if (pk == null)
+                                prepared.add(pk = new PreparedUpdates(this, entityPropertyPath, connection));
 
-                    if (pk == null)
-                        prepared.add(pk = buildStatement(connection, entityPropertyPath));
+                            for (Integer updatedIndex : updatedEntities.get(entityPropertyPath)) {
+                                String firstIdProp = pk.getFirstIdColumnName();
+                                Object anyId = row.getColumnValue(updatedIndex,
+                                        entityPropertyPath.length() == 0 ? firstIdProp :
+                                                entityPropertyPath + "." + firstIdProp);
+                                if (anyId == null) { //is new element
 
-                    for (Integer updatedIndex : updates.get(row).get(entityPropertyPath)) {
-                        Object anyId = row.getColumnValue(updatedIndex,
-                                expandPath(entityPropertyPath, pk.ids.iterator().next().getPropertyName()));
-
-                        if (anyId == null) { //is new element
-
-                            //TODO or not TODO
-
-                        } else if (pk.versionFrom != null) { //versional bean
-                            int pIdx = 1;
-                            if (pk.versionTo != null) {
-                                setColumnValue(pk.ps, pIdx++, pk.versionTo, dateNow);
-                                for (DDataAttribute id : pk.ids)
-                                    setColumnValue(pk.ps, pIdx++, id,
-                                            row.getColumnValue(updatedIndex,
-                                                    expandPath(entityPropertyPath, id.getPropertyName())));
+                                    //TODO or not TODO
+                                    prepared.remove(pk);
+                                } else
+                                    pk.fillStatement(row, updatedIndex, dateNow);
                             }
-                            for (DDataFilter prop : pk.props)
-                                setColumnValue(pk.ps, pIdx++, prop.getAttribute(),
-                                        row.getColumnValue(updatedIndex, viewPaths.get(prop)));
-
-                            setColumnValue(pk.ps, pIdx++, pk.versionFrom, dateNow);
-
-                            for (DDataAttribute id : pk.ids)
-                                setColumnValue(pk.ps, pIdx++, id,
-                                        row.getColumnValue(updatedIndex,
-                                                expandPath(entityPropertyPath, id.getPropertyName())));
-                            if (LOG.isTraceEnabled()) {
-                                LOG.trace(pk.ps.toString());
-                                LOG.trace("Parameters: " + (pk.versionTo != null ? (
-                                        dateNow.toString() + "," +
-                                                pk.ids.stream().map(id ->
-                                                        row.getColumnValue(updatedIndex,
-                                                                expandPath(entityPropertyPath, id.getPropertyName()))
-                                                                .toString()
-                                                ).collect(Collectors.joining(",")) + ",") :
-                                        "") + pk.props.stream()
-                                        .map(prop -> row.getColumnValue(updatedIndex, viewPaths.get(prop)))
-                                        .map(val -> val == null ? "NULL" : val.toString())
-                                        .collect(Collectors.joining(",")) +
-                                        "," + dateNow.toString() + "," +
-                                        pk.ids.stream().map(id ->
-                                                row.getColumnValue(updatedIndex,
-                                                        expandPath(entityPropertyPath, id.getPropertyName()))
-                                                        .toString()
-                                        ).collect(Collectors.joining(","))
-                                );
-                            }
-                            pk.ps.executeUpdate();
-                        } else {
-                            int pIdx = 1;
-                            for (DDataFilter prop : pk.props)
-                                setColumnValue(pk.ps, pIdx++, prop.getAttribute(),
-                                        row.getColumnValue(updatedIndex, viewPaths.get(prop)));
-                            for (DDataAttribute id : pk.ids)
-                                setColumnValue(pk.ps, pIdx++, id,
-                                        row.getColumnValue(updatedIndex,
-                                                expandPath(entityPropertyPath, id.getPropertyName())));
-                            if (LOG.isTraceEnabled()) {
-                                LOG.trace(pk.ps.toString());
-                                LOG.trace("Parameters: " +
-                                        pk.props.stream().map(prop -> row.getColumnValue(updatedIndex, viewPaths.get(prop)).toString())
-                                                .collect(Collectors.joining(",")) + "," +
-                                        pk.ids.stream().map(id ->
-                                                row.getColumnValue(updatedIndex, expandPath(entityPropertyPath, id.getPropertyName())).toString()
-                                        ).collect(Collectors.joining(","))
-                                );
-                            }
-                            pk.ps.addBatch();
                         }
                     }
+                } catch (Exception e) {
+                    exceptionHandler.handle(e);
                 }
-            }
             for (PreparedUpdates pk : prepared) if (pk.batchOperation) pk.ps.execute();
         } finally {
             for (PreparedUpdates pk : prepared) pk.ps.close();
         }
     }
 
-    private PreparedUpdates buildStatement(Connection connection, String entityPropertyPath) throws SQLException, DDataException {
-        PreparedUpdates pk = new PreparedUpdates(entityPropertyPath);
-        if (pk.versionFrom != null) {
-            String valuesExceptModified = pk.unModified.isEmpty() ? "" :
-                    pk.unModified.stream()
-                            .filter(c-> pk.versionTo == null || !pk.versionTo.getColumnName().equals(c.getColumnName()))
-                            .map(DDataAttribute::getColumnName)
-                            .collect(Collectors.joining(",")) + ",";
-            String sql = (pk.versionTo != null ?
-                    "UPDATE " + pk.tableName + " SET " + pk.versionTo.getColumnName() +
-                            "=? WHERE " + pk.ids.stream().map(p -> p.getColumnName() + "=?")
-                            .collect(Collectors.joining(" AND ")) + "; " :
-                    "") +
-                    "INSERT INTO " + pk.tableName + " (" +
-                    //all ids except version
-                    pk.ids.stream().filter(a -> a != pk.versionFrom)
-                            .map(DDataAttribute::getColumnName)
-                            .collect(Collectors.joining(",")) +
-                    "," +
-                    //all values except modified by view
-                    valuesExceptModified +
-                    //values modified by view
-                    pk.props.stream()
-                            .map(c -> c.getAttribute().getColumnName())
-                            .collect(Collectors.joining(",")) +
-                    "," + pk.versionFrom.getColumnName() +
-                    ") SELECT " +
-                    //all ids except version
-                    pk.ids.stream().filter(a -> a != pk.versionFrom)
-                            .map(DDataAttribute::getColumnName)
-                            .collect(Collectors.joining(",")) +
-                    "," +
-                    //all values except modified by view
-                    valuesExceptModified +
-                    //values modified by view
-                    pk.props.stream()
-                            .map(p -> "?")
-                            .collect(Collectors.joining(",")) +
-                    ",?" +//value of version
-                    " FROM " + pk.tableName +
-                    " WHERE " + pk.ids.stream().map(p -> p.getColumnName() + "=?")
-                    .collect(Collectors.joining(" AND "));
-            pk.ps = connection.prepareStatement(sql);
-            pk.batchOperation = false;
-            return pk;
-        } else {
-            String sql = "UPDATE " + pk.tableName +
-                    " SET " + pk.props.stream()
-                    .map(p -> p.getAttribute().getColumnName() + "=?")
-                    .collect(Collectors.joining(",")) +
-                    " WHERE " + pk.ids.stream().map(p -> p.getColumnName() + "=?")
-                    .collect(Collectors.joining(" AND "));
-            pk.ps = connection.prepareStatement(sql);
-            pk.batchOperation = true;
-            return pk;
-        }
+    @SuppressWarnings("unchecked")
+    private DDataBeanUpdateService getUpdateServiceFor(String entityPropertyPath) {
+        DDataAttribute entityBeanAttribute = getEntityForPath(entityPropertyPath);
+        return entityBeanAttribute == null ? null : getUpdateServiceFor(entityBeanAttribute.getBeanInterface());
     }
 
-    private String expandPath(String path, String propertyName) {
-        return path.length() == 0 ? propertyName : path + "." + propertyName;
+    private HashMap<Class, DDataBeanUpdateService> knownUpdaters = new HashMap<>();
+
+    @SuppressWarnings("unchecked")
+    public <T extends Serializable> DDataBeanUpdateService<T> getUpdateServiceFor(Class<T> beanInterface) {
+        return (DDataBeanUpdateService<T>) knownUpdaters.get(beanInterface);
     }
 
-    private void setColumnValue(
-            PreparedStatement ps, int pIdx, DDataAttribute prop, Object v
-    ) throws SQLException {
-        if ("TIMESTAMP".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.TIMESTAMP);
-            else if (v instanceof Timestamp)
-                ps.setTimestamp(pIdx, (Timestamp) v);
-            else if (v instanceof LocalDateTime)
-                ps.setTimestamp(pIdx, Timestamp.valueOf((LocalDateTime) v));
-            else if (v instanceof Date)
-                ps.setTimestamp(pIdx, new Timestamp(((Date) v).getTime()));
-            else
-                ps.setNull(pIdx, Types.TIMESTAMP);
-        } else if ("DATE".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.DATE);
-            else if (v instanceof java.sql.Date)
-                ps.setDate(pIdx, (java.sql.Date) v);
-            else if (v instanceof LocalDate)
-                ps.setDate(pIdx, java.sql.Date.valueOf((LocalDate) v));
-            else if (v instanceof Date)
-                ps.setDate(pIdx, new java.sql.Date(((Date) v).getTime()));
-            else
-                ps.setNull(pIdx, Types.DATE);
-        } else if ("TIME".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.TIME);
-            else if (v instanceof java.sql.Time)
-                ps.setTime(pIdx, (java.sql.Time) v);
-            else if (v instanceof Date)
-                ps.setTime(pIdx, new java.sql.Time(((Date) v).getTime()));
-            else if (v instanceof LocalTime)
-                ps.setTime(pIdx, java.sql.Time.valueOf((LocalTime) v));
-            else
-                ps.setNull(pIdx, Types.TIME);
-        } else if ("VARCHAR".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.VARCHAR);
-            else if (v instanceof String)
-                ps.setString(pIdx, v.toString());
-        } else if ("BOOLEAN".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.BOOLEAN);
-            else if (v instanceof Boolean)
-                ps.setBoolean(pIdx, (Boolean) v);
-            else
-                ps.setNull(pIdx, Types.BOOLEAN);
-        } else if ("SMALLINT".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.SMALLINT);
-            else if (v instanceof Number)
-                ps.setShort(pIdx, ((Number) v).shortValue());
-            else
-                ps.setNull(pIdx, Types.SMALLINT);
-        } else if ("INTEGER".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.INTEGER);
-            else if (v instanceof Number)
-                ps.setInt(pIdx, ((Number) v).intValue());
-            else
-                ps.setNull(pIdx, Types.INTEGER);
-        } else if ("BIGINT".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.BIGINT);
-            else if (v instanceof Number)
-                ps.setLong(pIdx, ((Number) v).longValue());
-            else
-                ps.setNull(pIdx, Types.BIGINT);
-        } else if ("REAL".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.REAL);
-            else if (v instanceof Number)
-                ps.setFloat(pIdx, ((Number) v).floatValue());
-            else
-                ps.setNull(pIdx, Types.REAL);
-        } else if ("DOUBLE".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.DOUBLE);
-            else if (v instanceof Number)
-                ps.setDouble(pIdx, ((Number) v).doubleValue());
-            else
-                ps.setNull(pIdx, Types.DOUBLE);
-        } else if ("NUMERIC".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.NUMERIC);
-            else if (v instanceof BigDecimal)
-                ps.setBigDecimal(pIdx, (BigDecimal) v);
-            else if (v instanceof Number)
-                ps.setBigDecimal(pIdx, BigDecimal.valueOf(((Number) v).doubleValue()));
-            else
-                ps.setNull(pIdx, Types.NUMERIC);
-        } else if ("BINARY".equals(prop.getJdbcType())) {
-            if (v == null)
-                ps.setNull(pIdx, Types.BINARY);
-            else if (v instanceof byte[])
-                ps.setBytes(pIdx, (byte[]) v);
-            else if (v instanceof InputStream)
-                ps.setBinaryStream(pIdx, (InputStream) v);
-            else
-                ps.setNull(pIdx, Types.BINARY);
-        }
+    public <T extends Serializable> void addUpdateService(Class<T> i, DDataBeanUpdateService<T> service) {
+        knownUpdaters.put(i, service);
     }
 
     static class Sort {

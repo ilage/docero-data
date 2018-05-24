@@ -264,7 +264,7 @@ class DataBeanPropertyBuilder {
                             environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                             environment.getTypeUtils().erasure(this.type)
                     ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection +
-                    ", null, null," + this.isId + "),");
+                    ", null, null," + this.isId + ", null),");
         } else {
             cf.println("/** Value of column " + this.columnName + "*/");
             Mapping map = mappings.get(dataBean.interfaceType.toString() + "." + this.name);
@@ -277,7 +277,7 @@ class DataBeanPropertyBuilder {
                     (map == null ? "" : map.stream()
                             .map(m -> "put(\"" + m.property.columnName + "\",\"" + m.mappedProperty.columnName + "\");")
                             .collect(Collectors.joining(" "))) +
-                    "}}" + ", false),");
+                    "}}" + ", false, " + mappedType + ".class),");
         }
     }
 
