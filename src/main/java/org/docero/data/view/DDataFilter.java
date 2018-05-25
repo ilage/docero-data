@@ -14,7 +14,6 @@ import java.util.stream.Collectors;
 @SuppressWarnings({"unused", "WeakerAccess"})
 public class DDataFilter {
     private final DDataAttribute attribute;
-    private final String mapToName;
     private final DDataFilterOperator operator;
     private final Object value;
     private final Object valueTo;
@@ -127,7 +126,6 @@ public class DDataFilter {
         operator = null;
         value = null;
         valueTo = null;
-        mapToName = null;
         attribute = ROOT_FILTER;
     }
 
@@ -138,29 +136,17 @@ public class DDataFilter {
      * @throws DDataException if DDataAttribute is null or NONE_
      */
     public DDataFilter(DDataAttribute column) throws DDataException {
-        this(column, null, null, null, null);
-    }
-
-    /**
-     * Create element in filters patch (tree branch) for view column
-     *
-     * @param column    attribute of mapped bean or collection of beans
-     * @param mapToName string to use as property name if object map
-     * @throws DDataException if DDataAttribute is null or NONE_
-     */
-    public DDataFilter(DDataAttribute column, String mapToName) throws DDataException {
-        this(column, null, null, null, mapToName);
+        this(column, null, null, null);
     }
 
     /**
      * Create element in filters patch (tree branch) for aggregating view column
      *
      * @param column    attribute of mapped bean or collection of beans
-     * @param mapToName string to use as property name if object map
      * @throws DDataException if DDataAttribute is null or NONE_
      */
-    public DDataFilter(DDataAttribute column, String mapToName, DDataFilterOperator operator) throws DDataException {
-        this(column, operator, null, null, mapToName);
+    public DDataFilter(DDataAttribute column, DDataFilterOperator operator) throws DDataException {
+        this(column, operator, null, null);
     }
 
     /**
@@ -172,7 +158,7 @@ public class DDataFilter {
      * @throws DDataException if DDataAttribute is null or NONE_
      */
     public DDataFilter(DDataAttribute column, DDataFilterOperator operator, Object value) throws DDataException {
-        this(column, operator, value, null, null);
+        this(column, operator, value, null);
     }
 
     /**
@@ -185,14 +171,9 @@ public class DDataFilter {
      * @throws DDataException if DDataAttribute is null or NONE_
      */
     public DDataFilter(DDataAttribute column, DDataFilterOperator operator, Object value, Object valueTo) throws DDataException {
-        this(column, operator, value, valueTo, null);
-    }
-
-    DDataFilter(DDataAttribute column, DDataFilterOperator operator, Object value, Object valueTo, String mapToName) throws DDataException {
         if (column == null || column.getPropertyName() == null)
             throw new DDataException("can't create filter for NULL");
 
-        this.mapToName = mapToName;
         this.attribute = column;
         if (column.isMappedBean() && attribute.getJavaType().isEnum()) {
             filters = new ArrayList<>();
@@ -210,7 +191,7 @@ public class DDataFilter {
     @SuppressWarnings("MethodDoesntCallSuperMethod")
     public DDataFilter clone() {
         try {
-            DDataFilter c = new DDataFilter(this.attribute, this.operator, this.value, this.valueTo, this.mapToName);
+            DDataFilter c = new DDataFilter(this.attribute, this.operator, this.value, this.valueTo);
             if (this.filters != null) {
                 c.filters.addAll(this.filters.stream().map(DDataFilter::clone).collect(Collectors.toList()));
             }
@@ -293,10 +274,6 @@ public class DDataFilter {
     public boolean equals(Object o) {
         return o != null && o instanceof DDataFilter &&
                 Objects.equals(((DDataFilter) o).attribute, attribute);
-    }
-
-    public String mapToName() {
-        return mapToName;
     }
 
     public Boolean isSortAscending() {

@@ -62,19 +62,8 @@ public class DDataViewRow {
      */
     public Object getColumnValue(int index, String path) {
         if (map == null) return null;
-        int idx = path.lastIndexOf('.');
-        String parName = idx < 0 ? path : path.substring(idx + 1);
-        String parPath = idx < 0 ? "" : path.substring(0, idx + 1);
-        DDataFilter column = view.viewPaths.entrySet().stream()
-                .filter(pair ->
-                        pair.getValue().startsWith(parPath) &&
-                                pair.getKey().getAttribute().getPropertyName().equals(parName))
-                .map(Map.Entry::getKey).findAny().orElse(null);
         String[] aPath = path.split("\\.");
-        if (column != null && column.mapToName() != null)
-            aPath[aPath.length - 1] = column.mapToName();
         Object[] a = columnValue(map, aPath, 0);
-        if (a.length < index) a = getColumn(path);
         return a.length <= index || index < 0 ? null : a[index];
     }
 

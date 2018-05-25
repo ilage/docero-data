@@ -1,12 +1,14 @@
 package org.docero.data.view;
 
 import org.apache.ibatis.session.SqlSession;
+import org.docero.data.GeneratedValue;
 import org.docero.data.utils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.sql.*;
 import java.time.temporal.Temporal;
 import java.util.*;
@@ -18,7 +20,7 @@ public class DDataView extends AbstractDataView {
     private final static Logger LOG = LoggerFactory.getLogger(DDataView.class);
 
     private final SqlSession sqlSession;
-    final Class[] roots;
+    final Class<? extends DDataAttribute>[] roots;
     final DDataFilter[] columns;
     private DDataFilter filter = new DDataFilter();
     private final Temporal version;
@@ -56,7 +58,7 @@ public class DDataView extends AbstractDataView {
     private void fillViewEntities(DDataFilter column, String path, DDataAttribute parent) {
         DDataAttribute attribute = column.getAttribute();
         if (attribute != null) {
-            String nameInPath = column.mapToName() == null ? attribute.getPropertyName() : column.mapToName();
+            String nameInPath = attribute.getPropertyName();
             String cp = path == null ? nameInPath : (path + "." + nameInPath);
             viewPaths.put(column, cp);
             //String[] attrPath = cp.split("\\.");
@@ -77,7 +79,8 @@ public class DDataView extends AbstractDataView {
                     sortedPaths.add(new Sort(cp, column.isSortAscending()));
 
                 viewProperties.computeIfAbsent(parent,
-                        k -> new TreeSet<>(columnsComparator)).add(column);
+                        k -> new TreeSet<>(columnsComparator))
+                        .add(column);
             }
 
             if (column.getFilters() != null) column.getFilters()
@@ -159,7 +162,7 @@ public class DDataView extends AbstractDataView {
             for (Class root : roots)
                 if (super.isApplicable(root, column)) {
                     super.addColumnToViewSql(sql, root, column);
-                    String pathName = column.mapToName() != null ? column.mapToName() : column.getName();
+                    String pathName = column.getName();
                     agSql.SELECT(operator + "(t.\"" + pathName + "\") AS \"" + pathName + "\"");
                     break;
                 }
@@ -173,7 +176,7 @@ public class DDataView extends AbstractDataView {
         if (row == null) return new int[0];
         int[] ret = new int[row.size() - 1];
         for (int i = 0; i < columns.length; i++) {
-            Object ro = row.get(columns[i].mapToName() != null ? columns[i].mapToName() : columns[i].getName());
+            Object ro = row.get(columns[i].getName());
             if (ro instanceof Number) ret[i] = ((Number) ro).intValue();
         }
         return ret;
@@ -280,12 +283,20 @@ public class DDataView extends AbstractDataView {
             for (DDataViewRow row : updates.keySet())
                 try {
                     HashMap<String, Set<Integer>> updatedEntities = updates.get(row);
+                    HashMap<String, Set<Integer>> updatedParents = new HashMap<>();
                     for (String entityPropertyPath : updatedEntities.keySet()) {
                         DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
                         if (beanService != null)
                             for (Integer updatedIndex : updatedEntities.get(entityPropertyPath))
-                                beanService.update(row, updatedIndex, entityPropertyPath);
+                                if (beanService.update(row, updatedIndex, entityPropertyPath)) {
+                                    String parentPath = entityPropertyPath.substring(0, entityPropertyPath.lastIndexOf('.'));
+                                    if (!updatedEntities.containsKey(parentPath))
+                                        updatedParents.computeIfAbsent(parentPath, k -> new HashSet<>())
+                                                .add(getEntityForPath(parentPath).isCollection() ? 0 : updatedIndex);
+                                }
                     }
+                    // if children updates/inserts modify parent mapping attributes, add parent to updates
+                    updatedEntities.putAll(updatedParents);
                 } catch (Exception e) {
                     exceptionHandler.handle(e);
                 }
@@ -293,6 +304,7 @@ public class DDataView extends AbstractDataView {
             for (DDataViewRow row : updates.keySet())
                 try {
                     HashMap<String, Set<Integer>> updatedEntities = updates.get(row);
+                    HashMap<String, Set<Integer>> updatedParents = new HashMap<>();
                     for (String entityPropertyPath : updatedEntities.keySet()) {
                         DDataAttribute entityBeanAttribute = this.getEntityForPath(entityPropertyPath);
                         DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
@@ -308,22 +320,119 @@ public class DDataView extends AbstractDataView {
                                 Object anyId = row.getColumnValue(updatedIndex,
                                         entityPropertyPath.length() == 0 ? firstIdProp :
                                                 entityPropertyPath + "." + firstIdProp);
-                                if (anyId == null) { //is new element
-
-                                    //TODO or not TODO
-                                    prepared.remove(pk);
+                                boolean parentMustBeUpdated = false;
+                                if (idIsNull(anyId)) { //is new element
+                                    if (beanService == null) {
+                                        for (DDataAttribute idAttribute : row.view.viewEIds.get(entityBeanAttribute))
+                                            fillIdAttibute(connection, row,
+                                                    entityBeanAttribute.getBeanInterface(),
+                                                    entityPropertyPath,
+                                                    updatedIndex, idAttribute, dateNow);
+                                        pk.fillMappings(row, entityBeanAttribute, updatedIndex, entityPropertyPath);
+                                    }
+                                    pk.fillInsert(row, updatedIndex, dateNow);
+                                    parentMustBeUpdated = entityBeanAttribute.joinMapping()
+                                            .keySet().stream().anyMatch(v ->
+                                                    Arrays.stream(entityBeanAttribute.getClass().getEnumConstants())
+                                                            .filter(a -> v.equals(a.getColumnName()))
+                                                            .anyMatch(a -> !a.isPrimaryKey())
+                                            );
                                 } else
-                                    pk.fillStatement(row, updatedIndex, dateNow);
+                                    pk.fillUpdate(row, updatedIndex, dateNow);
+                                if (parentMustBeUpdated) {
+                                    String parentPath = entityPropertyPath.substring(0, entityPropertyPath.lastIndexOf('.'));
+                                    if (!updatedEntities.containsKey(parentPath))
+                                        updatedParents.computeIfAbsent(parentPath, k -> new HashSet<>())
+                                                .add(getEntityForPath(parentPath).isCollection() ? 0 : updatedIndex);
+                                }
                             }
+                        }
+                    }
+                    // if children inserts modify parent mapping attributes, update parents entities
+                    for (String entityPropertyPath : updatedParents.keySet()) {
+                        DDataAttribute entityBeanAttribute = this.getEntityForPath(entityPropertyPath);
+                        DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
+                        if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
+                            PreparedUpdates pk = prepared.stream()
+                                    .filter(k -> entityPropertyPath.equals(k.entityPropertyPath))
+                                    .findAny().orElse(null);
+                            if (pk == null)
+                                prepared.add(pk = new PreparedUpdates(this, entityPropertyPath, connection));
+
+                            for (Integer updatedIndex : updatedParents.get(entityPropertyPath))
+                                pk.fillUpdate(row, updatedIndex, dateNow);
                         }
                     }
                 } catch (Exception e) {
                     exceptionHandler.handle(e);
                 }
-            for (PreparedUpdates pk : prepared) if (pk.batchOperation) pk.ps.execute();
+            for (PreparedUpdates pk : prepared) pk.execute();
         } finally {
-            for (PreparedUpdates pk : prepared) pk.ps.close();
+            for (PreparedUpdates pk : prepared) pk.close();
+            //sqlSession.clearCache();
         }
+    }
+
+    static boolean idIsNull(Object anyId) {
+        return anyId == null || (
+                anyId instanceof Number && ((Number) anyId).longValue() == 0
+        );
+    }
+
+    private void fillIdAttibute(
+            Connection connection, DDataViewRow row, Class<? extends Serializable> beanInterface,
+            String entityPropertyPath, Integer index, DDataAttribute idAttribute, Date dateNow
+    ) throws NoSuchMethodException, SQLException {
+        String pCase = Character.toUpperCase(idAttribute.getPropertyName().charAt(0)) +
+                idAttribute.getPropertyName().substring(1);
+        Method idProp = beanInterface.getDeclaredMethod("get" + pCase);
+        String idPropertyPath = entityPropertyPath.length() == 0 ?
+                idAttribute.getPropertyName() :
+                entityPropertyPath + "." + idAttribute.getPropertyName();
+        GeneratedValue gen = idProp.getAnnotation(GeneratedValue.class);
+        if (gen == null) try {
+            idProp = beanInterface.getDeclaredMethod("set" + pCase);
+            gen = idProp.getAnnotation(GeneratedValue.class);
+        } catch (Exception ignore) {
+            gen = null;
+        }
+        if (gen == null) {
+            if (Temporal.class.isAssignableFrom(idAttribute.getJavaType()))
+                row.setColumnValue(dateNow, index, idPropertyPath, false);
+            else if (Date.class.isAssignableFrom(idAttribute.getJavaType()))
+                row.setColumnValue(dateNow, index, idPropertyPath, false);
+        } else {
+            Object idValue = null;
+            switch (gen.strategy()) {
+                case SEQUENCE:
+                    try (PreparedStatement st = connection.prepareStatement("SELECT nextval(?);")) {
+                        st.setString(1, gen.value());
+                        try (ResultSet rs = st.executeQuery()) {
+                            if (rs.next()) idValue = idFromResult(rs, idAttribute);
+                        }
+                    }
+                    break;
+                case SELECT:
+                    try (Statement st = connection.createStatement()) {
+                        try (ResultSet rs = st.executeQuery(gen.value())) {
+                            if (rs.next()) idValue = idFromResult(rs, idAttribute);
+                        }
+                    }
+                    break;
+            }
+            if (idValue != null)
+                row.setColumnValue(idValue, index, idPropertyPath, false);
+        }
+    }
+
+    private Object idFromResult(ResultSet rs, DDataAttribute idAttribute) throws SQLException {
+        if (Integer.class.isAssignableFrom(idAttribute.getJavaType()))
+            return rs.getInt(1);
+        if (Long.class.isAssignableFrom(idAttribute.getJavaType()))
+            return rs.getLong(1);
+        if (Short.class.isAssignableFrom(idAttribute.getJavaType()))
+            return rs.getShort(1);
+        return null;
     }
 
     @SuppressWarnings("unchecked")

@@ -13,7 +13,7 @@ public abstract class DDataBeanUpdateService<T> {
         this.beanInterface = beanInterface;
     }
 
-    void update(DDataViewRow row, Integer index, String entityPath) throws Exception {
+    boolean update(DDataViewRow row, Integer index, String entityPath) throws Exception {
         T bean = createBean();
         DDataAttribute entityAttribute = row.view.getEntityForPath(entityPath);
         @SuppressWarnings("unchecked")
@@ -35,7 +35,8 @@ public abstract class DDataBeanUpdateService<T> {
                         parentMapAttribute.getPropertyName() :
                         entityPath.substring(0, i + 1) + parentMapAttribute.getPropertyName());
                 setProperty(bean, beanMapAttribute, parentMapValue);
-            } else throw new Exception("beanMapAttribute == null || parentMapAttribute == null");
+            } else
+                throw new Exception("beanMapAttribute == null || parentMapAttribute == null");
         }
         // call update services for children
         boolean anyChildUpdated = false;
@@ -52,6 +53,7 @@ public abstract class DDataBeanUpdateService<T> {
         bean = updateBean(bean);
 
         // update parent properties used for mapping from bean
+        boolean anyParentItemMayBeModified = false;
         for (String parentMapColumn : entityAttribute.joinMapping().keySet()) {
             String beanMapColumn = entityAttribute.joinMapping().get(parentMapColumn);
             DDataAttribute beanMapAttribute = Arrays.stream(wb.getEnumConstants())
@@ -61,10 +63,13 @@ public abstract class DDataBeanUpdateService<T> {
             DDataAttribute parentMapAttribute = getParentAttribute(row, entityPath, i, parentMapColumn);
             if (beanMapAttribute != null && parentMapAttribute != null && !parentMapAttribute.isPrimaryKey()) {
                 Object beanMapValue = getProperty(bean, beanMapAttribute);
-                row.setColumnValue(beanMapValue, entityAttribute.isCollection() ? 0 : index, i < 0 ?
-                                parentMapAttribute.getPropertyName() :
-                                entityPath.substring(0, i + 1) + parentMapAttribute.getPropertyName(),
-                        false);
+                if (!DDataView.idIsNull(beanMapValue)) {
+                    row.setColumnValue(beanMapValue, entityAttribute.isCollection() ? 0 : index, i < 0 ?
+                                    parentMapAttribute.getPropertyName() :
+                                    entityPath.substring(0, i + 1) + parentMapAttribute.getPropertyName(),
+                            false);
+                    anyParentItemMayBeModified = true;
+                }
             }
         }
         // write bean properties to view row if updates to database must be wrote by view
@@ -79,6 +84,8 @@ public abstract class DDataBeanUpdateService<T> {
                                 false);
                 }
             }
+
+        return anyParentItemMayBeModified;
     }
 
     private void updateBeanByRow(
@@ -96,7 +103,7 @@ public abstract class DDataBeanUpdateService<T> {
 
     private DDataAttribute getParentAttribute(DDataViewRow row, String entityPath, int i, String parentColumnName) {
         if (i < 0) {
-            return (DDataAttribute) Arrays.stream(row.view.roots).filter(r ->
+            return Arrays.stream(row.view.roots).filter(r ->
                     Arrays.stream(r.getEnumConstants())
                             .anyMatch(a -> parentColumnName.equals(((DDataAttribute) a).getColumnName()))
             ).findAny().map(rx -> Arrays.stream(rx.getEnumConstants())
@@ -104,7 +111,9 @@ public abstract class DDataBeanUpdateService<T> {
                     .findAny().orElse(null)
             ).orElse(null);
         } else {
-            return Arrays.stream(row.view.getEntityForPath(entityPath.substring(0, i)).getClass().getEnumConstants())
+            @SuppressWarnings("unchecked") Class<? extends DDataAttribute> parentClass =
+                    row.view.getEntityForPath(entityPath.substring(0, i)).getJavaType();
+            return Arrays.stream(parentClass.getEnumConstants())
                     .filter(a -> parentColumnName.equals(a.getColumnName()))
                     .findAny().orElse(null);
         }

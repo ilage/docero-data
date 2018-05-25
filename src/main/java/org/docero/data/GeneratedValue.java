@@ -1,13 +1,22 @@
 package org.docero.data;
 
+import java.lang.annotation.*;
+
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.FIELD})
 public @interface GeneratedValue {
     GenerationType strategy() default GenerationType.SEQUENCE;
+
     String value() default "";
+
     /**
      * Synonym for value
+     *
      * @return value
      */
     String generator() default "";
+
     /**
      * If set to FALSE, it runs the insert statement and then
      * the selectKey statement – which is common with databases

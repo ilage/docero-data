@@ -3,11 +3,13 @@ package org.docero.data.beans;
 import org.docero.data.DDataBean;
 import org.docero.data.DDataProperty;
 import org.docero.data.DictionaryType;
+import org.docero.data.GeneratedValue;
 
 import java.io.Serializable;
 
 @DDataBean(value = "inner", table = "inner", schema = "ddata")
 public interface Inner extends Serializable {
+    @GeneratedValue("ddata.sample_seq")
     @DDataProperty(value = "id", id = true)
     int getId();
     void setId(int id);

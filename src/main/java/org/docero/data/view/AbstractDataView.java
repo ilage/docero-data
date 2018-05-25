@@ -76,18 +76,18 @@ abstract class AbstractDataView {
             DSQL sql, Class clazz,
             DDataFilter column
     ) {
-        addColumnToViewSql(sql, clazz, column, "", "", 0, joinedInRootQuery, columnsInRoot);
+        addColumnToViewSql(sql, null, clazz, column, "", "", 0, joinedInRootQuery, columnsInRoot);
     }
 
     private void addColumnToViewSql(
-            DSQL sql, Class clazz,
+            DSQL sql, DDataAttribute parentAttribute, Class<? extends DDataAttribute> clazz,
             DDataFilter column, String path, String uniqPath, int fromTableIndex,
             HashSet<Integer> alreadyJoined, HashSet<String> columnsInSelect
     ) {
         DDataAttribute attribute = null;
         for (Field field : clazz.getDeclaredFields())
             if (field.isEnumConstant()) {
-                DDataAttribute a = (DDataAttribute) Enum.valueOf(clazz, field.getName());
+                DDataAttribute a = (DDataAttribute) Enum.valueOf((Class<? extends Enum>) clazz, field.getName());
                 if (a.getPropertyName() != null && a.getPropertyName().equals(column.getName())) {
                     attribute = a;
                     break;
@@ -95,10 +95,9 @@ abstract class AbstractDataView {
             }
 
         if (attribute != null && attribute.getColumnName() != null) {
-            String pathAttributeName = path + (column.mapToName() == null ?
-                    attribute.getPropertyName() : column.mapToName());
+            String pathAttributeName = path + attribute.getPropertyName();
             String pathAttributeKey = pathAttributeName + PROP_PATCH_DELIMITER;
-            String uniqKey = uniqPath + attribute.getPropertyName() + ":" + column.mapToName() + ":" +
+            String uniqKey = uniqPath + attribute.getPropertyName() + ":" +
                     attribute.getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
 
             if (attribute.isMappedBean()) {
@@ -108,50 +107,84 @@ abstract class AbstractDataView {
                     allJoins.put(uniqKey, table);
                 }
 
-                if (attribute.getJavaType().isEnum()) {
-                    if (!attribute.isCollection() && column.hasFilters()) {
-                        if (!alreadyJoined.contains(table.tableIndex)) {
-                            sql.LEFT_OUTER_JOIN(table.joinSql);
-                            alreadyJoined.add(table.tableIndex);
-                        }
-                        for (DDataFilter col : column.getFilters()) {
-                            addColumnToViewSql(sql, attribute.getJavaType(), col,
-                                    pathAttributeKey, uniqKey, table.tableIndex, alreadyJoined, columnsInSelect);
-                        }
-                        //add ids if not present in columnsInSelect
-                        for (Field a : attribute.getJavaType().getDeclaredFields())
-                            if (a.isEnumConstant()) {
-                                DDataAttribute idAttribute = (DDataAttribute)
-                                        Enum.valueOf(attribute.getJavaType(), a.getName());
-                                if (idAttribute.isPrimaryKey()) {
-                                    String idKey = pathAttributeKey + idAttribute.getPropertyName();
-                                    if (!columnsInSelect.contains(idKey))
+                if (!attribute.isCollection() && column.hasFilters()) {
+                    if (!alreadyJoined.contains(table.tableIndex)) {
+                        sql.LEFT_OUTER_JOIN(table.joinSql);
+                        alreadyJoined.add(table.tableIndex);
+                    }
+                    for (DDataFilter col : column.getFilters()) {
+                        addColumnToViewSql(sql, attribute, attribute.getJavaType(), col,
+                                pathAttributeKey, uniqKey, table.tableIndex, alreadyJoined, columnsInSelect);
+
+                        if (col.getAttribute().isMappedBean()) {
+                            // add non id mapping columns used by col.attribute.joinMapping.keySet
+                            for (String columnName : col.getAttribute().joinMapping().keySet()) {
+                                DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(attribute.getJavaType(), columnName);
+                                if (mapAttr != null) {
+                                    String mapKey = pathAttributeKey + mapAttr.getPropertyName();
+                                    if (!columnsInSelect.contains(mapKey))
                                         try {
-                                            addColumnToViewSql(sql, attribute.getJavaType(),
-                                                    new DDataFilter(idAttribute),
+                                            addColumnToViewSql(sql, attribute, attribute.getJavaType(),
+                                                    new DDataFilter(mapAttr),
                                                     pathAttributeKey, uniqKey, table.tableIndex,
                                                     alreadyJoined, columnsInSelect);
-                                            columnsInSelect.add(idKey);
+                                            columnsInSelect.add(mapKey);
                                         } catch (DDataException ignore) {
                                         }
                                 }
                             }
-                    } else if (column.getOperator() != null && column.getOperator().isAggregation()) {
-                        if (!alreadyJoined.contains(table.tableIndex)) {
-                            sql.LEFT_OUTER_JOIN(table.joinSql);
-                            alreadyJoined.add(table.tableIndex);
                         }
-                        sql.SELECT(column.getOperator() + "(t" + table.tableIndex + ".*)" +
-                                " AS \"" + pathAttributeName + "\"");
-                    } else if (column.hasFilters()) { // is collection without aggregation
-                        CollectionColumn cc = subSelectsForColumns.get(uniqKey);
-                        if (cc == null) {
-                            subSelectsForColumns.put(uniqKey, cc = new CollectionColumn(
-                                    table, pathAttributeKey, uniqKey, attribute.getJavaType()));
-                        }
-                        cc.filters.addAll(column.getFilters());
                     }
+                    //add ids if not present in columnsInSelect
+                    for (Field a : attribute.getJavaType().getDeclaredFields())
+                        if (a.isEnumConstant()) {
+                            DDataAttribute idAttribute = (DDataAttribute)
+                                    Enum.valueOf(attribute.getJavaType(), a.getName());
+                            if (idAttribute.isPrimaryKey()) {
+                                String idKey = pathAttributeKey + idAttribute.getPropertyName();
+                                if (!columnsInSelect.contains(idKey))
+                                    try {
+                                        addColumnToViewSql(sql, attribute, attribute.getJavaType(),
+                                                new DDataFilter(idAttribute),
+                                                pathAttributeKey, uniqKey, table.tableIndex,
+                                                alreadyJoined, columnsInSelect);
+                                        columnsInSelect.add(idKey);
+                                    } catch (DDataException ignore) {
+                                    }
+                            }
+                        }
+                } else if (column.getOperator() != null && column.getOperator().isAggregation()) {
+                    if (!alreadyJoined.contains(table.tableIndex)) {
+                        sql.LEFT_OUTER_JOIN(table.joinSql);
+                        alreadyJoined.add(table.tableIndex);
+                    }
+                    sql.SELECT(column.getOperator() + "(t" + table.tableIndex + ".*)" +
+                            " AS \"" + pathAttributeName + "\"");
+                } else if (column.hasFilters()) { // is collection without aggregation
+                    CollectionColumn cc = subSelectsForColumns.get(uniqKey);
+                    if (cc == null) {
+                        subSelectsForColumns.put(uniqKey, cc = new CollectionColumn(
+                                table, pathAttributeKey, uniqKey, attribute));
+                    }
+                    cc.filters.addAll(column.getFilters());
                 }
+                // add non id mapping columns used by parentAttribute.joinMapping.values
+                if (parentAttribute != null)
+                    for (String columnName : parentAttribute.joinMapping().values()) {
+                        DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(attribute.getJavaType(), columnName);
+                        if (mapAttr != null) {
+                            String mapKey = pathAttributeKey + mapAttr.getPropertyName();
+                            if (!columnsInSelect.contains(mapKey))
+                                try {
+                                    addColumnToViewSql(sql, attribute, attribute.getJavaType(),
+                                            new DDataFilter(mapAttr),
+                                            pathAttributeKey, uniqKey, table.tableIndex,
+                                            alreadyJoined, columnsInSelect);
+                                    columnsInSelect.add(mapKey);
+                                } catch (DDataException ignore) {
+                                }
+                        }
+                    }
             } else if (column.getOperator() != null) {
                 addFilterSql(sql, column, clazz, uniqPath, fromTableIndex, alreadyJoined);
             } else {
@@ -166,6 +199,14 @@ abstract class AbstractDataView {
         }
     }
 
+    private DDataAttribute getNotIdAttrubuteByColumnName(Class<? extends DDataAttribute> clazz, String columnName) {
+        return Arrays.stream(clazz.getEnumConstants())
+                .filter(a -> a.getColumnName() != null)
+                .filter(a -> !a.isPrimaryKey())
+                .filter(a -> a.getColumnName().equals(columnName))
+                .findAny().orElse(null);
+    }
+
     List<DSQL> getSubSelects() {
         ArrayList<DSQL> subSelects = new ArrayList();
         for (CollectionColumn column : subSelectsForColumns.values()) {
@@ -177,12 +218,12 @@ abstract class AbstractDataView {
 
             sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
             for (DDataFilter col : column.filters) {
-                String uniqKey = column.uniqPath + col.getAttribute().getPropertyName() + ":" + col.mapToName() + ":" +
+                String uniqKey = column.uniqPath + col.getAttribute().getPropertyName() + ":" +
                         col.getAttribute().getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
                 JoinedTable jt = allJoins.get(uniqKey);
                 if (jt != null) addJoinForSubSelects(sql, jt, joinedInSubQuery);
 
-                addColumnToViewSql(sql, column.clazz, col, column.path, column.uniqPath, column.table.tableIndex,
+                addColumnToViewSql(sql, column.byAttribute, column.clazz, col, column.path, column.uniqPath, column.table.tableIndex,
                         joinedInSubQuery, columnsInSubQuery);
             }
             //add ids if not present in columnsInSubQuery (setSortAscending(true))
@@ -194,7 +235,7 @@ abstract class AbstractDataView {
                         String idKey = column.path + idAttribute.getPropertyName();
                         if (!columnsInSubQuery.contains(idKey))
                             try {
-                                addColumnToViewSql(sql, column.clazz, new DDataFilter(idAttribute) {{
+                                addColumnToViewSql(sql, column.byAttribute, column.clazz, new DDataFilter(idAttribute) {{
                                             this.setSortAscending(true);
                                         }}, column.path, column.uniqPath, column.table.tableIndex,
                                         joinedInSubQuery, columnsInSubQuery);
@@ -203,6 +244,22 @@ abstract class AbstractDataView {
                             }
                     }
                 }
+            // add non id mapping columns used by column.byAttribute.joinMapping.values
+            for (String columnName : column.byAttribute.joinMapping().values()) {
+                DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(column.clazz, columnName);
+                if (mapAttr != null) {
+                    String mapKey = column.path + mapAttr.getPropertyName();
+                    if (!columnsInSubQuery.contains(mapKey))
+                        try {
+                            addColumnToViewSql(sql, column.byAttribute, column.clazz,
+                                    new DDataFilter(mapAttr),
+                                    column.path, column.uniqPath, column.table.tableIndex,
+                                    joinedInSubQuery, columnsInSubQuery);
+                            columnsInSubQuery.add(mapKey);
+                        } catch (DDataException ignore) {
+                        }
+                }
+            }
             subSelects.add(sql);
         }
         return subSelects;
@@ -321,13 +378,13 @@ abstract class AbstractDataView {
                     }
                 } else if (filter.hasFilters()) {
                     Class innerClass = filter.getAttribute().getJavaType();
-                    String key = path + filter.getAttribute().getPropertyName() + ":" + filter.mapToName() + ":" +
+                    String key = path + filter.getAttribute().getPropertyName() + ":" +
                             innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                     addFilterSql(sql, filter, innerClass, key, table.tableIndex, alreadyJoined);
                 }
             } else { // we can't use two separate filters by same table
                 Class innerClass = filter.getAttribute().getJavaType();
-                String key = path + filter.getAttribute().getPropertyName() + ":" + filter.mapToName() + ":" +
+                String key = path + filter.getAttribute().getPropertyName() + ":" +
                         innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                 int finalN = tablesCounter.incrementAndGet();
                 allJoins.put(key, new JoinedTable(fromTableIndex, finalN, filter.getAttribute()));
@@ -411,7 +468,7 @@ abstract class AbstractDataView {
                     String idKey = idAttribute.getPropertyName();
                     if (!columnsInRoot.contains(idKey))
                         try {
-                            addColumnToViewSql(sql, rootClass, new DDataFilter(idAttribute) {{
+                            addColumnToViewSql(sql, null, rootClass, new DDataFilter(idAttribute) {{
                                         this.setSortAscending(true);
                                     }}, "", "", 0,
                                     joinedInRootQuery, columnsInRoot);
@@ -449,12 +506,14 @@ abstract class AbstractDataView {
         private final String path;
         private final String uniqPath;
         private final Class clazz;
+        private final DDataAttribute byAttribute;
 
-        private CollectionColumn(JoinedTable table, String path, String uniqPath, Class javaType) {
+        private CollectionColumn(JoinedTable table, String path, String uniqPath, DDataAttribute byAttribute) {
             this.table = table;
             this.path = path;
             this.uniqPath = uniqPath;
-            this.clazz = javaType;
+            this.byAttribute = byAttribute;
+            this.clazz = byAttribute.getJavaType();
         }
     }
 }

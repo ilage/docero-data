@@ -235,14 +235,20 @@ public class DDataTest {
             DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
             iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             iCols.add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
-                this.add(new DDataFilter(Inner_WB_.TEXT, "myNameForProperty"));
-                this.add(new DDataFilter(Inner_WB_.ID, "myIdProperty"));
+                this.add(new DDataFilter(Inner_WB_.TEXT));
+                this.add(new DDataFilter(Inner_WB_.ID));
+                // checked if present this.add(new DDataFilter(Inner_WB_.SAMPLE_ID));
                 this.add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 5555));
             }});
-            iCols.add(new DDataFilter(Sample_WB_.LIST_PARAMETER, "listParameterEx") {{
-                this.add(new DDataFilter(Inner_WB_.TEXT, "!"));
-            }});
             add(iCols);
+
+            add(new DDataFilter(ItemItemSample_WB_.SAMPLE) {{
+                add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
+                    add(new DDataFilter(Sample_WB_.INNER) {{
+                        this.add(new DDataFilter(Inner_WB_.TEXT));
+                    }});
+                }});
+            }});
 
             iCols = new DDataFilter(ItemInner_WB_.INNER);
             iCols.add(new DDataFilter(Inner_WB_.TEXT));
@@ -273,31 +279,10 @@ public class DDataTest {
         DDataViewRow row;
         Map<Object, Object> map;
         assertNotNull(row = viewResult.getRow((Object) 3));
-        Object[] v = row.getColumn(ItemSample_WB_.SAMPLE.getPropertyName() + "." +
-                "listParameterEx");
+        Object[] v = row.getColumn(ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.TEXT);
         assertEquals(2, v.length);
-        String myNameForProperty = ItemSample_WB_.SAMPLE.getPropertyName() + "." +
-                Sample_WB_.LIST_PARAMETER.getPropertyName() + "." +
-                "myNameForProperty";
-        v = row.getColumn(myNameForProperty);
-        assertEquals(2, v.length);
-/*        //noinspection unchecked
-        assertNotNull(map = (Map<Object, Object>) map.get(ItemSample_WB_.SAMPLE.getPropertyName()));
-        //noinspection unchecked
-        List<Object> list;
-        //noinspection unchecked
-        assertNotNull(list = (List<Object>) map.get("listParameterEx"));
-        assertEquals(2, list.size());
-        //noinspection unchecked
-        assertNotNull(list = (List<Object>) map.get(Sample_WB_.LIST_PARAMETER.getPropertyName()));
-        assertEquals(2, list.size());
-        //noinspection unchecked
-        assertNotNull(map = (Map<Object, Object>) list.get(0));
-        //noinspection unchecked
-        assertNull(map.get(Inner_WB_.TEXT.getPropertyName()));
-        assertNotNull(map.get("myNameForProperty"));*/
 
-        view.addUpdateService(Inner.class, new DDataBeanUpdateService<Inner>(Inner.class) {
+        /*view.addUpdateService(Inner.class, new DDataBeanUpdateService<Inner>(Inner.class) {
             @Override
             protected Inner createBean() {
                 return iInnerRepository.create();
@@ -312,34 +297,52 @@ public class DDataTest {
             public boolean serviceDoesNotMakeUpdates() {
                 return true;
             }
-        });
-        row.setColumnValue("test for", 0,
-                ItemInner_WB_.INNER, Inner_WB_.TEXT);
+        });*/
 
-        row.setColumnValue("updated text value", 1, myNameForProperty);
+        row.setColumnValue("updated text value", 1,
+                ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.TEXT);
 
-        assertEquals("updated text value", row.getColumnValue(1, myNameForProperty));
+        assertEquals("updated text value", row.getColumnValue(1,
+                ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.TEXT));
 
-        Integer updated_id = (Integer) row.getColumnValue(1,
+        row.setColumnValue("test for insert", 2,
+                ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.TEXT);
+
+        /*row.setColumnValue("test for linkage", 0,
+                ItemItemSample_WB_.SAMPLE, ItemSample_WB_.SAMPLE, Sample_WB_.INNER, Inner_WB_.TEXT);*/
+
+        Integer sample_id = (Integer) row.getColumnValue(0, ItemSample_WB_.ID);
+
+        Integer inner_id = (Integer) row.getColumnValue(1,
                 ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.ID);
 
         view.flushUpdates(t -> {
+            t.printStackTrace();
             throw new RuntimeException("Too many errors", t);
         });
 
         assertEquals(viewResult.size(), viewResult.toList().size());
 
-        assertEquals("updated text value", iInnerRepository.get(updated_id).getText());
+        assertEquals("updated text value", iInnerRepository.get(inner_id).getText());
+
+        ItemSample sample_o = multiTypesRepository.get(sample_id);
+        assertNotNull(sample_o);
+        assertNotNull(sample_o.getSample().getListParameter());
+        assertTrue(
+                sample_o.getSample().getListParameter().stream()
+                        .anyMatch(i -> "test for insert".equals(i.getText()))
+        );
+        //assertEquals("test for linkage", sample_o.getSample().getInner().getText());
 
         assertEquals(3, view.count());
 
         view = viewBuilder.build(Sample_WB_.class, new ArrayList<DDataFilter>() {{
-            add(new DDataFilter(Sample_WB_.LIST_PARAMETER, "list1", DDataFilterOperator.COUNT));
+            add(new DDataFilter(Sample_WB_.LIST_PARAMETER, DDataFilterOperator.COUNT));
         }});
         int[] maxCount = view.aggregateInt(DDataFilterOperator.MAX);
         assertNotNull(maxCount);
         assertEquals(1, maxCount.length);
-        assertEquals(2, maxCount[0]);
+        assertEquals(3, maxCount[0]);
     }
 
     /*private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
@@ -627,11 +630,10 @@ public class DDataTest {
         for (int i = 0; i < 10000; i++) assertNotNull(iInnerRepository.get(inrId));
 
         Inner ni = iInnerRepository.create();
-        ni.setId(1010);
         ni.setText("new");
         iInnerRepository.insert(ni);
 
-        assertNotNull(iInnerRepository.get(1010));
+        assertNotNull(iInnerRepository.get(ni.getId()));
     }
 
     @Test
