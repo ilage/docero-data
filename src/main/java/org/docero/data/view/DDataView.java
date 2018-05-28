@@ -28,7 +28,8 @@ public class DDataView extends AbstractDataView {
     final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
     final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
     private final HashMap<String, DDataAttribute> viewEntities = new HashMap<>();
-    final IdentityHashMap<DDataFilter, String> viewPaths = new IdentityHashMap<>();
+    final HashMap<DDataFilter, String> viewPaths = new HashMap<>();
+    final HashMap<String, List<EntityMapping>> viewMappings = new HashMap<>();
     final List<Sort> sortedPaths = new ArrayList<>();
 
     final HashMap<DDataAttribute, Set<DDataAttribute>> viewEIds = new HashMap<>();
@@ -45,10 +46,10 @@ public class DDataView extends AbstractDataView {
         for (Field field : roots[0].getDeclaredFields())
             if (field.isEnumConstant())
                 try {
-                    DDataAttribute idAtr = (DDataAttribute) field.get(null);
-                    if (idAtr.isPrimaryKey()) {
+                    DDataAttribute attr = (DDataAttribute) field.get(null);
+                    if (attr.isPrimaryKey()) {
                         viewEIds.computeIfAbsent(null, k -> new TreeSet<>(propertiesComparator))
-                                .add(idAtr);
+                                .add(attr);
                     }
                 } catch (IllegalAccessException ignore) {
                 }
@@ -64,14 +65,27 @@ public class DDataView extends AbstractDataView {
             //String[] attrPath = cp.split("\\.");
             if (attribute.isMappedBean()) {
                 viewEntities.put(cp, attribute);
-                for (Field field : attribute.getJavaType().getDeclaredFields())
+                for (Field field : attribute.getJavaType().getFields())
                     if (field.isEnumConstant())
                         try {
-                            DDataAttribute idAtr = (DDataAttribute) field.get(null);
-                            if (idAtr.isPrimaryKey()) {
+                            DDataAttribute attr = (DDataAttribute) field.get(null);
+                            if (attr.isPrimaryKey()) {
                                 viewEIds.computeIfAbsent(attribute, k -> new TreeSet<>(propertiesComparator))
-                                        .add(idAtr);
+                                        .add(attr);
                             }
+                            attribute.joinMapping().entrySet().stream()
+                                    .filter(v -> v.getValue().equals(attr.getColumnName()))
+                                    .findAny().ifPresent(v -> {
+                                Arrays.stream((parent != null ?
+                                        parent.getClass() : roots[0]).getEnumConstants())
+                                        .filter(a -> v.getKey().equals(a.getColumnName()))
+                                        .findAny().ifPresent(pa ->
+                                        viewMappings.computeIfAbsent(cp, a -> new ArrayList<>())
+                                                .add(new EntityMapping(
+                                                        path == null ? pa.getPropertyName() : path + "." + pa.getPropertyName(),
+                                                        cp + "." + attr.getPropertyName(),
+                                                        pa, attr)));
+                            });
                         } catch (IllegalAccessException ignore) {
                         }
             } else if (!attribute.isPrimaryKey() && attribute.getColumnName() != null) {
@@ -253,7 +267,7 @@ public class DDataView extends AbstractDataView {
     /**
      * row -> beanPath -> index -> parameter entityPropertyPath
      */
-    private HashMap<DDataViewRow, HashMap<String, Set<Integer>>> updates;
+    private HashMap<DDataViewRow, TreeMap<String, Set<Integer>>> updates;
 
     DDataAttribute getEntityForPath(String s) {
         return viewEntities.get(s);
@@ -266,8 +280,10 @@ public class DDataView extends AbstractDataView {
     void addUpdate(DDataViewRow dDataViewRow, int index, String path) {
         int i = path.lastIndexOf('.');
         String beanPath = i < 0 ? null : path.substring(0, i);
-        HashMap<String, Set<Integer>> update =
-                updates.computeIfAbsent(dDataViewRow, k -> new HashMap<>());
+        TreeMap<String, Set<Integer>> update =
+                updates.computeIfAbsent(dDataViewRow, k -> new TreeMap<>(
+                        (s1, s2) -> Integer.compare(s2 == null ? 0 : s2.length(), s1 == null ? 0 : s1.length()))
+                );
         update.computeIfAbsent(beanPath, k -> new HashSet<>()).add(index);
     }
 
@@ -276,13 +292,14 @@ public class DDataView extends AbstractDataView {
         Date dateNow = new Date();
 
         Connection connection = sqlSession.getConnection();
-        Set<PreparedUpdates> prepared = new TreeSet<>(Comparator.comparingInt(k -> k.entityPropertyPath.length()));
+        Set<PreparedUpdates> prepared = new TreeSet<>(Comparator.comparingInt(k ->
+                k.entityPropertyPath == null ? 0 : k.entityPropertyPath.length()));
         try {
             // at first, process rows data by known bean update services (DDataBeanUpdateService)
             // they must do real updates in database and may replace ids of managed bean
             for (DDataViewRow row : updates.keySet())
                 try {
-                    HashMap<String, Set<Integer>> updatedEntities = updates.get(row);
+                    TreeMap<String, Set<Integer>> updatedEntities = updates.get(row);
                     HashMap<String, Set<Integer>> updatedParents = new HashMap<>();
                     for (String entityPropertyPath : updatedEntities.keySet()) {
                         DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
@@ -303,14 +320,19 @@ public class DDataView extends AbstractDataView {
             // next, write updated rows to database
             for (DDataViewRow row : updates.keySet())
                 try {
-                    HashMap<String, Set<Integer>> updatedEntities = updates.get(row);
+                    TreeMap<String, Set<Integer>> updatedEntities = updates.get(row);
                     HashMap<String, Set<Integer>> updatedParents = new HashMap<>();
                     for (String entityPropertyPath : updatedEntities.keySet()) {
                         DDataAttribute entityBeanAttribute = this.getEntityForPath(entityPropertyPath);
+                        @SuppressWarnings("unchecked")
+                        Class<? extends Serializable> entityBeanInterface = entityBeanAttribute != null ?
+                                entityBeanAttribute.getBeanInterface() :
+                                (Class<? extends Serializable>)
+                                        roots[0].getField("BEAN_INTERFACE").get(null);
                         DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
                         if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
                             PreparedUpdates pk = prepared.stream()
-                                    .filter(k -> entityPropertyPath.equals(k.entityPropertyPath))
+                                    .filter(k -> Objects.equals(entityPropertyPath, k.entityPropertyPath))
                                     .findAny().orElse(null);
                             if (pk == null)
                                 prepared.add(pk = new PreparedUpdates(this, entityPropertyPath, connection));
@@ -318,25 +340,22 @@ public class DDataView extends AbstractDataView {
                             for (Integer updatedIndex : updatedEntities.get(entityPropertyPath)) {
                                 String firstIdProp = pk.getFirstIdColumnName();
                                 Object anyId = row.getColumnValue(updatedIndex,
-                                        entityPropertyPath.length() == 0 ? firstIdProp :
+                                        entityPropertyPath == null ? firstIdProp :
                                                 entityPropertyPath + "." + firstIdProp);
                                 boolean parentMustBeUpdated = false;
                                 if (idIsNull(anyId)) { //is new element
                                     if (beanService == null) {
                                         for (DDataAttribute idAttribute : row.view.viewEIds.get(entityBeanAttribute))
                                             fillIdAttibute(connection, row,
-                                                    entityBeanAttribute.getBeanInterface(),
+                                                    entityBeanInterface,
                                                     entityPropertyPath,
                                                     updatedIndex, idAttribute, dateNow);
-                                        pk.fillMappings(row, entityBeanAttribute, updatedIndex, entityPropertyPath);
+                                        if (entityBeanAttribute != null)
+                                            pk.fillMappings(row, entityBeanAttribute, updatedIndex, entityPropertyPath);
                                     }
                                     pk.fillInsert(row, updatedIndex, dateNow);
-                                    parentMustBeUpdated = entityBeanAttribute.joinMapping()
-                                            .keySet().stream().anyMatch(v ->
-                                                    Arrays.stream(entityBeanAttribute.getClass().getEnumConstants())
-                                                            .filter(a -> v.equals(a.getColumnName()))
-                                                            .anyMatch(a -> !a.isPrimaryKey())
-                                            );
+                                    parentMustBeUpdated = viewMappings.get(entityPropertyPath).stream()
+                                            .anyMatch(em -> !em.parentAttribute.isPrimaryKey());
                                 } else
                                     pk.fillUpdate(row, updatedIndex, dateNow);
                                 if (parentMustBeUpdated) {
@@ -350,7 +369,7 @@ public class DDataView extends AbstractDataView {
                     }
                     // if children inserts modify parent mapping attributes, update parents entities
                     for (String entityPropertyPath : updatedParents.keySet()) {
-                        DDataAttribute entityBeanAttribute = this.getEntityForPath(entityPropertyPath);
+                        //DDataAttribute entityBeanAttribute = this.getEntityForPath(entityPropertyPath);
                         DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
                         if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
                             PreparedUpdates pk = prepared.stream()
@@ -385,13 +404,13 @@ public class DDataView extends AbstractDataView {
     ) throws NoSuchMethodException, SQLException {
         String pCase = Character.toUpperCase(idAttribute.getPropertyName().charAt(0)) +
                 idAttribute.getPropertyName().substring(1);
-        Method idProp = beanInterface.getDeclaredMethod("get" + pCase);
+        Method idProp = beanInterface.getMethod("get" + pCase);
         String idPropertyPath = entityPropertyPath.length() == 0 ?
                 idAttribute.getPropertyName() :
                 entityPropertyPath + "." + idAttribute.getPropertyName();
         GeneratedValue gen = idProp.getAnnotation(GeneratedValue.class);
         if (gen == null) try {
-            idProp = beanInterface.getDeclaredMethod("set" + pCase);
+            idProp = beanInterface.getMethod("set" + pCase);
             gen = idProp.getAnnotation(GeneratedValue.class);
         } catch (Exception ignore) {
             gen = null;
@@ -459,6 +478,20 @@ public class DDataView extends AbstractDataView {
         Sort(String path, boolean asc) {
             this.path = path;
             this.asc = asc;
+        }
+    }
+
+    static class EntityMapping {
+        final String parentPath;
+        final String childPath;
+        final DDataAttribute parentAttribute;
+        final DDataAttribute childAttribute;
+
+        EntityMapping(String parentPath, String childPath, DDataAttribute parentAttribute, DDataAttribute childAttribute) {
+            this.parentPath = parentPath;
+            this.childPath = childPath;
+            this.parentAttribute = parentAttribute;
+            this.childAttribute = childAttribute;
         }
     }
 }

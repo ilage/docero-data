@@ -118,6 +118,7 @@ abstract class AbstractDataView {
 
                         if (col.getAttribute().isMappedBean()) {
                             // add non id mapping columns used by col.attribute.joinMapping.keySet
+
                             for (String columnName : col.getAttribute().joinMapping().keySet()) {
                                 DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(attribute.getJavaType(), columnName);
                                 if (mapAttr != null) {

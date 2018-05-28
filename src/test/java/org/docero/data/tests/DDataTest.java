@@ -308,8 +308,8 @@ public class DDataTest {
         row.setColumnValue("test for insert", 2,
                 ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.TEXT);
 
-        /*row.setColumnValue("test for linkage", 0,
-                ItemItemSample_WB_.SAMPLE, ItemSample_WB_.SAMPLE, Sample_WB_.INNER, Inner_WB_.TEXT);*/
+        row.setColumnValue("test for linkage", 0,
+                ItemSample_WB_.SAMPLE, Sample_WB_.INNER, Inner_WB_.TEXT);
 
         Integer sample_id = (Integer) row.getColumnValue(0, ItemSample_WB_.ID);
 
@@ -332,7 +332,7 @@ public class DDataTest {
                 sample_o.getSample().getListParameter().stream()
                         .anyMatch(i -> "test for insert".equals(i.getText()))
         );
-        //assertEquals("test for linkage", sample_o.getSample().getInner().getText());
+        assertEquals("test for linkage", sample_o.getSample().getInner().getText());
 
         assertEquals(3, view.count());
 
@@ -364,6 +364,41 @@ public class DDataTest {
             }
         }
     }*/
+
+    @Test
+    @Transactional
+    public void versionalViewTest() throws Exception {
+        setUp();
+
+        DDataViewBuilder viewBuilder = new DDataViewBuilder(sqlSessionFactory);
+        DDataView view = viewBuilder.build(HistSample_WB_.class, new ArrayList<DDataFilter>() {{
+            add(new DDataFilter(HistSample_WB_.VALUE));
+            add(new DDataFilter(HistSample_WB_.INNER) {{
+                add(new DDataFilter(HistInner_WB_.TEXT));
+            }});
+        }});
+        view.setFilter(new DDataFilter() {{
+            add(new DDataFilter(HistSample_WB_.ID, DDataFilterOperator.GREATE, 0));
+        }});
+
+        DDataViewRows vr = view.select(0, 100);
+        vr.setOrder(DDataOrder.asc(HistSample_WB_.ID));
+        DDataViewRow row = vr.getRow(0);
+        Integer t_sample_id = (Integer) row.getColumnValue(0, HistSample_WB_.ID);
+
+        row.setColumnValue("update sample", 0, HistSample_WB_.VALUE);
+        row.setColumnValue("update inner", 0, HistSample_WB_.INNER, HistInner_WB_.TEXT);
+
+        view.flushUpdates(t -> {
+            t.printStackTrace();
+            throw new RuntimeException("Too many errors", t);
+        });
+
+        HistSample bean = iVSample.get(t_sample_id);
+        assertNotNull(bean);
+        assertNotNull(bean.getInner());
+    }
+
 
     @Test
     @Transactional
