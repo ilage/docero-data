@@ -21,7 +21,6 @@ public class DDataView extends AbstractDataView {
 
     private final SqlSession sqlSession;
     final Class<? extends DDataAttribute>[] roots;
-    final List<DDataAttribute> rootAttrubutes = new ArrayList<>();
     final DDataFilter[] columns;
     private DDataFilter filter = new DDataFilter();
     private final Temporal version;
@@ -36,7 +35,10 @@ public class DDataView extends AbstractDataView {
     final HashMap<DDataAttribute, Set<DDataAttribute>> viewEIds = new HashMap<>();
     final HashMap<DDataAttribute, Set<DDataFilter>> viewProperties = new HashMap<>();
 
-    DDataView(SqlSession sqlSession, Class[] roots, DDataFilter[] columns, Temporal version) {
+    DDataView(
+            SqlSession sqlSession, Class<? extends DDataAttribute>[] roots,
+            DDataFilter[] columns, Temporal version
+    ) throws DDataException {
         this.sqlSession = sqlSession;
         this.roots = roots;
         this.columns = columns;
@@ -44,15 +46,22 @@ public class DDataView extends AbstractDataView {
             columns[0].setSortAscending(true);
         this.version = version;
 
+        try {
+            rootVersionFrom = (DDataAttribute)
+                    roots[0].getDeclaredField("VERSION_FROM").get(null);
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            throw new DDataException("select view not from *_WB_ enum: " + roots[0].getCanonicalName());
+        }
+        String versionColumn = rootVersionFrom == null ? "" : rootVersionFrom.getColumnName();
         for (int ri = 0; ri < roots.length; ri++)
             for (Field field : roots[ri].getDeclaredFields())
                 if (field.isEnumConstant())
                     try {
                         DDataAttribute attr = (DDataAttribute) field.get(null);
-                        if (attr.getColumnName() != null && rootAttrubutes.stream()
+                        if (attr.getColumnName() != null && rootAttributes.stream()
                                 .noneMatch(a -> a.getColumnName().equals(attr.getColumnName()))) {
-                            rootAttrubutes.add(attr);
-                            if (attr.isPrimaryKey()) {
+                            rootAttributes.add(attr);
+                            if (attr.isPrimaryKey() && !versionColumn.equals(attr.getColumnName())) {
                                 viewEIds.computeIfAbsent(null, k -> new TreeSet<>(propertiesComparator))
                                         .add(attr);
                             }
@@ -71,11 +80,18 @@ public class DDataView extends AbstractDataView {
             //String[] attrPath = cp.split("\\.");
             if (attribute.isMappedBean()) {
                 viewEntities.put(cp, attribute);
+                String versionColumn = "";
+                try {
+                    DDataAttribute va = (DDataAttribute)
+                            attribute.getJavaType().getField("VERSION_FROM").get(null);
+                    if (va != null) versionColumn = va.getColumnName();
+                } catch (IllegalAccessException | NoSuchFieldException ignore) {
+                }
                 for (Field field : attribute.getJavaType().getFields())
                     if (field.isEnumConstant())
                         try {
                             DDataAttribute attr = (DDataAttribute) field.get(null);
-                            if (attr.isPrimaryKey()) {
+                            if (attr.isPrimaryKey() && !versionColumn.equals(attr.getColumnName())) {
                                 viewEIds.computeIfAbsent(attribute, k -> new TreeSet<>(propertiesComparator))
                                         .add(attr);
                             }
@@ -83,7 +99,7 @@ public class DDataView extends AbstractDataView {
                                     .filter(v -> v.getValue().equals(attr.getColumnName()))
                                     .findAny().ifPresent(v -> {
                                 (parent != null ? Arrays.stream(parent.getClass().getEnumConstants()) :
-                                        rootAttrubutes.stream())
+                                        rootAttributes.stream())
                                         .filter(a -> v.getKey().equals(a.getColumnName()))
                                         .findAny().ifPresent(pa ->
                                         viewMappings.computeIfAbsent(cp, a -> new ArrayList<>())
@@ -122,7 +138,7 @@ public class DDataView extends AbstractDataView {
     }
 
     public long count() throws DDataException {
-        DSQL sql = buildFrom(roots[0]);
+        DSQL sql = buildFrom(roots);
         sql.SELECT("COUNT(*)");
         buildFilters(sql);
 
@@ -132,13 +148,13 @@ public class DDataView extends AbstractDataView {
 
     public DDataViewRows select(int offset, int limit) throws DDataException {
         this.updates = new HashMap<>();
-        DSQL sql = buildFrom(roots[0]);
+        DSQL sql = buildFrom(roots);
         String keySql = getKeySQL();
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
         for (DDataFilter column : columns)
             for (Class root : roots)
                 if (super.isApplicable(root, column)) {
-                    super.addColumnToViewSql(sql, root, column);
+                    super.addColumnToViewSql(sql, column);
                     break;
                 }
         super.addRootIdsToViewSql(sql);
@@ -175,13 +191,13 @@ public class DDataView extends AbstractDataView {
     public int[] aggregateInt(DDataFilterOperator operator) throws DDataException {
         DSQL agSql = new DSQL();
         agSql.SELECT("'group' as \"dDataBeanKey_\"");
-        DSQL sql = buildFrom(roots[0]);
+        DSQL sql = buildFrom(roots);
         String keySql = getKeySQL();
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
         for (DDataFilter column : columns)
             for (Class root : roots)
                 if (super.isApplicable(root, column)) {
-                    super.addColumnToViewSql(sql, root, column);
+                    super.addColumnToViewSql(sql, column);
                     String pathName = column.getName();
                     agSql.SELECT(operator + "(t.\"" + pathName + "\") AS \"" + pathName + "\"");
                     break;
@@ -365,7 +381,8 @@ public class DDataView extends AbstractDataView {
                                 } else
                                     pk.fillUpdate(row, updatedIndex, dateNow);
                                 if (parentMustBeUpdated) {
-                                    String parentPath = entityPropertyPath.substring(0, entityPropertyPath.lastIndexOf('.'));
+                                    int lii = entityPropertyPath.lastIndexOf('.');
+                                    String parentPath = lii < 0 ? null : entityPropertyPath.substring(0, lii);
                                     if (!updatedEntities.containsKey(parentPath))
                                         updatedParents.computeIfAbsent(parentPath, k -> new HashSet<>())
                                                 .add(getEntityForPath(parentPath).isCollection() ? 0 : updatedIndex);
@@ -422,6 +439,12 @@ public class DDataView extends AbstractDataView {
             gen = null;
         }
         if (gen == null) {
+            DDataAttribute ea = getEntityForPath(entityPropertyPath);
+            viewMappings.get(entityPropertyPath).stream()
+                    .filter(m -> m.childPath.equals(idPropertyPath))
+                    .findAny().ifPresent(m -> row.setColumnValue(
+                    row.getColumnValue(ea.isCollection() ? 0 : index, m.parentPath),
+                    index, idPropertyPath));
             if (Temporal.class.isAssignableFrom(idAttribute.getJavaType()))
                 row.setColumnValue(dateNow, index, idPropertyPath, false);
             else if (Date.class.isAssignableFrom(idAttribute.getJavaType()))

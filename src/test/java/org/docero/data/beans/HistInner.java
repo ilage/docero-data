@@ -1,15 +1,13 @@
 package org.docero.data.beans;
 
-import org.docero.data.DDataBean;
-import org.docero.data.DDataProperty;
-import org.docero.data.DDataVersionalBean;
-import org.docero.data.DictionaryType;
+import org.docero.data.*;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
 @DDataBean(value = "h2", table = "h2", schema = "ddata")
 public interface HistInner extends DDataVersionalBean<LocalDateTime> {
+    @GeneratedValue("ddata.sample_seq")
     @DDataProperty(value = "id", id = true)
     int getId();
     void setId(int id);

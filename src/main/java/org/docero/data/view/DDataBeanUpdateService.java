@@ -17,8 +17,8 @@ public abstract class DDataBeanUpdateService<T> {
         T bean = createBean();
         DDataAttribute entityAttribute = row.view.getEntityForPath(entityPath);
         @SuppressWarnings("unchecked")
-        Class<? extends DDataAttribute> wb = (Class<? extends DDataAttribute>)
-                this.getClass().getClassLoader().loadClass(beanInterface.getName() + "_WB_");
+        Class<? extends DDataAttribute> wb = entityAttribute.getJavaType();/*(Class<? extends DDataAttribute>)
+                this.getClass().getClassLoader().loadClass(beanInterface.getName() + "_WB_");*/
 
         updateBeanByRow(row, wb, bean, index, entityPath);
 
@@ -103,13 +103,9 @@ public abstract class DDataBeanUpdateService<T> {
 
     private DDataAttribute getParentAttribute(DDataViewRow row, String entityPath, int i, String parentColumnName) {
         if (i < 0) {
-            return Arrays.stream(row.view.roots).filter(r ->
-                    Arrays.stream(r.getEnumConstants())
-                            .anyMatch(a -> parentColumnName.equals(((DDataAttribute) a).getColumnName()))
-            ).findAny().map(rx -> Arrays.stream(rx.getEnumConstants())
-                    .filter(a -> parentColumnName.equals(((DDataAttribute) a).getColumnName()))
-                    .findAny().orElse(null)
-            ).orElse(null);
+            return row.view.rootAttributes.stream()
+                    .filter(a -> parentColumnName.equals(a.getColumnName()))
+                    .findAny().orElse(null);
         } else {
             @SuppressWarnings("unchecked") Class<? extends DDataAttribute> parentClass =
                     row.view.getEntityForPath(entityPath.substring(0, i)).getJavaType();

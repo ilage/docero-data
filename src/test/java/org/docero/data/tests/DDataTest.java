@@ -350,26 +350,6 @@ public class DDataTest {
         assertEquals(3, maxCount[0]);
     }
 
-    /*private void checkDDataView(DDataView view, long expectedRows) throws SQLException, DDataException {
-        try (Connection conn = dataSource.getConnection()) {
-            try (Statement st = conn.createStatement()) {
-                long c = 0;
-                String runSql = view.select().toString();
-                LOG.debug(runSql);
-                ResultSet rs = st.executeQuery(runSql);
-                while (rs.next()) c++;
-                assertEquals(expectedRows, c);
-
-                runSql = view.count().toString();
-                LOG.debug(runSql);
-                ResultSet rs0 = st.executeQuery(runSql);
-                assertTrue(rs0.next());
-                assertEquals(c, rs0.getLong(1));
-                rs0.close();
-            }
-        }
-    }*/
-
     @Test
     @Transactional
     public void versionalViewTest() throws Exception {
