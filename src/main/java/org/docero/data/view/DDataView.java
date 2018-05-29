@@ -21,6 +21,7 @@ public class DDataView extends AbstractDataView {
 
     private final SqlSession sqlSession;
     final Class<? extends DDataAttribute>[] roots;
+    final List<DDataAttribute> rootAttrubutes = new ArrayList<>();
     final DDataFilter[] columns;
     private DDataFilter filter = new DDataFilter();
     private final Temporal version;
@@ -28,7 +29,7 @@ public class DDataView extends AbstractDataView {
     final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
     final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
     private final HashMap<String, DDataAttribute> viewEntities = new HashMap<>();
-    final HashMap<DDataFilter, String> viewPaths = new HashMap<>();
+    final IdentityHashMap<DDataFilter, String> viewPaths = new IdentityHashMap<>();
     final HashMap<String, List<EntityMapping>> viewMappings = new HashMap<>();
     final List<Sort> sortedPaths = new ArrayList<>();
 
@@ -43,16 +44,21 @@ public class DDataView extends AbstractDataView {
             columns[0].setSortAscending(true);
         this.version = version;
 
-        for (Field field : roots[0].getDeclaredFields())
-            if (field.isEnumConstant())
-                try {
-                    DDataAttribute attr = (DDataAttribute) field.get(null);
-                    if (attr.isPrimaryKey()) {
-                        viewEIds.computeIfAbsent(null, k -> new TreeSet<>(propertiesComparator))
-                                .add(attr);
+        for (int ri = 0; ri < roots.length; ri++)
+            for (Field field : roots[ri].getDeclaredFields())
+                if (field.isEnumConstant())
+                    try {
+                        DDataAttribute attr = (DDataAttribute) field.get(null);
+                        if (attr.getColumnName() != null && rootAttrubutes.stream()
+                                .noneMatch(a -> a.getColumnName().equals(attr.getColumnName()))) {
+                            rootAttrubutes.add(attr);
+                            if (attr.isPrimaryKey()) {
+                                viewEIds.computeIfAbsent(null, k -> new TreeSet<>(propertiesComparator))
+                                        .add(attr);
+                            }
+                        }
+                    } catch (IllegalAccessException ignore) {
                     }
-                } catch (IllegalAccessException ignore) {
-                }
         for (DDataFilter column : columns) fillViewEntities(column, null, null);
     }
 
@@ -76,8 +82,8 @@ public class DDataView extends AbstractDataView {
                             attribute.joinMapping().entrySet().stream()
                                     .filter(v -> v.getValue().equals(attr.getColumnName()))
                                     .findAny().ifPresent(v -> {
-                                Arrays.stream((parent != null ?
-                                        parent.getClass() : roots[0]).getEnumConstants())
+                                (parent != null ? Arrays.stream(parent.getClass().getEnumConstants()) :
+                                        rootAttrubutes.stream())
                                         .filter(a -> v.getKey().equals(a.getColumnName()))
                                         .findAny().ifPresent(pa ->
                                         viewMappings.computeIfAbsent(cp, a -> new ArrayList<>())

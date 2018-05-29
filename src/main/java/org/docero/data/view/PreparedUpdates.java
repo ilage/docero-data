@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
-import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.time.LocalDate;
@@ -27,10 +26,10 @@ class PreparedUpdates {
     private final DDataAttribute versionFrom;
     private final DDataAttribute versionTo;
 
-
     private final Connection connection;
     private final TreeSet<DDataAttribute> unModified;
-    private final Map<DDataAttribute, String> mappings;
+    private final Map<DDataAttribute, MapPath> mappings;
+    private final boolean mapAsCollection;
     private String tableName = null;
     private PreparedStatement ps = null;
     private PreparedStatement pi = null;
@@ -45,37 +44,32 @@ class PreparedUpdates {
         Set<DDataFilter> beanProperties = dDataView.viewProperties.get(beanAttribute);
         props.addAll(beanProperties);
         mappings = new HashMap<>();
+        mapAsCollection = beanAttribute == null ? false : beanAttribute.isCollection();
         dDataView.viewMappings.values().forEach(e -> e.stream()
                 .filter(m -> entityPropertyPath == null ?
                         m.parentPath.indexOf('.') < 0 :
-                        m.parentPath.startsWith(entityPropertyPath) &&
-                                m.parentPath.indexOf('.', entityPropertyPath.length()) == 0 &&
+                        m.parentPath.startsWith(entityPropertyPath + ".") &&
                                 m.parentPath.indexOf('.', entityPropertyPath.length() + 1) < 0)
                 .filter(m -> !m.parentAttribute.isPrimaryKey())
-                .forEach(m -> mappings.put(m.parentAttribute, m.childPath)));
+                .forEach(m -> mappings.put(m.parentAttribute, new MapPath(m.childPath, false))));
         dDataView.viewMappings.values().forEach(e -> e.stream()
                 .filter(m -> entityPropertyPath == null ?
                         m.childPath.indexOf('.') < 0 :
-                        m.childPath.startsWith(entityPropertyPath) &&
-                                m.childPath.indexOf('.', entityPropertyPath.length()) == 0 &&
+                        m.childPath.startsWith(entityPropertyPath + ".") &&
                                 m.childPath.indexOf('.', entityPropertyPath.length() + 1) < 0)
                 .filter(m -> !m.childAttribute.isPrimaryKey())
-                .forEach(m -> mappings.put(m.childAttribute, m.parentPath)));
+                .forEach(m -> mappings.put(m.childAttribute, new MapPath(m.parentPath,
+                        beanAttribute != null && beanAttribute.isCollection()))));
 
         Class<? extends DDataAttribute> beanClass = beanAttribute != null ?
                 beanAttribute.getJavaType() : dDataView.roots[0];
         unModified = new TreeSet<>(DDataView.propertiesComparator);
-        for (Field field : beanClass.getDeclaredFields())
-            if (field.isEnumConstant())
-                try {
-                    DDataAttribute beanAtr = (DDataAttribute) field.get(null);
-                    if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
-                        if (props.stream().noneMatch(c -> c.getAttribute() == beanAtr) &&
-                                !mappings.containsKey(beanAtr))
-                            unModified.add(beanAtr);
-                    }
-                } catch (IllegalAccessException ignore) {
-                }
+        for (DDataAttribute beanAtr : beanAttribute != null ? Arrays.asList(beanClass.getEnumConstants()) : dDataView.rootAttrubutes)
+            if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
+                if (props.stream().noneMatch(c -> c.getAttribute() == beanAtr) &&
+                        !mappings.containsKey(beanAtr))
+                    unModified.add(beanAtr);
+            }
         try {
             tableName = (String) beanClass.getField("TABLE_NAME").get(null);
             versionFrom = (DDataAttribute) beanClass.getField("VERSION_FROM").get(null);
@@ -104,9 +98,9 @@ class PreparedUpdates {
                 fillStatement(ps, pIdx++, prop.getAttribute(),
                         row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)));
 
-            for (Map.Entry<DDataAttribute, String> m : mappings.entrySet()) {
+            for (Map.Entry<DDataAttribute, MapPath> m : mappings.entrySet()) {
                 fillStatement(ps, pIdx++, m.getKey(),
-                        row.getColumnValue(updatedIndex, m.getValue()));
+                        row.getColumnValue(m.getValue().fromCollection ? 0 : updatedIndex, m.getValue().path));
             }
 
             fillStatement(ps, pIdx++, versionFrom, dateNow);
@@ -131,8 +125,8 @@ class PreparedUpdates {
                                 .map(val -> val == null ? "NULL" : val.toString())
                                 .collect(Collectors.joining(",")) +
                         (mappings.isEmpty() ? "" : "," +
-                                mappings.entrySet().stream()
-                                        .map(m -> row.getColumnValue(updatedIndex, m.getValue()))
+                                mappings.values().stream()
+                                        .map(m -> row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.path))
                                         .map(val -> val == null ? "NULL" : val.toString())
                                         .collect(Collectors.joining(","))
                         ) +
@@ -150,9 +144,9 @@ class PreparedUpdates {
             for (DDataFilter prop : props)
                 fillStatement(ps, pIdx++, prop.getAttribute(),
                         row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)));
-            for (Map.Entry<DDataAttribute, String> m : mappings.entrySet()) {
+            for (Map.Entry<DDataAttribute, MapPath> m : mappings.entrySet()) {
                 fillStatement(ps, pIdx++, m.getKey(),
-                        row.getColumnValue(updatedIndex, m.getValue()));
+                        row.getColumnValue(m.getValue().fromCollection ? 0 : updatedIndex, m.getValue().path));
             }
             for (DDataAttribute id : ids)
                 fillStatement(ps, pIdx++, id,
@@ -165,8 +159,8 @@ class PreparedUpdates {
                                 .map(val -> val == null ? "NULL" : val.toString())
                                 .collect(Collectors.joining(",")) +
                         (mappings.isEmpty() ? "" : "," +
-                                mappings.entrySet().stream()
-                                        .map(m -> row.getColumnValue(updatedIndex, m.getValue()))
+                                mappings.values().stream()
+                                        .map(m -> row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.path))
                                         .map(val -> val == null ? "NULL" : val.toString())
                                         .collect(Collectors.joining(","))
                         ) + "," +
@@ -366,9 +360,9 @@ class PreparedUpdates {
         for (DDataFilter prop : props)
             fillStatement(pi, pIdx++, prop.getAttribute(),
                     row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)));
-        for (Map.Entry<DDataAttribute, String> m : mappings.entrySet()) {
+        for (Map.Entry<DDataAttribute, MapPath> m : mappings.entrySet()) {
             fillStatement(pi, pIdx++, m.getKey(),
-                    row.getColumnValue(updatedIndex, m.getValue()));
+                    row.getColumnValue(m.getValue().fromCollection ? 0 : updatedIndex, m.getValue().path));
         }
         for (DDataAttribute id : ids)
             fillStatement(pi, pIdx++, id,
@@ -381,8 +375,8 @@ class PreparedUpdates {
                             .map(val -> val == null ? "NULL" : val.toString())
                             .collect(Collectors.joining(",")) +
                     (mappings.isEmpty() ? "" : "," +
-                            mappings.entrySet().stream()
-                                    .map(m -> row.getColumnValue(updatedIndex, m.getValue()))
+                            mappings.values().stream()
+                                    .map(m -> row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.path))
                                     .map(val -> val == null ? "NULL" : val.toString())
                                     .collect(Collectors.joining(","))
                     ) + "," +
@@ -494,6 +488,16 @@ class PreparedUpdates {
                         ") ->" + m.getValue() + " (" +
                         (childMapAttribute == null ? "NULL" : childMapAttribute.getPropertyName()) +
                         ")");
+        }
+    }
+
+    private class MapPath {
+        final String path;
+        final boolean fromCollection;
+
+        private MapPath(String path, boolean fromCollection) {
+            this.path = path;
+            this.fromCollection = fromCollection;
         }
     }
 }

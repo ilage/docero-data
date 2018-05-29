@@ -235,10 +235,13 @@ public class DDataTest {
             DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
             iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             iCols.add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
+                add(new DDataFilter(Inner_WB_.TEXT));
+                add(new DDataFilter(Inner_WB_.ID));
+                // checked if present add(new DDataFilter(Inner_WB_.SAMPLE_ID));
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 5555));
+            }});
+            iCols.add(new DDataFilter(Sample_WB_.INNER) {{
                 this.add(new DDataFilter(Inner_WB_.TEXT));
-                this.add(new DDataFilter(Inner_WB_.ID));
-                // checked if present this.add(new DDataFilter(Inner_WB_.SAMPLE_ID));
-                this.add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 5555));
             }});
             add(iCols);
 
@@ -308,7 +311,7 @@ public class DDataTest {
         row.setColumnValue("test for insert", 2,
                 ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.TEXT);
 
-        row.setColumnValue("test for linkage", 0,
+        row.setColumnValue("update linked", 0,
                 ItemSample_WB_.SAMPLE, Sample_WB_.INNER, Inner_WB_.TEXT);
 
         Integer sample_id = (Integer) row.getColumnValue(0, ItemSample_WB_.ID);
@@ -327,12 +330,14 @@ public class DDataTest {
 
         ItemSample sample_o = multiTypesRepository.get(sample_id);
         assertNotNull(sample_o);
+        assertNotNull(sample_o.getSample());
+        assertNotNull(sample_o.getSample().getInner());
+        assertEquals("update linked", sample_o.getSample().getInner().getText());
         assertNotNull(sample_o.getSample().getListParameter());
         assertTrue(
                 sample_o.getSample().getListParameter().stream()
                         .anyMatch(i -> "test for insert".equals(i.getText()))
         );
-        assertEquals("test for linkage", sample_o.getSample().getInner().getText());
 
         assertEquals(3, view.count());
 
@@ -370,6 +375,8 @@ public class DDataTest {
     public void versionalViewTest() throws Exception {
         setUp();
 
+        LocalDateTime beforeUpdate = LocalDateTime.now().minusSeconds(1);
+
         DDataViewBuilder viewBuilder = new DDataViewBuilder(sqlSessionFactory);
         DDataView view = viewBuilder.build(HistSample_WB_.class, new ArrayList<DDataFilter>() {{
             add(new DDataFilter(HistSample_WB_.VALUE));
@@ -397,7 +404,15 @@ public class DDataTest {
         HistSample bean = iVSample.get(t_sample_id);
         assertNotNull(bean);
         assertNotNull(bean.getInner());
+        assertEquals("update inner",bean.getInner().getText());
+
+        bean = iVSample.get(t_sample_id, beforeUpdate);
+        assertNotNull(bean);
+        assertNotNull(bean.getInner());
+        assertNotEquals("update inner",bean.getInner().getText());
     }
+
+
 
 
     @Test
