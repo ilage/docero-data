@@ -21,15 +21,13 @@ class PreparedUpdates {
     final String entityPropertyPath;
 
     private final DDataView dDataView;
-    private final TreeSet<DDataAttribute> ids = new TreeSet<>(DDataView.propertiesComparator);
-    private final TreeSet<DDataFilter> props = new TreeSet<>(DDataView.columnsComparator);
-    private final DDataAttribute versionFrom;
-    private final DDataAttribute versionTo;
+    private final List<DDataAttribute> ids = new ArrayList<>();
+    private final List<AbstractDataView.TableCell> props = new ArrayList<>();
+    private final AbstractDataView.TableEntity entity;
 
     private final Connection connection;
+    private final List<PreparedMap> mappings;
     private final TreeSet<DDataAttribute> unModified;
-    private final Map<DDataAttribute, MapPath> mappings;
-    private String tableName;
     private PreparedStatement ps = null;
     private PreparedStatement pi = null;
     private boolean batchOperation = false;
@@ -38,85 +36,75 @@ class PreparedUpdates {
         this.entityPropertyPath = entityPropertyPath;
         this.dDataView = dDataView;
         this.connection = connection;
-        DDataAttribute beanAttribute = dDataView.getEntityForPath(entityPropertyPath);
-        ids.addAll(dDataView.viewEIds.get(beanAttribute));
-        Set<DDataFilter> beanProperties = dDataView.viewProperties.get(beanAttribute);
-        props.addAll(beanProperties);
-        mappings = new HashMap<>();
-        dDataView.viewMappings.values().forEach(e -> e.stream()
-                .filter(m -> entityPropertyPath == null ?
-                        m.parentPath.indexOf('.') < 0 :
-                        m.parentPath.startsWith(entityPropertyPath + ".") &&
-                                m.parentPath.indexOf('.', entityPropertyPath.length() + 1) < 0)
-                .filter(m -> !m.parentAttribute.isPrimaryKey())
-                .forEach(m -> mappings.put(m.parentAttribute, new MapPath(m.childPath, false))));
-        dDataView.viewMappings.values().forEach(e -> e.stream()
-                .filter(m -> entityPropertyPath == null ?
-                        m.childPath.indexOf('.') < 0 :
-                        m.childPath.startsWith(entityPropertyPath + ".") &&
-                                m.childPath.indexOf('.', entityPropertyPath.length() + 1) < 0)
-                .filter(m -> !m.childAttribute.isPrimaryKey())
-                .forEach(m -> mappings.put(m.childAttribute, new MapPath(m.parentPath,
-                        beanAttribute != null && beanAttribute.isCollection()))));
+        this.entity = dDataView.getEntityForPath(entityPropertyPath);
+        ids.addAll(entity.cells.stream()
+                .filter(c -> !c.isVersion && c.attribute.isPrimaryKey())
+                .map(c -> c.attribute).collect(Collectors.toSet())
+        );
+        mappings = new ArrayList<>();
+        entity.mappings.entrySet().stream()
+                .filter(m -> !m.getKey().attribute.isPrimaryKey() && !m.getKey().isVersion)
+                .forEach(m -> mappings.add(new PreparedMap(m.getKey(), m.getValue(), false)));
+        if (entity.parent != null)
+            entity.parent.mappings.entrySet().stream()
+                    .filter(m -> entity.cells.contains(m.getValue()) && !m.getValue().attribute.isPrimaryKey() && !m.getValue().isVersion)
+                    .forEach(m -> mappings.add(new PreparedMap(m.getValue(), m.getKey(), entity.isCollection())));
 
-        Class<? extends DDataAttribute> beanClass = beanAttribute != null ?
-                beanAttribute.getJavaType() : dDataView.roots[0];
+        props.addAll(entity.cells.stream()
+                .filter(c -> c.column != null && !c.isVersion && !c.attribute.isPrimaryKey() &&
+                        mappings.stream().noneMatch(m -> m.to.attribute == c.attribute))
+                .collect(Collectors.toSet())
+        );
+
         unModified = new TreeSet<>(DDataView.propertiesComparator);
-        for (DDataAttribute beanAtr : beanAttribute != null ? Arrays.asList(beanClass.getEnumConstants()) : dDataView.rootAttributes)
+        for (DDataAttribute beanAtr : entity.attributes)
             if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
-                if (props.stream().noneMatch(c -> c.getAttribute() == beanAtr) &&
-                        !mappings.containsKey(beanAtr))
+                if (props.stream().noneMatch(c -> c.attribute == beanAtr) &&
+                        mappings.stream().noneMatch(m -> m.to.attribute == beanAtr))
                     unModified.add(beanAtr);
             }
-        try {
-            tableName = (String) beanClass.getField("TABLE_NAME").get(null);
-            versionFrom = (DDataAttribute) beanClass.getField("VERSION_FROM").get(null);
-            versionTo = (DDataAttribute) beanClass.getField("VERSION_TO").get(null);
-        } catch (IllegalAccessException | NoSuchFieldException e) {
-            throw new DDataException("incorrect enumeration used for filter");
-        }
-        if (props.isEmpty() || ids.isEmpty() || tableName == null)
-            throw new DDataException("props==null || ids==null || tableName==null");
+        if (props.isEmpty() || ids.isEmpty())
+            throw new DDataException("props==null || ids==null");
     }
 
     void fillUpdate(DDataViewRow row, Integer updatedIndex, java.util.Date dateNow) throws SQLException {
         if (ps == null) prepareUpdate();
 
-        if (versionFrom != null) { //versional bean
+        if (entity.versionFrom != null) { //versional bean
             int pIdx = 1;
-            if (versionTo != null) {
-                fillStatement(ps, pIdx++, versionTo, dateNow);
+            if (entity.versionTo != null) {
+                fillStatement(ps, pIdx++, entity.versionTo, dateNow);
                 for (DDataAttribute id : ids)
                     fillStatement(ps, pIdx++, id,
                             row.getColumnValue(updatedIndex,
                                     expandPath(entityPropertyPath, id.getPropertyName())));
-                fillStatement(ps, pIdx++, versionFrom,
+                fillStatement(ps, pIdx++, entity.versionFrom,
                         row.getColumnValue(updatedIndex,
-                                expandPath(entityPropertyPath, versionFrom.getPropertyName())));
+                                expandPath(entityPropertyPath, entity.versionFrom.getPropertyName())));
             }
 
-            for (DDataFilter prop : props)
-                fillStatement(ps, pIdx++, prop.getAttribute(),
-                        row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)));
+            for (AbstractDataView.TableCell prop : props)
+                fillStatement(ps, pIdx++, prop.attribute,
+                        row.getColumnValue(updatedIndex, prop.name));
 
-            for (Map.Entry<DDataAttribute, MapPath> m : mappings.entrySet()) {
-                fillStatement(ps, pIdx++, m.getKey(),
-                        row.getColumnValue(m.getValue().fromCollection ? 0 : updatedIndex, m.getValue().path));
+            for (PreparedMap m : mappings) {
+                fillStatement(ps, pIdx++, m.to.attribute,
+                        row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.from.name));
             }
 
-            fillStatement(ps, pIdx++, versionFrom, dateNow);
+            fillStatement(ps, pIdx++, entity.versionFrom, dateNow);
 
             for (DDataAttribute id : ids)
                 fillStatement(ps, pIdx++, id,
                         row.getColumnValue(updatedIndex,
                                 expandPath(entityPropertyPath, id.getPropertyName())));
-            fillStatement(ps, pIdx++, versionFrom,
+            fillStatement(ps, pIdx++, entity.versionFrom,
                     row.getColumnValue(updatedIndex,
-                            expandPath(entityPropertyPath, versionFrom.getPropertyName())));
+                            expandPath(entityPropertyPath, entity.versionFrom.getPropertyName())));
 
             if (LOG.isTraceEnabled()) {
                 LOG.trace(ps.toString());
-                LOG.trace("Parameters: " + (versionTo != null ? (
+                LOG.trace("Parameters: " + (entity.versionTo != null ? (
                                 "NOW()," +
                                         ids.stream().map(id ->
                                                 row.getColumnValue(updatedIndex,
@@ -124,17 +112,18 @@ class PreparedUpdates {
                                                         .toString()
                                         ).collect(Collectors.joining(",")) + "," +
                                         row.getColumnValue(updatedIndex,
-                                                expandPath(entityPropertyPath, versionFrom.getPropertyName())) +
+                                                expandPath(entityPropertyPath, entity.versionFrom.getPropertyName())) +
                                         ","
                         ) :
                                 "") +
                                 props.stream()
-                                        .map(prop -> row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)))
+                                        .map(prop -> row.getColumnValue(updatedIndex, prop.name))
                                         .map(val -> val == null ? "NULL" : val.toString())
                                         .collect(Collectors.joining(",")) +
                                 (mappings.isEmpty() ? "" : "," +
-                                        mappings.values().stream()
-                                                .map(m -> row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.path))
+                                        mappings.stream()
+                                                .map(m -> row.getColumnValue(
+                                                        m.fromCollection ? 0 : updatedIndex, m.from.name))
                                                 .map(val -> val == null ? "NULL" : val.toString())
                                                 .collect(Collectors.joining(","))
                                 ) +
@@ -145,18 +134,18 @@ class PreparedUpdates {
                                         .map(val -> val == null ? "NULL" : val.toString())
                                         .collect(Collectors.joining(",")) + "," +
                                 row.getColumnValue(updatedIndex,
-                                        expandPath(entityPropertyPath, versionFrom.getPropertyName()))
+                                        expandPath(entityPropertyPath, entity.versionFrom.getPropertyName()))
                 );
             }
             ps.executeUpdate();
         } else {
             int pIdx = 1;
-            for (DDataFilter prop : props)
-                fillStatement(ps, pIdx++, prop.getAttribute(),
-                        row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)));
-            for (Map.Entry<DDataAttribute, MapPath> m : mappings.entrySet()) {
-                fillStatement(ps, pIdx++, m.getKey(),
-                        row.getColumnValue(m.getValue().fromCollection ? 0 : updatedIndex, m.getValue().path));
+            for (AbstractDataView.TableCell prop : props)
+                fillStatement(ps, pIdx++, prop.attribute,
+                        row.getColumnValue(updatedIndex, prop.name));
+            for (PreparedMap m : mappings) {
+                fillStatement(ps, pIdx++, m.to.attribute,
+                        row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.from.name));
             }
             for (DDataAttribute id : ids)
                 fillStatement(ps, pIdx++, id,
@@ -165,12 +154,13 @@ class PreparedUpdates {
             if (LOG.isTraceEnabled()) {
                 LOG.trace(ps.toString());
                 LOG.trace("Parameters: " +
-                        props.stream().map(prop -> row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)))
+                        props.stream().map(prop -> row.getColumnValue(updatedIndex, prop.name))
                                 .map(val -> val == null ? "NULL" : val.toString())
                                 .collect(Collectors.joining(",")) +
                         (mappings.isEmpty() ? "" : "," +
-                                mappings.values().stream()
-                                        .map(m -> row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.path))
+                                mappings.stream()
+                                        .map(m -> row.getColumnValue(
+                                                m.fromCollection ? 0 : updatedIndex, m.from.name))
                                         .map(val -> val == null ? "NULL" : val.toString())
                                         .collect(Collectors.joining(","))
                         ) + "," +
@@ -188,23 +178,23 @@ class PreparedUpdates {
      * Prepare statement
      */
     private void prepareUpdate() throws SQLException {
-        if (versionFrom != null) {
+        if (entity.versionFrom != null) {
             String valuesExceptModified = unModified.stream()
-                    .filter(c -> versionTo == null || !versionTo.getColumnName().equals(c.getColumnName()))
+                    .filter(c -> entity.versionTo == null || !entity.versionTo.getColumnName().equals(c.getColumnName()))
                     .map(DDataAttribute::getColumnName)
                     .map(s -> "\"" + s + "\"")
                     .collect(Collectors.joining(","));
             if (valuesExceptModified.length() > 0) valuesExceptModified += ",";
 
-            String sql = (versionTo != null ?
-                    "UPDATE " + tableName + " SET \"" + versionTo.getColumnName() +
+            String sql = (entity.versionTo != null ?
+                    "UPDATE " + entity.table + " SET \"" + entity.versionTo.getColumnName() +
                             "\"=? WHERE " + ids.stream().map(p -> "\"" + p.getColumnName() + "\"=?")
                             .collect(Collectors.joining(" AND ")) + " AND \"" +
-                            versionFrom.getColumnName() + "\"=?; " :
+                            entity.versionFrom.getColumnName() + "\"=?; " :
                     "") +
-                    "INSERT INTO " + tableName + " (" +
+                    "INSERT INTO " + entity.table + " (" +
                     //all ids except version
-                    ids.stream().filter(a -> a != versionFrom)
+                    ids.stream().filter(a -> a != entity.versionFrom)
                             .map(DDataAttribute::getColumnName)
                             .map(s -> "\"" + s + "\"")
                             .collect(Collectors.joining(",")) +
@@ -213,18 +203,18 @@ class PreparedUpdates {
                     valuesExceptModified +
                     //values modified by view
                     props.stream()
-                            .map(c -> c.getAttribute().getColumnName())
+                            .map(c -> c.attribute.getColumnName())
                             .map(s -> "\"" + s + "\"")
                             .collect(Collectors.joining(",")) +
                     (mappings.isEmpty() ? "" : "," +
-                            mappings.entrySet().stream()
-                                    .map(m -> m.getKey().getColumnName())
+                            mappings.stream()
+                                    .map(m -> m.to.attribute.getColumnName())
                                     .map(s -> "\"" + s + "\"")
                                     .collect(Collectors.joining(","))) +
-                    ",\"" + versionFrom.getColumnName() +
+                    ",\"" + entity.versionFrom.getColumnName() +
                     "\") SELECT " +
                     //all ids except version
-                    ids.stream().filter(a -> a != versionFrom)
+                    ids.stream().filter(a -> a != entity.versionFrom)
                             .map(DDataAttribute::getColumnName)
                             .map(s -> "\"" + s + "\"")
                             .collect(Collectors.joining(",")) +
@@ -234,19 +224,19 @@ class PreparedUpdates {
                     //values modified by view
                     parameters(props.size() + mappings.size()) +
                     ",?" +//value of version
-                    " FROM " + tableName +
+                    " FROM " + entity.table +
                     " WHERE " + ids.stream().map(p -> "\"" + p.getColumnName() + "\"=?")
                     .collect(Collectors.joining(" AND ")) +
-                    " AND \"" + versionFrom.getColumnName() + "\"=?";
+                    " AND \"" + entity.versionFrom.getColumnName() + "\"=?";
             ps = connection.prepareStatement(sql);
             batchOperation = false;
         } else {
-            String sql = "UPDATE " + tableName +
+            String sql = "UPDATE " + entity.table +
                     " SET " + props.stream()
-                    .map(p -> "\"" + p.getAttribute().getColumnName() + "\"=?")
+                    .map(p -> "\"" + p.attribute.getColumnName() + "\"=?")
                     .collect(Collectors.joining(",")) +
-                    (mappings.isEmpty() ? "" : "," + mappings.entrySet().stream()
-                            .map(m -> "\"" + m.getKey().getColumnName() + "\"=?")
+                    (mappings.isEmpty() ? "" : "," + mappings.stream()
+                            .map(m -> "\"" + m.to.attribute.getColumnName() + "\"=?")
                             .collect(Collectors.joining(","))) +
                     " WHERE " + ids.stream().map(p -> "\"" + p.getColumnName() + "\"=?")
                     .collect(Collectors.joining(" AND "));
@@ -369,30 +359,31 @@ class PreparedUpdates {
         if (pi == null) prepareInsert();
 
         int pIdx = 1;
-        for (DDataFilter prop : props)
-            fillStatement(pi, pIdx++, prop.getAttribute(),
-                    row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)));
-        for (Map.Entry<DDataAttribute, MapPath> m : mappings.entrySet()) {
-            fillStatement(pi, pIdx++, m.getKey(),
-                    row.getColumnValue(m.getValue().fromCollection ? 0 : updatedIndex, m.getValue().path));
+        for (AbstractDataView.TableCell prop : props)
+            fillStatement(pi, pIdx++, prop.attribute,
+                    row.getColumnValue(updatedIndex, prop.name));
+        for (PreparedMap m : mappings) {
+            fillStatement(pi, pIdx++, m.to.attribute,
+                    row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.from.name));
         }
 
         for (DDataAttribute id : ids)
             fillStatement(pi, pIdx++, id,
                     row.getColumnValue(updatedIndex,
                             expandPath(entityPropertyPath, id.getPropertyName())));
-        if (versionFrom != null)
-            fillStatement(pi, pIdx++, versionFrom, dateNow);
+        if (entity.versionFrom != null)
+            fillStatement(pi, pIdx++, entity.versionFrom, dateNow);
 
         if (LOG.isTraceEnabled()) {
             LOG.trace(pi.toString());
             LOG.trace("Parameters: " +
-                    props.stream().map(prop -> row.getColumnValue(updatedIndex, dDataView.getPathForColumn(prop)))
+                    props.stream().map(prop -> row.getColumnValue(updatedIndex, prop.name))
                             .map(val -> val == null ? "NULL" : val.toString())
                             .collect(Collectors.joining(",")) +
                     (mappings.isEmpty() ? "" : "," +
-                            mappings.values().stream()
-                                    .map(m -> row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.path))
+                            mappings.stream()
+                                    .map(m -> row.getColumnValue(
+                                            m.fromCollection ? 0 : updatedIndex, m.from.name))
                                     .map(val -> val == null ? "NULL" : val.toString())
                                     .collect(Collectors.joining(","))
                     ) + "," +
@@ -400,30 +391,30 @@ class PreparedUpdates {
                             row.getColumnValue(updatedIndex, expandPath(entityPropertyPath, id.getPropertyName())))
                             .map(val -> val == null ? "NULL" : val.toString())
                             .collect(Collectors.joining(",")) +
-                    (versionFrom == null ? "" : ",NOW()")
+                    (entity.versionFrom == null ? "" : ",NOW()")
             );
         }
         pi.executeUpdate();
     }
 
     private void prepareInsert() throws SQLException {
-        String sql = "INSERT INTO " + tableName + " (" +
+        String sql = "INSERT INTO " + entity.table + " (" +
                 props.stream()
-                        .map(p -> p.getAttribute().getColumnName())
+                        .map(p -> p.attribute.getColumnName())
                         .map(s -> "\"" + s + "\"")
                         .collect(Collectors.joining(",")) +
                 (mappings.isEmpty() ? "" : "," +
-                        mappings.entrySet().stream()
-                                .map(m -> m.getKey().getColumnName())
+                        mappings.stream()
+                                .map(m -> m.to.attribute.getColumnName())
                                 .map(s -> "\"" + s + "\"")
                                 .collect(Collectors.joining(","))
                 ) + "," +
                 ids.stream().map(DDataAttribute::getColumnName)
                         .map(s -> "\"" + s + "\"")
                         .collect(Collectors.joining(",")) +
-                (versionFrom == null ? "" : ",\"" + versionFrom.getColumnName() + "\"") +
+                (entity.versionFrom == null ? "" : ",\"" + entity.versionFrom.getColumnName() + "\"") +
                 ") VALUES (" + parameters(props.size() + mappings.size() +
-                ids.size() + (versionFrom == null ? 0 : 1)) + ")";
+                ids.size() + (entity.versionFrom == null ? 0 : 1)) + ")";
         pi = connection.prepareStatement(sql);
     }
 
@@ -512,12 +503,14 @@ class PreparedUpdates {
         }
     }
 
-    private class MapPath {
-        final String path;
+    private class PreparedMap {
+        final AbstractDataView.TableCell to;
+        final AbstractDataView.TableCell from;
         final boolean fromCollection;
 
-        private MapPath(String path, boolean fromCollection) {
-            this.path = path;
+        private PreparedMap(AbstractDataView.TableCell to, AbstractDataView.TableCell from, boolean fromCollection) {
+            this.to = to;
+            this.from = from;
             this.fromCollection = fromCollection;
         }
     }

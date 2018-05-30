@@ -7,6 +7,7 @@ import org.docero.data.utils.DDataTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.Temporal;
@@ -21,38 +22,124 @@ abstract class AbstractDataView {
     private final AtomicInteger tablesCounter = new AtomicInteger(0);
     private final Map<String, CollectionColumn> subSelectsForColumns = new HashMap<>();
 
+    final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
+    final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
+
     abstract Temporal version();
 
-    protected final List<DDataAttribute> rootAttributes = new ArrayList<>();
-    protected DDataAttribute rootVersionFrom;
+    final Class<? extends DDataAttribute>[] roots;
+    final TableEntity rootEntity;
+    final HashMap<String, TableCell> tableCells = new HashMap<>();
+    final HashMap<String, TableEntity> tableEntities = new HashMap<>();
+    final IdentityHashMap<DDataFilter, TableCell> cell4Column = new IdentityHashMap<>();
 
-    private String rootTable;
     private String keyType;
     private HashSet<Integer> joinedInRootQuery;
     private HashSet<String> columnsInRoot;
     private final HashMap<String, JoinedTable> allJoins = new HashMap();
 
-    DSQL buildFrom(Class[] roots) throws DDataException {
-        try {
-            rootTable = (String) roots[0].getDeclaredField("TABLE_NAME").get(null);
-            allJoins.clear();
-            allJoins.put("", new JoinedTable(0, 0, null));
-            joinedInRootQuery = new HashSet<>();
-            columnsInRoot = new HashSet<>();
-            return new DSQL() {{
-                FROM(rootTable + " as t0");
-            }};
-        } catch (IllegalAccessException | NoSuchFieldException e) {
-            throw new DDataException("select view not from *_WB_ enum: " + roots[0].getCanonicalName());
-        }
+    AbstractDataView(Class<? extends DDataAttribute>[] roots, DDataFilter[] columns) {
+        this.roots = roots;
+
+        rootEntity = new TableEntity(roots[0]);
+        String versionColumn = rootEntity.versionFrom == null ? "" : rootEntity.versionFrom.getColumnName();
+
+        for (int ri = 0; ri < roots.length; ri++)
+            for (Field field : roots[ri].getDeclaredFields())
+                if (field.isEnumConstant())
+                    try {
+                        DDataAttribute attr = (DDataAttribute) field.get(null);
+                        if (attr.getColumnName() != null && rootEntity.attributes.stream()
+                                .noneMatch(a -> a.getColumnName().equals(attr.getColumnName()))) {
+                            rootEntity.attributes.add(attr);
+                            if (attr.isPrimaryKey()) {
+                                rootEntity.addCell(new TableCell(attr.getPropertyName(), attr,
+                                        versionColumn.equals(attr.getColumnName())));
+                            }
+                        }
+                    } catch (IllegalAccessException ignore) {
+                    }
+        tableEntities.put(null, rootEntity);
+
+        for (DDataFilter column : columns)
+            fillViewEntities(column, null, rootEntity);
+    }
+
+    private void fillViewEntities(DDataFilter column, String path, TableEntity parent) {
+        DDataAttribute attribute = column.getAttribute();
+        if (attribute != null) {
+            String nameInPath = attribute.getPropertyName();
+            String cp = path == null ? nameInPath : (path + "." + nameInPath);
+
+            String versionColumn = "";
+            try {
+                DDataAttribute va = (DDataAttribute)
+                        attribute.getJavaType().getField("VERSION_FROM").get(null);
+                if (va != null) versionColumn = va.getColumnName();
+            } catch (IllegalAccessException | NoSuchFieldException ignore) {
+            }
+
+            if (attribute.isMappedBean()) {
+                TableEntity entity = new TableEntity(parent, cp, attribute);
+                tableEntities.put(cp, entity);
+                for (DDataAttribute entityAttr : entity.attributes) {
+                    Map.Entry<String, String> usedInMapping = attribute.joinMapping().entrySet().stream()
+                            .filter(es -> es.getValue().equals(entityAttr.getColumnName()))
+                            .findAny().orElse(null);
+                    if (entityAttr.isPrimaryKey() || usedInMapping != null) {
+                        TableCell idCell = new TableCell(cp + "." + entityAttr.getPropertyName(), entityAttr,
+                                versionColumn.equals(entityAttr.getColumnName()));
+                        entity.addCell(idCell);
+                        if (usedInMapping != null) {
+                            TableCell parentMapCell = parent.cells.stream()
+                                    .filter(c -> c.attribute.getColumnName().equals(usedInMapping.getKey()))
+                                    .findAny().orElse(null);
+                            if (parentMapCell == null) {
+                                DDataAttribute parentMapAttr = parent.attributes.stream()
+                                        .filter(c -> c.getColumnName().equals(usedInMapping.getKey()))
+                                        .findAny().orElse(null);
+                                assert parentMapAttr != null;
+                                parent.addCell(parentMapCell = new TableCell(
+                                        (path == null ? "" : path + ".") + parentMapAttr.getPropertyName(),
+                                        parentMapAttr,
+                                        false
+                                ));
+                            }
+                            parent.mappings.put(parentMapCell, idCell);
+                        }
+                    }
+                }
+
+                if (column.getFilters() != null) column.getFilters()
+                        .forEach(f -> fillViewEntities(f, cp, entity));
+
+            } else if (attribute.getColumnName() != null) {
+                parent.addCell(new TableCell(cp, column, versionColumn.equals(attribute.getColumnName())));
+            }
+        } else if (column.getFilters() != null) column.getFilters()
+                .forEach(f -> fillViewEntities(f, path, parent));
+    }
+
+    TableEntity getEntityForPath(String s) {
+        return tableEntities.get(s);
+    }
+
+    DSQL buildFrom() {
+        allJoins.clear();
+        allJoins.put("", new JoinedTable(0, 0, null));
+        joinedInRootQuery = new HashSet<>();
+        columnsInRoot = new HashSet<>();
+        return new DSQL() {{
+            FROM(rootEntity.table + " as t0");
+        }};
     }
 
     String getKeySQL() {
         ArrayList<DDataAttribute> beanKeys = new ArrayList<>();
         String versionColumn = "";
-        if (rootVersionFrom != null)
-            versionColumn = rootVersionFrom.getColumnName();
-        for (DDataAttribute a : rootAttributes)
+        if (rootEntity.versionFrom != null)
+            versionColumn = rootEntity.versionFrom.getColumnName();
+        for (DDataAttribute a : rootEntity.attributes)
             if (a.isPrimaryKey() && !versionColumn.equals(a.getColumnName())) beanKeys.add(a);
 
         if (beanKeys.size() == 1) {
@@ -80,7 +167,7 @@ abstract class AbstractDataView {
             HashSet<Integer> alreadyJoined, HashSet<String> columnsInSelect
     ) {
         List<DDataAttribute> classAttrubutes = parentAttribute == null ?
-                rootAttributes :
+                rootEntity.attributes :
                 Arrays.asList(((Class<? extends DDataAttribute>)
                         parentAttribute.getJavaType()).getEnumConstants());
 
@@ -211,7 +298,7 @@ abstract class AbstractDataView {
         ArrayList<DSQL> subSelects = new ArrayList();
         for (CollectionColumn column : subSelectsForColumns.values()) {
             DSQL sql = new DSQL();
-            sql.FROM(rootTable + " as t0");
+            sql.FROM(rootEntity.table + " as t0");
             HashSet<Integer> joinedInSubQuery = new HashSet<>();
             HashSet<String> columnsInSubQuery = new HashSet<>();
             addJoinForSubSelects(sql, column.table, joinedInSubQuery);
@@ -300,7 +387,6 @@ abstract class AbstractDataView {
         }
         return false;
     }
-
 
 
     void addFilterSql(DSQL sql, DDataFilter rootFilter, Class rootClass) {
@@ -457,12 +543,12 @@ abstract class AbstractDataView {
         return sql;
     }
 
-    public String getKeyType() {
+    String getKeyType() {
         return keyType;
     }
 
     void addRootIdsToViewSql(DSQL sql) {
-        for (DDataAttribute idAttribute : rootAttributes)
+        for (DDataAttribute idAttribute : rootEntity.attributes)
             if (idAttribute.isPrimaryKey()) {
                 String idKey = idAttribute.getPropertyName();
                 if (!columnsInRoot.contains(idKey))
@@ -512,6 +598,88 @@ abstract class AbstractDataView {
             this.uniqPath = uniqPath;
             this.byAttribute = byAttribute;
             this.clazz = byAttribute.getJavaType();
+        }
+    }
+
+    class TableCell {
+        final String name;
+        final DDataFilter column;
+        final DDataAttribute attribute;
+        final boolean isVersion;
+
+        TableCell(String path, DDataFilter column, boolean isVersion) {
+            this.name = path;
+            this.column = column;
+            this.attribute = column.getAttribute();
+            this.isVersion = isVersion;
+        }
+
+        TableCell(String path, DDataAttribute attribute, boolean isVersion) {
+            this.name = path;
+            this.column = null;
+            this.attribute = attribute;
+            this.isVersion = isVersion;
+        }
+
+        boolean isSorted() {
+            return column != null && column.isSortAscending() != null;
+        }
+    }
+
+    class TableEntity {
+        final TableEntity parent;
+        final String name;
+        final DDataAttribute mapByAttribute;
+        final Class<? extends DDataAttribute> beanEnum;
+        final Class<? extends Serializable> beanInterface;
+        final List<DDataAttribute> attributes;
+        final List<TableCell> cells = new ArrayList<>();
+        final Map<TableCell, TableCell> mappings = new HashMap<>();
+
+        final String table;
+        final DDataAttribute versionFrom;
+        final DDataAttribute versionTo;
+
+        TableEntity(Class<? extends DDataAttribute> root) {
+            this.parent = null;
+            this.name = null;
+            this.mapByAttribute = null;
+            this.attributes = new ArrayList<>();
+            beanEnum = root;
+            try {
+                table = (String) root.getField("TABLE_NAME").get(null);
+                versionFrom = (DDataAttribute) root.getField("VERSION_FROM").get(null);
+                versionTo = (DDataAttribute) root.getField("VERSION_TO").get(null);
+                beanInterface = (Class<? extends Serializable>) root.getField("BEAN_INTERFACE").get(null);
+            } catch (IllegalAccessException | NoSuchFieldException e) {
+                throw new RuntimeException("select view not from *_WB_ enum: " + root.getCanonicalName());
+            }
+        }
+
+        TableEntity(TableEntity parent, String name, DDataAttribute mapByAttribute) {
+            this.parent = parent;
+            this.name = name;
+            this.mapByAttribute = mapByAttribute;
+            this.beanEnum = (Class<? extends DDataAttribute>) mapByAttribute.getJavaType();
+            this.attributes = Arrays.stream(beanEnum.getEnumConstants()).collect(Collectors.toList());
+            try {
+                beanInterface = mapByAttribute.getBeanInterface();
+                table = (String) beanEnum.getField("TABLE_NAME").get(null);
+                versionFrom = (DDataAttribute) beanEnum.getField("VERSION_FROM").get(null);
+                versionTo = (DDataAttribute) beanEnum.getField("VERSION_TO").get(null);
+            } catch (IllegalAccessException | NoSuchFieldException e) {
+                throw new RuntimeException("select view not from *_WB_ enum: " + beanEnum.getCanonicalName());
+            }
+        }
+
+        boolean isCollection() {
+            return mapByAttribute!=null && mapByAttribute.isCollection();
+        }
+
+        void addCell(TableCell cell) {
+            cells.add(cell);
+            if (cell.column != null) cell4Column.put(cell.column, cell);
+            tableCells.put(cell.name, cell);
         }
     }
 }

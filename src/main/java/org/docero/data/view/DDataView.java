@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.sql.*;
 import java.time.temporal.Temporal;
@@ -20,109 +19,25 @@ public class DDataView extends AbstractDataView {
     private final static Logger LOG = LoggerFactory.getLogger(DDataView.class);
 
     private final SqlSession sqlSession;
-    final Class<? extends DDataAttribute>[] roots;
-    final DDataFilter[] columns;
+    private final DDataFilter[] columns;
     private DDataFilter filter = new DDataFilter();
     private final Temporal version;
 
-    final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
-    final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
-    private final HashMap<String, DDataAttribute> viewEntities = new HashMap<>();
-    final IdentityHashMap<DDataFilter, String> viewPaths = new IdentityHashMap<>();
-    final HashMap<String, List<EntityMapping>> viewMappings = new HashMap<>();
-    final List<Sort> sortedPaths = new ArrayList<>();
-
-    final HashMap<DDataAttribute, Set<DDataAttribute>> viewEIds = new HashMap<>();
-    final HashMap<DDataAttribute, Set<DDataFilter>> viewProperties = new HashMap<>();
+    /*private final HashMap<String, DDataAttribute> tableEntities = new HashMap<>();
+    final IdentityHashMap<DDataFilter, String> viewPaths = new IdentityHashMap<>();*/
+    /*final HashMap<String, List<EntityMapping>> viewMappings = new HashMap<>();
+    final List<Sort> sortedPaths = new ArrayList<>();*/
 
     DDataView(
             SqlSession sqlSession, Class<? extends DDataAttribute>[] roots,
             DDataFilter[] columns, Temporal version
     ) throws DDataException {
+        super(roots, columns);
         this.sqlSession = sqlSession;
-        this.roots = roots;
         this.columns = columns;
         if (columns.length > 0 && Arrays.stream(columns).noneMatch(c -> c.isSortAscending() != null))
             columns[0].setSortAscending(true);
         this.version = version;
-
-        try {
-            rootVersionFrom = (DDataAttribute)
-                    roots[0].getDeclaredField("VERSION_FROM").get(null);
-        } catch (IllegalAccessException | NoSuchFieldException e) {
-            throw new DDataException("select view not from *_WB_ enum: " + roots[0].getCanonicalName());
-        }
-        String versionColumn = rootVersionFrom == null ? "" : rootVersionFrom.getColumnName();
-        for (int ri = 0; ri < roots.length; ri++)
-            for (Field field : roots[ri].getDeclaredFields())
-                if (field.isEnumConstant())
-                    try {
-                        DDataAttribute attr = (DDataAttribute) field.get(null);
-                        if (attr.getColumnName() != null && rootAttributes.stream()
-                                .noneMatch(a -> a.getColumnName().equals(attr.getColumnName()))) {
-                            rootAttributes.add(attr);
-                            if (attr.isPrimaryKey() && !versionColumn.equals(attr.getColumnName())) {
-                                viewEIds.computeIfAbsent(null, k -> new TreeSet<>(propertiesComparator))
-                                        .add(attr);
-                            }
-                        }
-                    } catch (IllegalAccessException ignore) {
-                    }
-        for (DDataFilter column : columns) fillViewEntities(column, null, null);
-    }
-
-    private void fillViewEntities(DDataFilter column, String path, DDataAttribute parent) {
-        DDataAttribute attribute = column.getAttribute();
-        if (attribute != null) {
-            String nameInPath = attribute.getPropertyName();
-            String cp = path == null ? nameInPath : (path + "." + nameInPath);
-            viewPaths.put(column, cp);
-            //String[] attrPath = cp.split("\\.");
-            if (attribute.isMappedBean()) {
-                viewEntities.put(cp, attribute);
-                String versionColumn = "";
-                try {
-                    DDataAttribute va = (DDataAttribute)
-                            attribute.getJavaType().getField("VERSION_FROM").get(null);
-                    if (va != null) versionColumn = va.getColumnName();
-                } catch (IllegalAccessException | NoSuchFieldException ignore) {
-                }
-                for (Field field : attribute.getJavaType().getFields())
-                    if (field.isEnumConstant())
-                        try {
-                            DDataAttribute attr = (DDataAttribute) field.get(null);
-                            if (attr.isPrimaryKey() && !versionColumn.equals(attr.getColumnName())) {
-                                viewEIds.computeIfAbsent(attribute, k -> new TreeSet<>(propertiesComparator))
-                                        .add(attr);
-                            }
-                            attribute.joinMapping().entrySet().stream()
-                                    .filter(v -> v.getValue().equals(attr.getColumnName()))
-                                    .findAny().ifPresent(v -> {
-                                (parent != null ? Arrays.stream(parent.getClass().getEnumConstants()) :
-                                        rootAttributes.stream())
-                                        .filter(a -> v.getKey().equals(a.getColumnName()))
-                                        .findAny().ifPresent(pa ->
-                                        viewMappings.computeIfAbsent(cp, a -> new ArrayList<>())
-                                                .add(new EntityMapping(
-                                                        path == null ? pa.getPropertyName() : path + "." + pa.getPropertyName(),
-                                                        cp + "." + attr.getPropertyName(),
-                                                        pa, attr)));
-                            });
-                        } catch (IllegalAccessException ignore) {
-                        }
-            } else if (!attribute.isPrimaryKey() && attribute.getColumnName() != null) {
-                if (column.isSortAscending() != null)
-                    sortedPaths.add(new Sort(cp, column.isSortAscending()));
-
-                viewProperties.computeIfAbsent(parent,
-                        k -> new TreeSet<>(columnsComparator))
-                        .add(column);
-            }
-
-            if (column.getFilters() != null) column.getFilters()
-                    .forEach(f -> fillViewEntities(f, cp, attribute));
-        } else if (column.getFilters() != null) column.getFilters()
-                .forEach(f -> fillViewEntities(f, path, parent));
     }
 
     Temporal version() {
@@ -138,7 +53,7 @@ public class DDataView extends AbstractDataView {
     }
 
     public long count() throws DDataException {
-        DSQL sql = buildFrom(roots);
+        DSQL sql = buildFrom();
         sql.SELECT("COUNT(*)");
         buildFilters(sql);
 
@@ -148,7 +63,7 @@ public class DDataView extends AbstractDataView {
 
     public DDataViewRows select(int offset, int limit) throws DDataException {
         this.updates = new HashMap<>();
-        DSQL sql = buildFrom(roots);
+        DSQL sql = buildFrom();
         String keySql = getKeySQL();
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
         for (DDataFilter column : columns)
@@ -191,7 +106,7 @@ public class DDataView extends AbstractDataView {
     public int[] aggregateInt(DDataFilterOperator operator) throws DDataException {
         DSQL agSql = new DSQL();
         agSql.SELECT("'group' as \"dDataBeanKey_\"");
-        DSQL sql = buildFrom(roots);
+        DSQL sql = buildFrom();
         String keySql = getKeySQL();
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
         for (DDataFilter column : columns)
@@ -269,8 +184,8 @@ public class DDataView extends AbstractDataView {
                 ).collect(Collectors.toList())
         );
 
-        super.addFilterSql(sql, allTypesFilter, roots[0]);
-        String vc = versionConstraint(roots[0], 0);
+        super.addFilterSql(sql, allTypesFilter, rootEntity.beanEnum);
+        String vc = versionConstraint(rootEntity.beanEnum, 0);
         if (vc.length() > 0) sql.WHERE(vc);
 
         DSQL ssql = new DSQL();
@@ -290,14 +205,6 @@ public class DDataView extends AbstractDataView {
      * row -> beanPath -> index -> parameter entityPropertyPath
      */
     private HashMap<DDataViewRow, TreeMap<String, Set<Integer>>> updates;
-
-    DDataAttribute getEntityForPath(String s) {
-        return viewEntities.get(s);
-    }
-
-    String getPathForColumn(DDataFilter column) {
-        return viewPaths.get(column);
-    }
 
     void addUpdate(DDataViewRow dDataViewRow, int index, String path) {
         int i = path.lastIndexOf('.');
@@ -345,12 +252,8 @@ public class DDataView extends AbstractDataView {
                     TreeMap<String, Set<Integer>> updatedEntities = updates.get(row);
                     HashMap<String, Set<Integer>> updatedParents = new HashMap<>();
                     for (String entityPropertyPath : updatedEntities.keySet()) {
-                        DDataAttribute entityBeanAttribute = this.getEntityForPath(entityPropertyPath);
+                        AbstractDataView.TableEntity entity = this.getEntityForPath(entityPropertyPath);
                         @SuppressWarnings("unchecked")
-                        Class<? extends Serializable> entityBeanInterface = entityBeanAttribute != null ?
-                                entityBeanAttribute.getBeanInterface() :
-                                (Class<? extends Serializable>)
-                                        roots[0].getField("BEAN_INTERFACE").get(null);
                         DDataBeanUpdateService beanService = getUpdateServiceFor(entityPropertyPath);
                         if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
                             PreparedUpdates pk = prepared.stream()
@@ -367,19 +270,22 @@ public class DDataView extends AbstractDataView {
                                 boolean parentMustBeUpdated = false;
                                 if (idIsNull(anyId)) { //is new element
                                     if (beanService == null) {
-                                        for (DDataAttribute idAttribute : row.view.viewEIds.get(entityBeanAttribute))
-                                            fillIdAttibute(connection, row,
-                                                    entityBeanInterface,
-                                                    entityPropertyPath,
-                                                    updatedIndex, idAttribute, dateNow);
-                                        if (entityBeanAttribute != null)
-                                            pk.fillMappings(row, entityBeanAttribute, updatedIndex, entityPropertyPath);
+                                        for (TableCell cell : entity.cells)
+                                            if (cell.attribute.isPrimaryKey() && !cell.isVersion)
+                                                fillIdAttibute(connection, row,
+                                                        entity.beanInterface,
+                                                        entityPropertyPath,
+                                                        updatedIndex, cell, dateNow);
+                                        if (entity != null)
+                                            pk.fillMappings(row, entity.mapByAttribute, updatedIndex, entityPropertyPath);
                                     }
                                     pk.fillInsert(row, updatedIndex, dateNow);
-                                    parentMustBeUpdated = viewMappings.get(entityPropertyPath).stream()
-                                            .anyMatch(em -> !em.parentAttribute.isPrimaryKey());
+                                    parentMustBeUpdated = entity.parent != null && entity.parent.mappings.entrySet()
+                                            .stream().anyMatch(c -> !c.getKey().attribute.isPrimaryKey() &&
+                                                    c.getValue().name.startsWith(entityPropertyPath + "."));
                                 } else
                                     pk.fillUpdate(row, updatedIndex, dateNow);
+
                                 if (parentMustBeUpdated) {
                                     int lii = entityPropertyPath.lastIndexOf('.');
                                     String parentPath = lii < 0 ? null : entityPropertyPath.substring(0, lii);
@@ -423,14 +329,14 @@ public class DDataView extends AbstractDataView {
 
     private void fillIdAttibute(
             Connection connection, DDataViewRow row, Class<? extends Serializable> beanInterface,
-            String entityPropertyPath, Integer index, DDataAttribute idAttribute, Date dateNow
+            String entityPropertyPath, Integer index, TableCell cell, Date dateNow
     ) throws NoSuchMethodException, SQLException {
-        String pCase = Character.toUpperCase(idAttribute.getPropertyName().charAt(0)) +
-                idAttribute.getPropertyName().substring(1);
+        String pCase = Character.toUpperCase(cell.attribute.getPropertyName().charAt(0)) +
+                cell.attribute.getPropertyName().substring(1);
         Method idProp = beanInterface.getMethod("get" + pCase);
         String idPropertyPath = entityPropertyPath.length() == 0 ?
-                idAttribute.getPropertyName() :
-                entityPropertyPath + "." + idAttribute.getPropertyName();
+                cell.attribute.getPropertyName() :
+                entityPropertyPath + "." + cell.attribute.getPropertyName();
         GeneratedValue gen = idProp.getAnnotation(GeneratedValue.class);
         if (gen == null) try {
             idProp = beanInterface.getMethod("set" + pCase);
@@ -439,15 +345,16 @@ public class DDataView extends AbstractDataView {
             gen = null;
         }
         if (gen == null) {
-            DDataAttribute ea = getEntityForPath(entityPropertyPath);
-            viewMappings.get(entityPropertyPath).stream()
-                    .filter(m -> m.childPath.equals(idPropertyPath))
-                    .findAny().ifPresent(m -> row.setColumnValue(
-                    row.getColumnValue(ea.isCollection() ? 0 : index, m.parentPath),
-                    index, idPropertyPath));
-            if (Temporal.class.isAssignableFrom(idAttribute.getJavaType()))
+            AbstractDataView.TableEntity entity = getEntityForPath(entityPropertyPath);
+            entity.mappings.entrySet().stream()
+                    .filter(m -> m.getValue().name.equals(idPropertyPath))
+                    .findAny().ifPresent(m ->
+                    row.setColumnValue(
+                            row.getColumnValue(entity.isCollection() ? 0 : index, m.getKey().name),
+                            index, idPropertyPath));
+            if (Temporal.class.isAssignableFrom(cell.attribute.getJavaType()))
                 row.setColumnValue(dateNow, index, idPropertyPath, false);
-            else if (Date.class.isAssignableFrom(idAttribute.getJavaType()))
+            else if (Date.class.isAssignableFrom(cell.attribute.getJavaType()))
                 row.setColumnValue(dateNow, index, idPropertyPath, false);
         } else {
             Object idValue = null;
@@ -456,14 +363,14 @@ public class DDataView extends AbstractDataView {
                     try (PreparedStatement st = connection.prepareStatement("SELECT nextval(?);")) {
                         st.setString(1, gen.value());
                         try (ResultSet rs = st.executeQuery()) {
-                            if (rs.next()) idValue = idFromResult(rs, idAttribute);
+                            if (rs.next()) idValue = idFromResult(rs, cell.attribute);
                         }
                     }
                     break;
                 case SELECT:
                     try (Statement st = connection.createStatement()) {
                         try (ResultSet rs = st.executeQuery(gen.value())) {
-                            if (rs.next()) idValue = idFromResult(rs, idAttribute);
+                            if (rs.next()) idValue = idFromResult(rs, cell.attribute);
                         }
                     }
                     break;
@@ -485,8 +392,8 @@ public class DDataView extends AbstractDataView {
 
     @SuppressWarnings("unchecked")
     private DDataBeanUpdateService getUpdateServiceFor(String entityPropertyPath) {
-        DDataAttribute entityBeanAttribute = getEntityForPath(entityPropertyPath);
-        return entityBeanAttribute == null ? null : getUpdateServiceFor(entityBeanAttribute.getBeanInterface());
+        TableEntity entity = getEntityForPath(entityPropertyPath);
+        return entity == null ? null : getUpdateServiceFor(entity.beanInterface);
     }
 
     private HashMap<Class, DDataBeanUpdateService> knownUpdaters = new HashMap<>();
@@ -498,29 +405,5 @@ public class DDataView extends AbstractDataView {
 
     public <T extends Serializable> void addUpdateService(Class<T> i, DDataBeanUpdateService<T> service) {
         knownUpdaters.put(i, service);
-    }
-
-    static class Sort {
-        final String path;
-        final boolean asc;
-
-        Sort(String path, boolean asc) {
-            this.path = path;
-            this.asc = asc;
-        }
-    }
-
-    static class EntityMapping {
-        final String parentPath;
-        final String childPath;
-        final DDataAttribute parentAttribute;
-        final DDataAttribute childAttribute;
-
-        EntityMapping(String parentPath, String childPath, DDataAttribute parentAttribute, DDataAttribute childAttribute) {
-            this.parentPath = parentPath;
-            this.childPath = childPath;
-            this.parentAttribute = parentAttribute;
-            this.childAttribute = childAttribute;
-        }
     }
 }

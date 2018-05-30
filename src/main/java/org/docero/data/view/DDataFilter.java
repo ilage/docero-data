@@ -119,7 +119,7 @@ public class DDataFilter {
     }
 
     /**
-     * Creating root element of data filters tree
+     * Creating rootEntity element of data filters tree
      */
     public DDataFilter() {
         filters = new ArrayList<>();

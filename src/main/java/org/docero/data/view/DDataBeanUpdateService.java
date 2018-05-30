@@ -4,7 +4,6 @@ import org.docero.data.utils.DDataAttribute;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 
 public abstract class DDataBeanUpdateService<T> {
     private final Class<T> beanInterface;
@@ -15,32 +14,18 @@ public abstract class DDataBeanUpdateService<T> {
 
     boolean update(DDataViewRow row, Integer index, String entityPath) throws Exception {
         T bean = createBean();
-        DDataAttribute entityAttribute = row.view.getEntityForPath(entityPath);
-        @SuppressWarnings("unchecked")
-        Class<? extends DDataAttribute> wb = entityAttribute.getJavaType();/*(Class<? extends DDataAttribute>)
-                this.getClass().getClassLoader().loadClass(beanInterface.getName() + "_WB_");*/
-
-        updateBeanByRow(row, wb, bean, index, entityPath);
+        AbstractDataView.TableEntity entity = row.view.getEntityForPath(entityPath);
+        updateBeanByRow(row, entity, bean, index, entityPath);
 
         // update properties used for mapping from parent entity if exists
-        for (String parentMapColumn : entityAttribute.joinMapping().keySet()) {
-            String beanMapColumn = entityAttribute.joinMapping().get(parentMapColumn);
-            DDataAttribute beanMapAttribute = Arrays.stream(wb.getEnumConstants())
-                    .filter(a -> beanMapColumn.equals(a.getColumnName()))
-                    .findAny().orElse(null);
-            int i = entityPath.lastIndexOf('.');
-            DDataAttribute parentMapAttribute = getParentAttribute(row, entityPath, i, parentMapColumn);
-            if (beanMapAttribute != null && parentMapAttribute != null) {
-                Object parentMapValue = row.getColumnValue(entityAttribute.isCollection() ? 0 : index, i < 0 ?
-                        parentMapAttribute.getPropertyName() :
-                        entityPath.substring(0, i + 1) + parentMapAttribute.getPropertyName());
-                setProperty(bean, beanMapAttribute, parentMapValue);
-            } else
-                throw new Exception("beanMapAttribute == null || parentMapAttribute == null");
+        for (AbstractDataView.TableCell parentMapColumn : entity.mappings.keySet()) {
+            AbstractDataView.TableCell beanMapColumn = entity.mappings.get(parentMapColumn);
+            Object parentMapValue = row.getColumnValue(entity.isCollection() ? 0 : index, parentMapColumn.name);
+            setProperty(bean, beanMapColumn.attribute, parentMapValue);
         }
         // call update services for children
         boolean anyChildUpdated = false;
-        for (DDataAttribute attribute : wb.getEnumConstants())
+        for (DDataAttribute attribute : entity.attributes)
             if (attribute.isMappedBean()) {
                 DDataBeanUpdateService iu = row.view.getUpdateServiceFor(attribute.getBeanInterface());
                 if (iu != null) {
@@ -48,33 +33,25 @@ public abstract class DDataBeanUpdateService<T> {
                     anyChildUpdated = true;
                 }
             }
-        if (anyChildUpdated) updateBeanByRow(row, wb, bean, index, entityPath);
+        if (anyChildUpdated) updateBeanByRow(row, entity, bean, index, entityPath);
 
         bean = updateBean(bean);
 
         // update parent properties used for mapping from bean
         boolean anyParentItemMayBeModified = false;
-        for (String parentMapColumn : entityAttribute.joinMapping().keySet()) {
-            String beanMapColumn = entityAttribute.joinMapping().get(parentMapColumn);
-            DDataAttribute beanMapAttribute = Arrays.stream(wb.getEnumConstants())
-                    .filter(a -> beanMapColumn.equals(a.getColumnName()))
-                    .findAny().orElse(null);
-            int i = entityPath.lastIndexOf('.');
-            DDataAttribute parentMapAttribute = getParentAttribute(row, entityPath, i, parentMapColumn);
-            if (beanMapAttribute != null && parentMapAttribute != null && !parentMapAttribute.isPrimaryKey()) {
-                Object beanMapValue = getProperty(bean, beanMapAttribute);
+        if (entity.parent != null)
+            for (AbstractDataView.TableCell parentMapColumn : entity.parent.mappings.keySet()) {
+                AbstractDataView.TableCell beanMapColumn = entity.parent.mappings.get(parentMapColumn);
+                Object beanMapValue = getProperty(bean, beanMapColumn.attribute);
                 if (!DDataView.idIsNull(beanMapValue)) {
-                    row.setColumnValue(beanMapValue, entityAttribute.isCollection() ? 0 : index, i < 0 ?
-                                    parentMapAttribute.getPropertyName() :
-                                    entityPath.substring(0, i + 1) + parentMapAttribute.getPropertyName(),
-                            false);
+                    row.setColumnValue(beanMapValue, entity.parent.isCollection() ? 0 : index,
+                            parentMapColumn.name, false);
                     anyParentItemMayBeModified = true;
                 }
             }
-        }
         // write bean properties to view row if updates to database must be wrote by view
         if (this.serviceDoesNotMakeUpdates())
-            for (DDataAttribute attribute : wb.getEnumConstants()) {
+            for (DDataAttribute attribute : entity.attributes) {
                 String property = attribute.getPropertyName();
                 if (!attribute.isMappedBean() && property != null) {
                     Object val = getProperty(bean, attribute);
@@ -89,9 +66,9 @@ public abstract class DDataBeanUpdateService<T> {
     }
 
     private void updateBeanByRow(
-            DDataViewRow row, Class<? extends DDataAttribute> wb, T bean, Integer index, String entityPath
+            DDataViewRow row, AbstractDataView.TableEntity entity, T bean, Integer index, String entityPath
     ) throws IllegalAccessException, NoSuchMethodException, InvocationTargetException {
-        for (DDataAttribute attribute : wb.getEnumConstants()) {
+        for (DDataAttribute attribute : entity.attributes) {
             String property = attribute.getPropertyName();
             if (!attribute.isMappedBean() && property != null) {
                 Object val = row.getColumnValue(index, entityPath.length() == 0 ? property :
@@ -101,19 +78,11 @@ public abstract class DDataBeanUpdateService<T> {
         }
     }
 
-    private DDataAttribute getParentAttribute(DDataViewRow row, String entityPath, int i, String parentColumnName) {
-        if (i < 0) {
-            return row.view.rootAttributes.stream()
+    /*private DDataAttribute getParentAttribute(DDataViewRow row, String entityPath, int i, String parentColumnName) {
+            return row.view.getEntityForPath(entityPath).attributes.stream()
                     .filter(a -> parentColumnName.equals(a.getColumnName()))
                     .findAny().orElse(null);
-        } else {
-            @SuppressWarnings("unchecked") Class<? extends DDataAttribute> parentClass =
-                    row.view.getEntityForPath(entityPath.substring(0, i)).getJavaType();
-            return Arrays.stream(parentClass.getEnumConstants())
-                    .filter(a -> parentColumnName.equals(a.getColumnName()))
-                    .findAny().orElse(null);
-        }
-    }
+    }*/
 
     private Object getProperty(T bean, DDataAttribute attribute) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException {
         Class<?> beanImplementation = bean.getClass();

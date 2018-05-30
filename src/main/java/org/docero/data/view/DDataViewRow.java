@@ -133,7 +133,7 @@ public class DDataViewRow {
         for (int offset = 0; offset < path.length; offset++) {
             boolean lastElement = (offset == path.length - 1);
             currPathLen = currPathLen + path[offset].length() + (lastElement ? 0 : 1);
-            DDataAttribute attribute = view.getEntityForPath(path2Parameter.substring(0, currPathLen));
+            DDataAttribute attribute = view.tableCells.get(path2Parameter).attribute;
 
             Object o = innerMap.get(path[offset]);
 

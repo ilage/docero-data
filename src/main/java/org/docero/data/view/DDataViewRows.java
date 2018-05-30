@@ -17,14 +17,16 @@ public class DDataViewRows {
     @SuppressWarnings("unchecked")
     public List<Object> toList() {
         return map.values().stream().sorted((o1, o2) -> {
-            for (DDataView.Sort sort : view.sortedPaths) {
-                Object v1 = DDataViewRow.getColumnValue((Map<Object, Object>) o1, 0, sort.path);
-                Object v2 = DDataViewRow.getColumnValue((Map<Object, Object>) o2, 0, sort.path);
+            for (AbstractDataView.TableCell sort : view.tableCells.values().stream()
+                    .filter(AbstractDataView.TableCell::isSorted)
+                    .collect(Collectors.toList())) {
+                Object v1 = DDataViewRow.getColumnValue((Map<Object, Object>) o1, 0, sort.name);
+                Object v2 = DDataViewRow.getColumnValue((Map<Object, Object>) o2, 0, sort.name);
                 if (v1 == null) {
-                    if (v2 != null) return sort.asc ? 1 : 0;
+                    if (v2 != null) return sort.column.isSortAscending() ? 1 : 0;
                 } else if (v1 instanceof Comparable) {
                     int cmp = ((Comparable) v1).compareTo(v2);
-                    if (cmp != 0) return sort.asc ? cmp : -cmp;
+                    if (cmp != 0) return sort.column.isSortAscending() ? cmp : -cmp;
                 }
             }
             return 0;
