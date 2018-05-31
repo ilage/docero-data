@@ -61,42 +61,44 @@ abstract class AbstractDataView {
                     }
         tableEntities.put(null, rootEntity);
 
-        for (DDataFilter column : columns)
-            fillViewEntities(column, null, rootEntity);
+        fillViewEntities(Arrays.asList(columns), null, rootEntity);
     }
 
-    private void fillViewEntities(DDataFilter column, String path, TableEntity parent) {
-        DDataAttribute attribute = column.getAttribute();
-        if (attribute != null) {
-            String nameInPath = attribute.getPropertyName();
-            String cp = path == null ? nameInPath : (path + "." + nameInPath);
-
-            String versionColumn = "";
-            try {
-                DDataAttribute va = (DDataAttribute)
-                        attribute.getJavaType().getField("VERSION_FROM").get(null);
-                if (va != null) versionColumn = va.getColumnName();
-            } catch (IllegalAccessException | NoSuchFieldException ignore) {
+    private void fillViewEntities(List<DDataFilter> columns, String path, TableEntity parent) {
+        // basic values
+        for (DDataFilter column : columns) {
+            DDataAttribute attribute = column.getAttribute();
+            String versionColumn = parent.versionFrom == null ? "" : parent.versionFrom.getColumnName();
+            if (attribute != null && !attribute.isMappedBean()) {
+                String nameInPath = attribute.getPropertyName();
+                String cp = path == null ? nameInPath : (path + "." + nameInPath);
+                parent.addCell(new TableCell(cp, column, versionColumn.equals(attribute.getColumnName())));
             }
-
-            if (attribute.isMappedBean()) {
-                TableEntity entity = new TableEntity(parent, cp, attribute);
-                tableEntities.put(cp, entity);
+        }
+        // mapped beans
+        for (DDataFilter column : columns) {
+            DDataAttribute attribute = column.getAttribute();
+            if (attribute != null && attribute.isMappedBean()) {
+                String nameInPath = attribute.getPropertyName();
+                String cp = path == null ? nameInPath : (path + "." + nameInPath);
+                TableEntity entity = new TableEntity(parent, cp, column);
+                parent.addEntity(entity);
+                String versionColumn = entity.versionFrom == null ? "" : entity.versionFrom.getColumnName();
                 for (DDataAttribute entityAttr : entity.attributes) {
-                    Map.Entry<String, String> usedInMapping = attribute.joinMapping().entrySet().stream()
+                    Map.Entry<String, String> columnNamesInMapping = attribute.joinMapping().entrySet().stream()
                             .filter(es -> es.getValue().equals(entityAttr.getColumnName()))
                             .findAny().orElse(null);
-                    if (entityAttr.isPrimaryKey() || usedInMapping != null) {
+                    if (entityAttr.isPrimaryKey() || columnNamesInMapping != null) {
                         TableCell idCell = new TableCell(cp + "." + entityAttr.getPropertyName(), entityAttr,
                                 versionColumn.equals(entityAttr.getColumnName()));
                         entity.addCell(idCell);
-                        if (usedInMapping != null) {
+                        if (columnNamesInMapping != null) {
                             TableCell parentMapCell = parent.cells.stream()
-                                    .filter(c -> c.attribute.getColumnName().equals(usedInMapping.getKey()))
+                                    .filter(c -> c.attribute.getColumnName().equals(columnNamesInMapping.getKey()))
                                     .findAny().orElse(null);
                             if (parentMapCell == null) {
                                 DDataAttribute parentMapAttr = parent.attributes.stream()
-                                        .filter(c -> c.getColumnName().equals(usedInMapping.getKey()))
+                                        .filter(c -> c.getColumnName().equals(columnNamesInMapping.getKey()))
                                         .findAny().orElse(null);
                                 assert parentMapAttr != null;
                                 parent.addCell(parentMapCell = new TableCell(
@@ -110,14 +112,11 @@ abstract class AbstractDataView {
                     }
                 }
 
-                if (column.getFilters() != null) column.getFilters()
-                        .forEach(f -> fillViewEntities(f, cp, entity));
-
-            } else if (attribute.getColumnName() != null) {
-                parent.addCell(new TableCell(cp, column, versionColumn.equals(attribute.getColumnName())));
-            }
-        } else if (column.getFilters() != null) column.getFilters()
-                .forEach(f -> fillViewEntities(f, path, parent));
+                if (column.getFilters() != null)
+                    fillViewEntities(column.getFilters(), cp, entity);
+            } else if (attribute == null && column.getFilters() != null)
+                fillViewEntities(column.getFilters(), path, parent);
+        }
     }
 
     TableEntity getEntityForPath(String s) {
@@ -203,7 +202,6 @@ abstract class AbstractDataView {
 
                         if (col.getAttribute().isMappedBean()) {
                             // add non id mapping columns used by col.attribute.joinMapping.keySet
-
                             for (String columnName : col.getAttribute().joinMapping().keySet()) {
                                 DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(attribute.getJavaType(), columnName);
                                 if (mapAttr != null) {
@@ -302,6 +300,7 @@ abstract class AbstractDataView {
             HashSet<Integer> joinedInSubQuery = new HashSet<>();
             HashSet<String> columnsInSubQuery = new HashSet<>();
             addJoinForSubSelects(sql, column.table, joinedInSubQuery);
+            TableEntity entity = tableEntities.get(column.path);
 
             sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
             for (DDataFilter col : column.filters) {
@@ -628,12 +627,14 @@ abstract class AbstractDataView {
 
     class TableEntity {
         final TableEntity parent;
+        final DDataFilter column;
         final String name;
         final DDataAttribute mapByAttribute;
         final Class<? extends DDataAttribute> beanEnum;
         final Class<? extends Serializable> beanInterface;
         final List<DDataAttribute> attributes;
         final List<TableCell> cells = new ArrayList<>();
+        final List<TableEntity> entities = new ArrayList<>();
         final Map<TableCell, TableCell> mappings = new HashMap<>();
 
         final String table;
@@ -641,6 +642,7 @@ abstract class AbstractDataView {
         final DDataAttribute versionTo;
 
         TableEntity(Class<? extends DDataAttribute> root) {
+            this.column = null;
             this.parent = null;
             this.name = null;
             this.mapByAttribute = null;
@@ -656,10 +658,11 @@ abstract class AbstractDataView {
             }
         }
 
-        TableEntity(TableEntity parent, String name, DDataAttribute mapByAttribute) {
+        TableEntity(TableEntity parent, String name, DDataFilter column) {
+            this.column = column;
             this.parent = parent;
             this.name = name;
-            this.mapByAttribute = mapByAttribute;
+            this.mapByAttribute = column.getAttribute();
             this.beanEnum = (Class<? extends DDataAttribute>) mapByAttribute.getJavaType();
             this.attributes = Arrays.stream(beanEnum.getEnumConstants()).collect(Collectors.toList());
             try {
@@ -673,13 +676,18 @@ abstract class AbstractDataView {
         }
 
         boolean isCollection() {
-            return mapByAttribute!=null && mapByAttribute.isCollection();
+            return mapByAttribute != null && mapByAttribute.isCollection();
         }
 
         void addCell(TableCell cell) {
             cells.add(cell);
             if (cell.column != null) cell4Column.put(cell.column, cell);
             tableCells.put(cell.name, cell);
+        }
+
+        void addEntity(TableEntity entity) {
+            entities.add(entity);
+            tableEntities.put(entity.name, entity);
         }
     }
 }
