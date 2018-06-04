@@ -124,6 +124,7 @@ public class DDataViewRow {
         setColumnValue(value, index, path2Parameter, true);
     }
 
+    @SuppressWarnings("unchecked")
     void setColumnValue(Object value, int index, String path2Parameter, boolean addViewUpdate) {
         if (map == null) return;
 

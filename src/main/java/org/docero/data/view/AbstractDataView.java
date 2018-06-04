@@ -18,25 +18,22 @@ import java.util.stream.Collectors;
 @SuppressWarnings("unchecked")
 abstract class AbstractDataView {
     private static final Logger LOG = LoggerFactory.getLogger(AbstractDataView.class);
+
     private static final String PROP_PATCH_DELIMITER = ".";
     private final AtomicInteger tablesCounter = new AtomicInteger(0);
-    private final Map<String, CollectionColumn> subSelectsForColumns = new HashMap<>();
+    private final Map<String, CollectionJoin> selectsForCollections = new HashMap<>();
 
-    final static Comparator<DDataAttribute> propertiesComparator = Comparator.comparing(DDataAttribute::getPropertyName);
-    final static Comparator<DDataFilter> columnsComparator = Comparator.comparing(k -> k.getAttribute().getPropertyName());
-
-    abstract Temporal version();
-
+    private final TableEntity rootEntity;
+    private final HashMap<String, TableEntity> tableEntities = new HashMap<>();
     final Class<? extends DDataAttribute>[] roots;
-    final TableEntity rootEntity;
     final HashMap<String, TableCell> tableCells = new HashMap<>();
-    final HashMap<String, TableEntity> tableEntities = new HashMap<>();
-    final IdentityHashMap<DDataFilter, TableCell> cell4Column = new IdentityHashMap<>();
 
     private String keyType;
     private HashSet<Integer> joinedInRootQuery;
     private HashSet<String> columnsInRoot;
     private final HashMap<String, JoinedTable> allJoins = new HashMap();
+
+    abstract Temporal version();
 
     AbstractDataView(Class<? extends DDataAttribute>[] roots, DDataFilter[] columns) {
         this.roots = roots;
@@ -44,8 +41,8 @@ abstract class AbstractDataView {
         rootEntity = new TableEntity(roots[0]);
         String versionColumn = rootEntity.versionFrom == null ? "" : rootEntity.versionFrom.getColumnName();
 
-        for (int ri = 0; ri < roots.length; ri++)
-            for (Field field : roots[ri].getDeclaredFields())
+        for (Class<? extends DDataAttribute> root : roots)
+            for (Field field : root.getDeclaredFields())
                 if (field.isEnumConstant())
                     try {
                         DDataAttribute attr = (DDataAttribute) field.get(null);
@@ -70,7 +67,7 @@ abstract class AbstractDataView {
             DDataAttribute attribute = column.getAttribute();
             String versionColumn = parent.versionFrom == null ? "" : parent.versionFrom.getColumnName();
             if (attribute != null && !attribute.isMappedBean()) {
-                String nameInPath = attribute.getPropertyName();
+                String nameInPath = column.getMapName();
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
                 parent.addCell(new TableCell(cp, column, versionColumn.equals(attribute.getColumnName())));
             }
@@ -79,7 +76,7 @@ abstract class AbstractDataView {
         for (DDataFilter column : columns) {
             DDataAttribute attribute = column.getAttribute();
             if (attribute != null && attribute.isMappedBean()) {
-                String nameInPath = attribute.getPropertyName();
+                String nameInPath = column.getMapName();
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
                 TableEntity entity = new TableEntity(parent, cp, column);
                 parent.addEntity(entity);
@@ -178,7 +175,7 @@ abstract class AbstractDataView {
             }
 
         if (attribute != null && attribute.getColumnName() != null) {
-            String pathAttributeName = path + attribute.getPropertyName();
+            String pathAttributeName = path + column.getMapName();
             String pathAttributeKey = pathAttributeName + PROP_PATCH_DELIMITER;
             String uniqKey = uniqPath + attribute.getPropertyName() + ":" +
                     attribute.getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
@@ -245,9 +242,9 @@ abstract class AbstractDataView {
                     sql.SELECT(column.getOperator() + "(t" + table.tableIndex + ".*)" +
                             " AS \"" + pathAttributeName + "\"");
                 } else if (column.hasFilters()) { // is collection without aggregation
-                    CollectionColumn cc = subSelectsForColumns.get(uniqKey);
+                    CollectionJoin cc = selectsForCollections.get(uniqKey);
                     if (cc == null) {
-                        subSelectsForColumns.put(uniqKey, cc = new CollectionColumn(
+                        selectsForCollections.put(uniqKey, cc = new CollectionJoin(
                                 table, pathAttributeKey, uniqKey, attribute));
                     }
                     cc.filters.addAll(column.getFilters());
@@ -294,13 +291,12 @@ abstract class AbstractDataView {
 
     List<DSQL> getSubSelects() {
         ArrayList<DSQL> subSelects = new ArrayList();
-        for (CollectionColumn column : subSelectsForColumns.values()) {
+        for (CollectionJoin column : selectsForCollections.values()) {
             DSQL sql = new DSQL();
             sql.FROM(rootEntity.table + " as t0");
             HashSet<Integer> joinedInSubQuery = new HashSet<>();
             HashSet<String> columnsInSubQuery = new HashSet<>();
             addJoinForSubSelects(sql, column.table, joinedInSubQuery);
-            TableEntity entity = tableEntities.get(column.path);
 
             sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
             for (DDataFilter col : column.filters) {
@@ -583,7 +579,7 @@ abstract class AbstractDataView {
         }
     }
 
-    private class CollectionColumn {
+    private class CollectionJoin {
         private final JoinedTable table;
         private final List<DDataFilter> filters = new ArrayList<>();
         private final String path;
@@ -591,7 +587,7 @@ abstract class AbstractDataView {
         private final Class clazz;
         private final DDataAttribute byAttribute;
 
-        private CollectionColumn(JoinedTable table, String path, String uniqPath, DDataAttribute byAttribute) {
+        private CollectionJoin(JoinedTable table, String path, String uniqPath, DDataAttribute byAttribute) {
             this.table = table;
             this.path = path;
             this.uniqPath = uniqPath;
@@ -627,27 +623,23 @@ abstract class AbstractDataView {
 
     class TableEntity {
         final TableEntity parent;
-        final DDataFilter column;
         final String name;
-        final DDataAttribute mapByAttribute;
-        final Class<? extends DDataAttribute> beanEnum;
         final Class<? extends Serializable> beanInterface;
-        final List<DDataAttribute> attributes;
         final List<TableCell> cells = new ArrayList<>();
         final List<TableEntity> entities = new ArrayList<>();
         final Map<TableCell, TableCell> mappings = new HashMap<>();
+        final boolean collection;
 
         final String table;
         final DDataAttribute versionFrom;
         final DDataAttribute versionTo;
+        final List<DDataAttribute> attributes;
 
         TableEntity(Class<? extends DDataAttribute> root) {
-            this.column = null;
             this.parent = null;
             this.name = null;
-            this.mapByAttribute = null;
             this.attributes = new ArrayList<>();
-            beanEnum = root;
+            this.collection = false;
             try {
                 table = (String) root.getField("TABLE_NAME").get(null);
                 versionFrom = (DDataAttribute) root.getField("VERSION_FROM").get(null);
@@ -659,12 +651,12 @@ abstract class AbstractDataView {
         }
 
         TableEntity(TableEntity parent, String name, DDataFilter column) {
-            this.column = column;
             this.parent = parent;
             this.name = name;
-            this.mapByAttribute = column.getAttribute();
-            this.beanEnum = (Class<? extends DDataAttribute>) mapByAttribute.getJavaType();
+            DDataAttribute mapByAttribute = column.getAttribute();
+            Class<? extends DDataAttribute> beanEnum = (Class<? extends DDataAttribute>) mapByAttribute.getJavaType();
             this.attributes = Arrays.stream(beanEnum.getEnumConstants()).collect(Collectors.toList());
+            this.collection = mapByAttribute.isCollection();
             try {
                 beanInterface = mapByAttribute.getBeanInterface();
                 table = (String) beanEnum.getField("TABLE_NAME").get(null);
@@ -676,12 +668,11 @@ abstract class AbstractDataView {
         }
 
         boolean isCollection() {
-            return mapByAttribute != null && mapByAttribute.isCollection();
+            return collection;
         }
 
         void addCell(TableCell cell) {
             cells.add(cell);
-            if (cell.column != null) cell4Column.put(cell.column, cell);
             tableCells.put(cell.name, cell);
         }
 

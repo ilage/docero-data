@@ -361,7 +361,10 @@ public class DDataTest {
         DDataView view = viewBuilder.build(HistSample_WB_.class, new ArrayList<DDataFilter>() {{
             add(new DDataFilter(HistSample_WB_.VALUE));
             add(new DDataFilter(HistSample_WB_.INNER) {{
-                add(new DDataFilter(HistInner_WB_.TEXT));
+                setMapName("inner007");
+                add(new DDataFilter(HistInner_WB_.TEXT) {{
+                    setMapName("txt");
+                }});
             }});
         }});
         view.setFilter(new DDataFilter() {{
@@ -374,7 +377,7 @@ public class DDataTest {
         Integer t_sample_id = (Integer) row.getColumnValue(0, HistSample_WB_.ID);
 
         row.setColumnValue("update sample", 0, HistSample_WB_.VALUE);
-        row.setColumnValue("update inner", 0, HistSample_WB_.INNER, HistInner_WB_.TEXT);
+        row.setColumnValue("update inner", 0, "inner007.txt");
 
         view.flushUpdates(t -> {
             t.printStackTrace();

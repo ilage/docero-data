@@ -184,8 +184,8 @@ public class DDataView extends AbstractDataView {
                 ).collect(Collectors.toList())
         );
 
-        super.addFilterSql(sql, allTypesFilter, rootEntity.beanEnum);
-        String vc = versionConstraint(rootEntity.beanEnum, 0);
+        super.addFilterSql(sql, allTypesFilter, roots[0]);
+        String vc = versionConstraint(roots[0], 0);
         if (vc.length() > 0) sql.WHERE(vc);
 
         DSQL ssql = new DSQL();
@@ -277,7 +277,7 @@ public class DDataView extends AbstractDataView {
                                                         entityPropertyPath,
                                                         updatedIndex, cell, dateNow);
                                         if (entity != null)
-                                            pk.fillMappings(row, entity.mapByAttribute, updatedIndex, entityPropertyPath);
+                                            pk.fillMappings(row, entity, updatedIndex, entityPropertyPath);
                                     }
                                     pk.fillInsert(row, updatedIndex, dateNow);
                                     parentMustBeUpdated = entity.parent != null && entity.parent.mappings.entrySet()

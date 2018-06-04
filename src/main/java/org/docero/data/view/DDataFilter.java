@@ -77,6 +77,7 @@ public class DDataFilter {
         }
     };
     private Boolean sortAscending;
+    private String mapName;
 
     /**
      * Find attribute for property name in given attribute
@@ -142,7 +143,7 @@ public class DDataFilter {
     /**
      * Create element in filters patch (tree branch) for aggregating view column
      *
-     * @param column    attribute of mapped bean or collection of beans
+     * @param column attribute of mapped bean or collection of beans
      * @throws DDataException if DDataAttribute is null or NONE_
      */
     public DDataFilter(DDataAttribute column, DDataFilterOperator operator) throws DDataException {
@@ -249,6 +250,7 @@ public class DDataFilter {
 
     /**
      * getFilters not returns null if attribute is mapped bean
+     *
      * @return is filter attribute is mapped bean
      */
     public boolean hasFilters() {
@@ -282,5 +284,13 @@ public class DDataFilter {
 
     public void setSortAscending(Boolean sortAscending) {
         this.sortAscending = sortAscending;
+    }
+
+    public String getMapName() {
+        return mapName != null ? mapName : (attribute == null ? "" : attribute.getPropertyName());
+    }
+
+    public void setMapName(String mapName) {
+        this.mapName = mapName;
     }
 }

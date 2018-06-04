@@ -135,9 +135,9 @@ public abstract class DDataBeanUpdateService<T> {
         if (setter == null) throw new NoSuchMethodException(beanInterface.getName() + "." + setterName);
     }
 
-    protected abstract T createBean();
+    abstract T createBean();
 
-    protected abstract T updateBean(T bean) throws Exception;
+    abstract T updateBean(T bean) throws Exception;
 
     /**
      * If service does not make updates in database, then view try to update or insert row by known columns
@@ -145,7 +145,7 @@ public abstract class DDataBeanUpdateService<T> {
      *
      * @return default false
      */
-    public boolean serviceDoesNotMakeUpdates() {
+    boolean serviceDoesNotMakeUpdates() {
         return false;
     }
 }

@@ -27,7 +27,7 @@ class PreparedUpdates {
 
     private final Connection connection;
     private final List<PreparedMap> mappings;
-    private final TreeSet<DDataAttribute> unModified;
+    private final List<DDataAttribute> unModified;
     private PreparedStatement ps = null;
     private PreparedStatement pi = null;
     private boolean batchOperation = false;
@@ -56,7 +56,7 @@ class PreparedUpdates {
                 .collect(Collectors.toSet())
         );
 
-        unModified = new TreeSet<>(DDataView.propertiesComparator);
+        unModified = new ArrayList<>();
         for (DDataAttribute beanAtr : entity.attributes)
             if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
                 if (props.stream().noneMatch(c -> c.attribute == beanAtr) &&
@@ -442,63 +442,48 @@ class PreparedUpdates {
     /**
      * Fill mapping values between parent and child beans.
      *
-     * @param row                 - data row
-     * @param entityBeanAttribute - attribute used for mapping (mappedBean=true)
-     * @param updatedIndex        - index of array value (parent entity)
-     * @param entityPropertyPath  - path to attribute (child entity)
+     * @param row                - data row
+     * @param entity             - entity (parent entity)
+     * @param updatedIndex       - index of array value (parent entity)
+     * @param entityPropertyPath - path to attribute (child entity)
      */
-    void fillMappings(DDataViewRow row, DDataAttribute entityBeanAttribute, Integer updatedIndex, String entityPropertyPath) {
-        for (Map.Entry<String, String> m : entityBeanAttribute.joinMapping().entrySet()) {
-            @SuppressWarnings("unchecked")
-            Class<? extends DDataAttribute> beanClass = entityBeanAttribute.getClass();
-            DDataAttribute beanMapAttribute = Arrays.stream(beanClass.getEnumConstants())
-                    .filter(a -> m.getKey().equals(a.getColumnName()))
-                    .findAny().orElse(null);
-            @SuppressWarnings("unchecked")
-            Class<? extends DDataAttribute> childClass = (Class<? extends DDataAttribute>) entityBeanAttribute.getJavaType();
-            DDataAttribute childMapAttribute = Arrays.stream(childClass.getEnumConstants())
-                    .filter(a -> m.getValue().equals(a.getColumnName()))
-                    .findAny().orElse(null);
-            if (beanMapAttribute != null && childMapAttribute != null) {
-                int lii = entityPropertyPath.lastIndexOf('.');
-                String parentPropertyPrefix = lii < 0 ? "" :
-                        entityPropertyPath.substring(0, lii + 1);
-                int parentIndex = entityBeanAttribute.isCollection() ? 0 : updatedIndex;
-                if (!beanMapAttribute.isPrimaryKey()) {
-                    row.setColumnValue(
-                            row.getColumnValue(updatedIndex, entityPropertyPath + "." +
-                                    childMapAttribute.getPropertyName()),
-                            parentIndex, parentPropertyPrefix +
-                                    beanMapAttribute.getPropertyName(),
-                            false);
-                    if (LOG.isDebugEnabled())
-                        LOG.debug("fill parent property '" + parentPropertyPrefix + beanMapAttribute.getPropertyName() +
-                                "' from child entity property '" + entityPropertyPath + "." + childMapAttribute.getPropertyName() +
-                                "' with value: " + row.getColumnValue(updatedIndex, entityPropertyPath + "." +
-                                childMapAttribute.getPropertyName()));
-                } else if (!childMapAttribute.isPrimaryKey()) {
-                    row.setColumnValue(
-                            row.getColumnValue(parentIndex, parentPropertyPrefix +
-                                    beanMapAttribute.getPropertyName()),
-                            updatedIndex, entityPropertyPath + "." +
-                                    childMapAttribute.getPropertyName(),
-                            false);
-                    if (LOG.isDebugEnabled())
-                        LOG.debug("fill child entity property '" + entityPropertyPath + "." + childMapAttribute.getPropertyName() +
-                                "' from parent property '" + parentPropertyPrefix + beanMapAttribute.getPropertyName() +
-                                "' with value: " + row.getColumnValue(parentIndex, parentPropertyPrefix +
-                                beanMapAttribute.getPropertyName()));
-                } else if (LOG.isDebugEnabled())
-                    LOG.debug("both properties are primaryKeys '" + m.getKey() + "' (" +
-                            parentPropertyPrefix + beanMapAttribute.getPropertyName() +
-                            ") -> '" + m.getValue() + "' (" +
-                            entityPropertyPath + "." + childMapAttribute.getPropertyName() +
-                            ")");
+    void fillMappings(DDataViewRow row, AbstractDataView.TableEntity entity, Integer updatedIndex, String entityPropertyPath) {
+        for (Map.Entry<AbstractDataView.TableCell, AbstractDataView.TableCell> m : entity.mappings.entrySet()) {
+            DDataAttribute beanMapAttribute = m.getKey().attribute;
+            DDataAttribute childMapAttribute = m.getValue().attribute;
+            int lii = entityPropertyPath.lastIndexOf('.');
+            String parentPropertyPrefix = lii < 0 ? "" :
+                    entityPropertyPath.substring(0, lii + 1);
+            int parentIndex = entity.isCollection() ? 0 : updatedIndex;
+            if (!beanMapAttribute.isPrimaryKey()) {
+                row.setColumnValue(
+                        row.getColumnValue(updatedIndex, entityPropertyPath + "." +
+                                childMapAttribute.getPropertyName()),
+                        parentIndex, parentPropertyPrefix +
+                                beanMapAttribute.getPropertyName(),
+                        false);
+                if (LOG.isDebugEnabled())
+                    LOG.debug("fill parent property '" + parentPropertyPrefix + beanMapAttribute.getPropertyName() +
+                            "' from child entity property '" + entityPropertyPath + "." + childMapAttribute.getPropertyName() +
+                            "' with value: " + row.getColumnValue(updatedIndex, entityPropertyPath + "." +
+                            childMapAttribute.getPropertyName()));
+            } else if (!childMapAttribute.isPrimaryKey()) {
+                row.setColumnValue(
+                        row.getColumnValue(parentIndex, parentPropertyPrefix +
+                                beanMapAttribute.getPropertyName()),
+                        updatedIndex, entityPropertyPath + "." +
+                                childMapAttribute.getPropertyName(),
+                        false);
+                if (LOG.isDebugEnabled())
+                    LOG.debug("fill child entity property '" + entityPropertyPath + "." + childMapAttribute.getPropertyName() +
+                            "' from parent property '" + parentPropertyPrefix + beanMapAttribute.getPropertyName() +
+                            "' with value: " + row.getColumnValue(parentIndex, parentPropertyPrefix +
+                            beanMapAttribute.getPropertyName()));
             } else if (LOG.isDebugEnabled())
-                LOG.debug("no mapping found for " + m.getKey() + " (" +
-                        (beanMapAttribute == null ? "NULL" : beanMapAttribute.getPropertyName()) +
-                        ") ->" + m.getValue() + " (" +
-                        (childMapAttribute == null ? "NULL" : childMapAttribute.getPropertyName()) +
+                LOG.debug("both properties are primaryKeys '" + m.getKey() + "' (" +
+                        parentPropertyPrefix + beanMapAttribute.getPropertyName() +
+                        ") -> '" + m.getValue() + "' (" +
+                        entityPropertyPath + "." + childMapAttribute.getPropertyName() +
                         ")");
         }
     }
