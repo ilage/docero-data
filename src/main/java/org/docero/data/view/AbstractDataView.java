@@ -177,7 +177,7 @@ abstract class AbstractDataView {
         if (attribute != null && attribute.getColumnName() != null) {
             String pathAttributeName = path + column.getMapName();
             String pathAttributeKey = pathAttributeName + PROP_PATCH_DELIMITER;
-            String uniqKey = uniqPath + attribute.getPropertyName() + ":" +
+            String uniqKey = uniqPath + column.getMapName() + ":" +
                     attribute.getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
 
             if (attribute.isMappedBean()) {
@@ -300,7 +300,7 @@ abstract class AbstractDataView {
 
             sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
             for (DDataFilter col : column.filters) {
-                String uniqKey = column.uniqPath + col.getAttribute().getPropertyName() + ":" +
+                String uniqKey = column.uniqPath + col.getMapName() + ":" +
                         col.getAttribute().getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
                 JoinedTable jt = allJoins.get(uniqKey);
                 if (jt != null) addJoinForSubSelects(sql, jt, joinedInSubQuery);
@@ -461,13 +461,13 @@ abstract class AbstractDataView {
                     }
                 } else if (filter.hasFilters()) {
                     Class innerClass = filter.getAttribute().getJavaType();
-                    String key = path + filter.getAttribute().getPropertyName() + ":" +
+                    String key = path + filter.getMapName() + ":" +
                             innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                     addFilterSql(sql, filter, innerClass, key, table.tableIndex, alreadyJoined);
                 }
             } else { // we can't use two separate filters by same table
                 Class innerClass = filter.getAttribute().getJavaType();
-                String key = path + filter.getAttribute().getPropertyName() + ":" +
+                String key = path + filter.getMapName() + ":" +
                         innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                 int finalN = tablesCounter.incrementAndGet();
                 allJoins.put(key, new JoinedTable(fromTableIndex, finalN, filter.getAttribute()));

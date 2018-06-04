@@ -5,6 +5,7 @@ import org.docero.data.utils.DDataAttribute;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
+@SuppressWarnings("WeakerAccess")
 public abstract class DDataBeanUpdateService<T> {
     private final Class<T> beanInterface;
 
@@ -135,9 +136,9 @@ public abstract class DDataBeanUpdateService<T> {
         if (setter == null) throw new NoSuchMethodException(beanInterface.getName() + "." + setterName);
     }
 
-    abstract T createBean();
+    public abstract T createBean();
 
-    abstract T updateBean(T bean) throws Exception;
+    public abstract T updateBean(T bean) throws Exception;
 
     /**
      * If service does not make updates in database, then view try to update or insert row by known columns
@@ -145,7 +146,7 @@ public abstract class DDataBeanUpdateService<T> {
      *
      * @return default false
      */
-    boolean serviceDoesNotMakeUpdates() {
+    public boolean serviceDoesNotMakeUpdates() {
         return false;
     }
 }
