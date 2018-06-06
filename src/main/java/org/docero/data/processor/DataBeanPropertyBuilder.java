@@ -161,6 +161,12 @@ class DataBeanPropertyBuilder {
         else if ("java.time.OffsetDateTime".equals(type.toString()))
             cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.time.OffsetDateTime.class, " +
                     "value = org.docero.data.utils.OffsetDateTimeAdapter.class)");
+        else if("java.sql.Date".equals(type.toString()))
+            cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.sql.Date.class, " +
+                    "value = org.docero.data.utils.SqlDateAdapter.class)");
+        else if("java.sql.Timestamp".equals(type.toString()))
+            cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.sql.Timestamp.class, " +
+                    "value = org.docero.data.utils.TimestampAdapter.class)");
     }
 
     void buildGetter(JavaClassWriter cf) throws IOException {
