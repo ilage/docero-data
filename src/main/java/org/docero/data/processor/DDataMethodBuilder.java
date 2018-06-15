@@ -225,16 +225,18 @@ class DDataMethodBuilder {
         }
 
         if (parameters.size() > 0) {
-            if (bean.isKeyComposite && parameters.size() == 1 &&
+            if (parameters.size() == 1 &&
                     (methodType == GET || methodType == DELETE) && methodIndex == 0
                     ) {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
                 for (DataBeanPropertyBuilder property : bean.properties.values())
                     if (property.isId) {
-                        cf.println("this.put(\"" + property.name + "\", " + parameters.get(0).name + ".get" +
-                                Character.toUpperCase(property.name.charAt(0)) +
-                                property.name.substring(1) + "());");
+                        cf.println("this.put(\"" + property.name + "\", " + parameters.get(0).name +
+                                (bean.isKeyComposite ?
+                                        ".get" + Character.toUpperCase(property.name.charAt(0)) +
+                                                property.name.substring(1) + "()" :
+                                        "") + ");");
                     }
                 cf.endBlock("}}");
                 cf.endBlock();
@@ -283,7 +285,7 @@ class DDataMethodBuilder {
                     cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
                 }
 
-                if(repositoryBuilder.versionalType!=null && !hasVersionFilter && methodType==SELECT) {
+                if (repositoryBuilder.versionalType != null && !hasVersionFilter && methodType == SELECT) {
                     Optional<DataBeanPropertyBuilder> versionProp = bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny();
                     cf.println("this.put(\"" + versionProp.get().name + "\", " +
                             DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
