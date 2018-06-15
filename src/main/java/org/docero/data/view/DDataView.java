@@ -61,10 +61,13 @@ public class DDataView extends AbstractDataView {
                 Collections.singletonMap("sqlStatement", sql.toString()));
     }
 
-    public DDataViewRows select(int offset, int limit) throws DDataException {
-        this.updates = new HashMap<>();
+    public String firstLevelSelect(int offset, int limit) throws DDataException {
+        return firstLevelSelect(getKeySQL(), offset, limit);
+    }
+
+    private String firstLevelSelect(String keySql, int offset, int limit) throws DDataException {
         DSQL sql = buildFrom();
-        String keySql = getKeySQL();
+
         sql.SELECT(keySql + " as \"dDataBeanKey_\"");
         for (DDataFilter column : columns)
             for (Class root : roots)
@@ -74,7 +77,13 @@ public class DDataView extends AbstractDataView {
                 }
         super.addRootIdsToViewSql(sql);
         buildFilters(sql);
-        String limitedSql = addBounds(sql.toString(), offset, limit);
+        return limit > 0 ? addBounds(sql.toString(), offset, limit) : sql.toString();
+    }
+
+    public DDataViewRows select(int offset, int limit) throws DDataException {
+        this.updates = new HashMap<>();
+        String keySql = getKeySQL();
+        String limitedSql = firstLevelSelect(keySql, offset, limit);
 
         //if(LOG.isDebugEnabled()) LOG.debug("Preparing: "+sql.toString());
         Map<Object, Object> resultMap = sqlSession.selectMap(

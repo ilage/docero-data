@@ -39,6 +39,7 @@ class DDataBuilder {
     final TypeMirror rowBoundsType;
     final ArrayList<DataBeanBuilder> unimplementedBeans = new ArrayList<>();
     String basePackage = "org.docero.data";
+    String componentName = "dData";
 
     DDataBuilder(ProcessingEnvironment environment) {
         this.environment = environment;
@@ -428,6 +429,7 @@ class DDataBuilder {
                         .map(cn -> cn.substring(0, cn.lastIndexOf('.')))
                         .orElse("org.docero.data");
             }
+            this.componentName = dc.springComponentName().length() > 0 ? dc.springComponentName() : "dData";
         }
     }
 }

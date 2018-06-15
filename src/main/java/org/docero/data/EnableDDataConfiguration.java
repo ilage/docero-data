@@ -21,4 +21,9 @@ public @interface EnableDDataConfiguration {
      * <p>if packageName specified it has precedence over packageClass</p>
      */
     Class<?> packageClass() default EnableDDataConfiguration.class;
+
+    /**
+     * if spring available set name for DData component, it may be useful in @DependsOn annotation.
+     */
+    String springComponentName() default "";
 }

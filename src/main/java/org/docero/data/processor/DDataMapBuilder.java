@@ -191,7 +191,7 @@ class DDataMapBuilder {
                 cf.endBlock("}");
 
                 cf.println("");
-                cf.println("@org.springframework.context.annotation.Bean");
+                cf.println("@org.springframework.context.annotation.Bean(name=\"" + builder.componentName + "\")");
                 cf.startBlock("public DData dData(");
                 for (DataBeanBuilder bean : builder.beansByInterface.values())
                     if (bean.dictionary != DictionaryType.NO) {
