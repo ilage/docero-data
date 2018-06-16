@@ -16,6 +16,7 @@ import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.test.annotation.Commit;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
@@ -30,10 +31,10 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.sql.*;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.*;
 import static org.junit.Assert.assertNotNull;
@@ -47,6 +48,8 @@ import static org.junit.Assert.assertNotNull;
 @SuppressWarnings("SpringJavaAutowiringInspection")
 public class DDataTest {
     private static final Logger LOG = LoggerFactory.getLogger(DDataTest.class);
+    @Autowired
+    private ApplicationContext springContext;
     @Autowired
     private DataSource dataSource;
     @Autowired
@@ -696,6 +699,66 @@ public class DDataTest {
         assertTrue(smallDictRepo.list().stream().anyMatch(el -> "new name".equals(el.getName())));
         // NO ANY SELECT
         smallDictRepo.get(firstId);
+    }
+
+    @Test
+    public void testDictionariesMultithread() throws SQLException, InterruptedException {
+        setUp();
+        smallDictRepo.list();
+
+        ExecutorService tp = Executors.newFixedThreadPool(9);
+        tp.submit(new DictionaryTest("test-1"));
+        tp.submit(new DictionaryTest("test-2"));
+        tp.submit(new DictionaryTest("test-3"));
+        tp.submit(new DictionaryTest("test-4"));
+        tp.submit(new DictionaryTest("test-5"));
+        tp.submit(new DictionaryTest("test-6"));
+        tp.submit(new DictionaryTest("test-7"));
+        tp.submit(new DictionaryTest("test-8"));
+        tp.submit(new DictionaryTest("test-9"));
+        tp.shutdown();
+        tp.awaitTermination(10, TimeUnit.SECONDS);
+    }
+
+    private class DictionaryTest implements Runnable {
+        private final String name;
+        private final Random r = new Random();
+
+        public DictionaryTest(String name) {
+            this.name = name;
+        }
+
+        private void yeald() throws InterruptedException {
+            int rnd = r.nextInt()&0x3FF;
+            Thread.sleep(rnd);
+        }
+
+        @Override
+        public void run() {
+            LOG.debug(name + " started");
+            try {
+                DDataDictionary<SmallDict, Integer> smallDict = (DDataDictionary<SmallDict, Integer>)
+                        springContext.getBean("smallDictRepository");
+
+                SmallDict e1 = smallDict.get(1);
+
+                yeald();
+                e1.setName(name);
+                smallDict.update(e1);
+                yeald();
+
+                e1 = smallDict.list().stream().filter(el -> el.getId() == 1).findAny().orElse(null);
+                LOG.debug(name + " read value as " + e1.getName());
+
+                for(int i=0; i< 5; i++) {
+                    yeald();
+                    smallDict.list();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            LOG.debug(name + " finished");
+        }
     }
 
     @Test

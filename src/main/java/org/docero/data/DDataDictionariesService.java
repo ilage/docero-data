@@ -73,7 +73,7 @@ public class DDataDictionariesService {
 
     public <T extends Serializable> void updateVersion(Class<T> type) {
         DDataDictionary d = dictionaries.get(type);
-        d.version_(d.version_() + 1);
+        d.version_((int) System.currentTimeMillis());
     }
 
     @SuppressWarnings({"unchecked", "JavaReflectionMemberAccess"})
@@ -82,15 +82,16 @@ public class DDataDictionariesService {
     ) {
         DDataDictionary<T, C> d = dictionaries.get(type);
         Integer localListVersion = versions.get(type);
-        Integer cv = d.version_();
-        boolean initialLoad = cv == 0;
-        if (!initialLoad && cv.equals(localListVersion)) {
+        if (d.version_().equals(localListVersion)) {
             List<T> cached = new ArrayList<>();
             List<C> keys = lists.get(type);
             if (keys != null) keys.forEach(id -> cached.add(d.get(id)));
             return cached;
         } else {
             List<T> selected = session.selectList(selectId);
+
+            Integer cv = d.version_();
+            boolean initialLoad = cv == 0;
             if (!selected.isEmpty())
                 try {
                     Method mget = selected.get(0).getClass().getMethod("getDDataBeanKey_");
