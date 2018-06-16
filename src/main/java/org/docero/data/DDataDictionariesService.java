@@ -82,7 +82,8 @@ public class DDataDictionariesService {
     ) {
         DDataDictionary<T, C> d = dictionaries.get(type);
         Integer localListVersion = versions.get(type);
-        if (d.version_().equals(localListVersion)) {
+        Integer cv = d.version_();
+        if (cv.equals(localListVersion)) {
             List<T> cached = new ArrayList<>();
             List<C> keys = lists.get(type);
             if (keys != null) keys.forEach(id -> cached.add(d.get(id)));
@@ -90,8 +91,7 @@ public class DDataDictionariesService {
         } else {
             List<T> selected = session.selectList(selectId);
 
-            Integer cv = d.version_();
-            boolean initialLoad = cv == 0;
+            boolean initialLoad = d.version_() == 0;
             if (!selected.isEmpty())
                 try {
                     Method mget = selected.get(0).getClass().getMethod("getDDataBeanKey_");
