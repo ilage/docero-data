@@ -9,6 +9,7 @@ import java.util.List;
 public interface DDataDictionary<T extends Serializable, C extends Serializable> extends DDataRepository<T, C> {
     DictionaryType getDictionaryType();
     <B extends T> B put_(B bean);
-    void putList_(List<C> beans);
+    Integer version_();
+    Integer version_(Integer i);
     List<T> list();
 }

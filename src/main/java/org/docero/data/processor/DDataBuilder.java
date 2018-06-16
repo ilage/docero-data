@@ -173,10 +173,13 @@ class DDataBuilder {
             cf.println("DData.cache(bean);");
             cf.endBlock("}");
             cf.println("");
-            cf.startBlock("protected <T extends java.io.Serializable> void cache(java.util.Collection<T> beans) {");
-            cf.println("DData.cache(beans);");
+            cf.startBlock("protected <T extends java.io.Serializable> java.util.List<T> listCached(");
+            cf.println("Class<T> type, org.apache.ibatis.session.SqlSession session, String selectId)");
+            cf.endBlock("{ return DData.list(type, session, selectId); }");
+            cf.println("");
+            cf.startBlock("protected <T extends java.io.Serializable> void updateVersion(Class<T> type) {");
+            cf.println("DData.updateVersion(type);");
             cf.endBlock("}");
-
             cf.endBlock("}");
         }
 
@@ -243,10 +246,12 @@ class DDataBuilder {
 
             cf.println("");
             cf.startBlock("public static final String[] cacheNames = new String[] {");
-            cf.println(beansByInterface.values().stream()
+            String cnames = beansByInterface.values().stream()
                     .filter(DataBeanBuilder::isDictionary)
                     .map(b -> "\"" + b.cacheMap + "\"")
-                    .collect(Collectors.joining(",\n\t")));
+                    .collect(Collectors.joining(",\n\t"));
+            cf.print("\"ddata.dictionaries\"");
+            cf.println((cnames.isEmpty() ? "" : ",\n\t") + cnames);
             cf.endBlock("};");
 
             cf.println("");
@@ -265,8 +270,13 @@ class DDataBuilder {
             cf.println("dictionariesService.put(bean);");
             cf.endBlock("}");
             cf.println("");
-            cf.startBlock("static <T extends java.io.Serializable> void cache(java.util.Collection<T> bean) {");
-            cf.println("dictionariesService.put(bean);");
+            cf.startBlock("static <T extends java.io.Serializable> java.util.List<T> list(");
+            cf.println("Class<T> type, org.apache.ibatis.session.SqlSession session, String selectId) {");
+            cf.println("return dictionariesService.list(type, session, selectId);");
+            cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("static <T extends java.io.Serializable> void updateVersion(Class<T> type) {");
+            cf.println("dictionariesService.updateVersion(type);");
             cf.endBlock("}");
             cf.println("");
             cf.startBlock("static <T extends java.io.Serializable, C extends java.io.Serializable> T cache(Class<T> type, C key) {");

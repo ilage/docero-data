@@ -9,10 +9,7 @@ import org.docero.data.repositories.CompositeKeyRepository;
 import org.docero.data.repositories.MultiTypesRepository;
 import org.docero.data.repositories.SampleRepository;
 import org.docero.data.repositories.VersionalSampleRepository;
-import org.docero.data.utils.DDataAttribute;
-import org.docero.data.utils.DDataException;
-import org.docero.data.utils.DDataExceptionHandler;
-import org.docero.data.utils.DSQL;
+import org.docero.data.utils.*;
 import org.docero.data.view.*;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -387,15 +384,13 @@ public class DDataTest {
         HistSample bean = iVSample.get(t_sample_id);
         assertNotNull(bean);
         assertNotNull(bean.getInner());
-        assertEquals("update inner",bean.getInner().getText());
+        assertEquals("update inner", bean.getInner().getText());
 
         bean = iVSample.get(t_sample_id, beforeUpdate);
         assertNotNull(bean);
         assertNotNull(bean.getInner());
-        assertNotEquals("update inner",bean.getInner().getText());
+        assertNotEquals("update inner", bean.getInner().getText());
     }
-
-
 
 
     @Test
@@ -667,6 +662,40 @@ public class DDataTest {
         iInnerRepository.insert(ni);
 
         assertNotNull(iInnerRepository.get(ni.getId()));
+    }
+
+    @Autowired
+    private DDataDictionary<SmallDict, Integer> smallDictRepo;
+
+    @Test
+    @Transactional
+    public void testDictionaries() throws SQLException {
+        setUp();
+
+        // SELECT 2 records
+        List<SmallDict> elts = smallDictRepo.list();
+
+        int firstId = elts.get(0).getId();
+
+        // NO ANY SELECT
+        SmallDict e = smallDictRepo.get(firstId);
+        assertNotNull(e);
+
+        for (int i = 0; i < 100; i++) {
+            // NO ANY SELECT
+            assertTrue(smallDictRepo.list().stream().anyMatch(el -> (el.getId() == firstId)));
+            // NO ANY SELECT
+            assertNotNull(smallDictRepo.get(firstId));
+        }
+
+        e.setName("new name");
+        //UPDATE 1 record
+        smallDictRepo.update(e);
+
+        //SELECT 2 records
+        assertTrue(smallDictRepo.list().stream().anyMatch(el -> "new name".equals(el.getName())));
+        // NO ANY SELECT
+        smallDictRepo.get(firstId);
     }
 
     @Test

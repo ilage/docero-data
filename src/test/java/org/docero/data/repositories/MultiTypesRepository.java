@@ -13,5 +13,5 @@ public interface MultiTypesRepository extends DDataRepository<ItemAbstraction, I
     <T extends ItemAbstraction> List<T> list(RowBounds bounds);
 
     @MultiTypesRepository_DDataFetch_(ignore = ItemAbstraction_.ELEM_TYPE)
-    void update(ItemAbstraction obj);
+    ItemAbstraction update(ItemAbstraction obj);
 }

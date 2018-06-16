@@ -221,8 +221,19 @@ class DataRepositoryBuilder {
                 cf.println("return bean;");
                 cf.endBlock("}");
                 cf.println("");
-                cf.startBlock("public void putList_(java.util.List<" + bean.keyType + "> bean) {");
+                if (spring)
+                    cf.println("@org.springframework.cache.annotation.Cacheable(cacheNames=\"ddata.dictionaries\", key = \"'" +
+                            bean.cacheMap + "'\")");
+                cf.startBlock("public Integer version_() {");
                 //TODO without Spring
+                cf.println("return 0;");
+                cf.endBlock("}");
+                if (spring)
+                    cf.println("@org.springframework.cache.annotation.CachePut(cacheNames=\"ddata.dictionaries\", key = \"'" +
+                            bean.cacheMap + "'\")");
+                cf.startBlock("public Integer version_(Integer i) {");
+                //TODO without Spring
+                cf.println("return i;");
                 cf.endBlock("}");
             }
 
@@ -246,8 +257,12 @@ class DataRepositoryBuilder {
             if (bean.dictionary != DictionaryType.NO && defaultListMethod == null) {
                 cf.println("");
                 cf.startBlock("public java.util.List<" + forInterfaceName + "> list() {");
-                cf.println("return getSqlSession().selectList(\"" +
-                        mappingClassName + ".dictionary\");");
+                if (bean.dictionary == DictionaryType.SMALL)
+                    cf.println("return listCached(" + forInterfaceName + ".class,getSqlSession(),\"" +
+                            mappingClassName + ".dictionary\");");
+                else
+                    cf.println("return getSqlSession().selectList(\"" +
+                            mappingClassName + ".dictionary\");");
                 cf.endBlock("}");
             }
 

@@ -1,19 +1,20 @@
 package org.docero.data;
 
+import org.apache.ibatis.session.SqlSession;
 import org.docero.data.utils.DDataDictionary;
 
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 public class DDataDictionariesService {
     private final ConcurrentHashMap<Class, DDataDictionary> dictionaries =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Class, Integer> versions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Class, List> lists = new ConcurrentHashMap<>();
 
     public DDataDictionariesService() {
     }
@@ -69,37 +70,41 @@ public class DDataDictionariesService {
         return bean;
     }
 
-    /**
-     * Store collection of beans in dictionary repository cache
-     *
-     * @param beans - collection of dictionary beans
-     */
-    public <T extends Serializable, C extends Serializable> void put(Collection<T> beans) {
-        if (beans != null && beans.size() > 0) {
-            @SuppressWarnings("unchecked")
-            Class<T> type = (Class<T>) beans.iterator().next().getClass();
-            @SuppressWarnings("unchecked")
-            DDataDictionary<T, C> d = dictionaries.get(type);
-            if (d != null) {
-                for (T bean : beans) d.put_(bean);
+
+    public <T extends Serializable> void updateVersion(Class<T> type) {
+        DDataDictionary d = dictionaries.get(type);
+        d.version_(d.version_() + 1);
+    }
+
+    @SuppressWarnings({"unchecked", "JavaReflectionMemberAccess"})
+    public <T extends Serializable, C extends Serializable> List<T> list(
+            Class<T> type, SqlSession session, String selectId
+    ) {
+        DDataDictionary<T, C> d = dictionaries.get(type);
+        Integer localListVersion = versions.get(type);
+        Integer cv = d.version_();
+        boolean initialLoad = cv == 0;
+        if (!initialLoad && cv.equals(localListVersion)) {
+            List<T> cached = new ArrayList<>();
+            List<C> keys = lists.get(type);
+            if (keys != null) keys.forEach(id -> cached.add(d.get(id)));
+            return cached;
+        } else {
+            List<T> selected = session.selectList(selectId);
+            if (!selected.isEmpty())
                 try {
-                    @SuppressWarnings("JavaReflectionMemberAccess")
-                    Method mget = type.getDeclaredMethod("getDDataBeanKey_");
-                    List<C> keys = beans.stream()
-                            .map(bean -> {
-                                try {
-                                    //noinspection unchecked
-                                    return (C) mget.invoke(bean);
-                                } catch (IllegalAccessException | InvocationTargetException ignore) {
-                                    return null;
-                                }
-                            })
-                            .filter(Objects::nonNull)
-                            .collect(Collectors.toList());
-                    d.putList_(keys);
-                } catch (NoSuchMethodException ignore) {
+                    Method mget = selected.get(0).getClass().getMethod("getDDataBeanKey_");
+                    ArrayList<Serializable> keys = new ArrayList();
+                    if (initialLoad)
+                        for (T bean : selected) keys.add((Serializable) mget.invoke(d.put_(bean)));
+                    else
+                        for (T bean : selected) keys.add((Serializable) mget.invoke(bean));
+                    lists.put(type, keys);
+                } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignore) {
                 }
-            }
+            if (initialLoad) cv = d.version_(1);
+            versions.put(type, cv);
+            return selected;
         }
     }
 }

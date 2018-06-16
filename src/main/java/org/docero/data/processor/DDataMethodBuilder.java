@@ -19,9 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static org.docero.data.processor.DDataMethodBuilder.MType.DELETE;
-import static org.docero.data.processor.DDataMethodBuilder.MType.GET;
-import static org.docero.data.processor.DDataMethodBuilder.MType.SELECT;
+import static org.docero.data.processor.DDataMethodBuilder.MType.*;
 
 class DDataMethodBuilder {
     final List<? extends TypeVariable> typeVariables;
@@ -98,12 +96,12 @@ class DDataMethodBuilder {
                 break;
             case INSERT:
                 methodName = "insert";
-                returnType = null;
+                returnType = repositoryBuilder.forInterfaceName;
                 parameters.add(new DDataMethodParameter("bean", repositoryBuilder.forInterfaceName));
                 break;
             case UPDATE:
                 methodName = "update";
-                returnType = null;
+                returnType = repositoryBuilder.forInterfaceName;
                 parameters.add(new DDataMethodParameter("bean", repositoryBuilder.forInterfaceName));
                 break;
             case DELETE:
@@ -133,12 +131,20 @@ class DDataMethodBuilder {
         DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
 
         if (bean.dictionary != DictionaryType.NO && repositoryBuilder.rootBuilder.useSpringCache && methodIndex == 0) {
-            if (methodType == GET)
-                cf.println("@org.springframework.cache.annotation.Cacheable(cacheNames=\"" + bean.cacheMap +
-                        "\", sync=true)");
-            else if (methodType == DELETE)
-                cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap +
-                        "\")");
+            switch (methodType) {
+                case GET:
+                    cf.println("@org.springframework.cache.annotation.Cacheable(cacheNames=\"" + bean.cacheMap +
+                            "\", sync=true)");
+                    break;
+                case DELETE:
+                    cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap +
+                            "\")");
+                    break;
+                case INSERT:
+                case UPDATE:
+                    cf.println("@org.springframework.cache.annotation.CachePut(cacheNames=\"" +
+                            bean.cacheMap + "\", key = \"#bean.dDataBeanKey_\")");
+            }
         }
         cf.startBlock("public " + typeVariables2String() +
                 (returnType == null ? "void" : returnType) + " " + methodName + "(");
@@ -163,17 +169,19 @@ class DDataMethodBuilder {
                 if (returnType != null) {
                     cf.print("return getSqlSession().");
                     if (returnType.toString().contains("java.util.List")) {
-                        cf.print("selectList");
+                        cf.print("selectList(");
                     } else if (returnType.toString().contains("java.util.Map")) {
-                        cf.print("selectMap");
+                        cf.print("selectMap(");
                     } else {
-                        cf.print("selectOne");
+                        cf.print("selectOne(");
                     }
                 }
-                cf.print("(\"" + selectId + "\"");
+                cf.print("\"" + selectId + "\"");
                 break;
             case INSERT:
                 useParameterBean = true;
+                if (bean.dictionary != DictionaryType.NO)
+                    cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 if (repositoryBuilder.versionalType != null) {
                     cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                             beanParameterName + ".set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
@@ -188,16 +196,18 @@ class DDataMethodBuilder {
                         cf.println("getSqlSession().insert(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                                 methodIndex == 0 ? "" : "_" + methodIndex) + "_" +
                                 item.beanInterfaceShort() + "\", " + beanParameterName + ");");
-                        cf.println("return;");
+                        cf.println("return " + beanParameterName + ";");
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().insert");
                 cf.print("(\"" + selectId + "\"");
-                if (bean.dictionary != DictionaryType.NO)
+                if (bean.dictionary != DictionaryType.NO && !repositoryBuilder.rootBuilder.useSpringCache)
                     cacheFunction = "cache(" + beanParameterName + ");";
                 break;
             case UPDATE:
                 useParameterBean = true;
+                if (bean.dictionary != DictionaryType.NO)
+                    cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 if (repositoryBuilder.versionalType != null) {
                     cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
                             beanParameterName + ".set" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) +
@@ -217,10 +227,12 @@ class DDataMethodBuilder {
                     }
                 cf.print("getSqlSession().update");
                 cf.print("(\"" + selectId + "\"");
-                if (bean.dictionary != DictionaryType.NO)
+                if (bean.dictionary != DictionaryType.NO && !repositoryBuilder.rootBuilder.useSpringCache)
                     cacheFunction = "cache(" + beanParameterName + ");";
                 break;
             default:
+                if (bean.dictionary != DictionaryType.NO)
+                    cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 cf.print("getSqlSession().delete(\"" + selectId + "\"");
         }
 
@@ -300,6 +312,8 @@ class DDataMethodBuilder {
         }
 
         if (cacheFunction != null) cf.println(cacheFunction);
+        if (returnType != null && (methodType == INSERT || methodType == UPDATE))
+            cf.println("return " + beanParameterName + ";");
         cf.endBlock("}");
 
         if (methodIndex == 0) {
