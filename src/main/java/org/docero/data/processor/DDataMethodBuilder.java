@@ -5,6 +5,7 @@ import org.docero.data.SelectId;
 
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
+import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeKind;
@@ -130,6 +131,20 @@ class DDataMethodBuilder {
         cf.println("");
         DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
 
+        List<MappedDictionary> dictionariesUpdatedByThis =
+                methodType == GET || bean.dictionary == DictionaryType.SMALL ? null :
+                        searchForDictionariesUseThisBean();
+        if (dictionariesUpdatedByThis != null)
+            for (MappedDictionary d : dictionariesUpdatedByThis) {
+                String cacheKey = d.cacheKey(parameters);
+                if (cacheKey != null)
+                    cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + d.bean.cacheMap +
+                            "\", key=\"" + cacheKey + "\")");
+                else
+                    cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + d.bean.cacheMap +
+                            "\", allEntries=true)");
+            }
+
         if (bean.dictionary != DictionaryType.NO && repositoryBuilder.rootBuilder.useSpringCache && methodIndex == 0) {
             switch (methodType) {
                 case GET:
@@ -181,7 +196,7 @@ class DDataMethodBuilder {
                 break;
             case INSERT:
                 useParameterBean = true;
-                if (bean.dictionary != DictionaryType.NO)
+                if (bean.dictionary == DictionaryType.SMALL)
                     cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 if (repositoryBuilder.versionalType != null) {
                     cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
@@ -207,7 +222,7 @@ class DDataMethodBuilder {
                 break;
             case UPDATE:
                 useParameterBean = true;
-                if (bean.dictionary != DictionaryType.NO)
+                if (bean.dictionary == DictionaryType.SMALL)
                     cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 if (repositoryBuilder.versionalType != null) {
                     cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
@@ -232,7 +247,7 @@ class DDataMethodBuilder {
                     cacheFunction = "cache(" + beanParameterName + ");";
                 break;
             default:
-                if (bean.dictionary != DictionaryType.NO)
+                if (bean.dictionary == DictionaryType.SMALL)
                     cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 cf.print("getSqlSession().delete(\"" + selectId + "\"");
         }
@@ -313,8 +328,16 @@ class DDataMethodBuilder {
         }
 
         if (cacheFunction != null) cf.println(cacheFunction);
+
+        if (dictionariesUpdatedByThis != null)
+            for (MappedDictionary d : dictionariesUpdatedByThis)
+                if (d.bean.dictionary == DictionaryType.SMALL) {
+                    cf.println("updateVersion(" + d.bean.interfaceType + ".class);");
+                }
+
         if (returnSomething && (methodType == INSERT || methodType == UPDATE))
             cf.println("return " + beanParameterName + ";");
+
         cf.endBlock("}");
 
         if (methodIndex == 0) {
@@ -345,6 +368,19 @@ class DDataMethodBuilder {
                     cf.endBlock("}");
                 }
         }
+    }
+
+    private List<MappedDictionary> searchForDictionariesUseThisBean() {
+        DataBeanBuilder thisBean =
+                repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
+        List<MappedDictionary> list = new ArrayList<>();
+        this.repositoryBuilder.rootBuilder.mappings.values().forEach(m -> {
+            DataBeanBuilder mappedBean = m.mappedProperties.get(0).dataBean;
+            DataBeanBuilder mapFromBean = m.properties.get(0).dataBean;
+            if (mappedBean == thisBean)
+                if (mapFromBean.isDictionary()) list.add(new MappedDictionary(mapFromBean, m));
+        });
+        return list;
     }
 
     private String typeVariables2String() {
@@ -381,6 +417,50 @@ class DDataMethodBuilder {
         DDataMethodParameter(String simpleName, TypeMirror typeMirror) {
             this.name = simpleName;
             this.type = typeMirror;
+        }
+    }
+
+    static class MappedDictionary {
+        final DataBeanBuilder bean;
+        final DataBeanPropertyBuilder property;
+        private final TypeMirror myType;
+        private final TypeMirror myKeyType;
+
+        MappedDictionary(DataBeanBuilder bean, Mapping m) {
+            this.bean = bean;
+            DataBeanBuilder myBean = m.mappedProperties.get(0).dataBean;
+            this.myType = myBean.interfaceType;
+            TypeElement keyTypeElement = myBean.rootBuilder.environment.getElementUtils()
+                    .getTypeElement(myBean.keyType);
+            this.myKeyType = keyTypeElement.asType();
+
+            List<DataBeanPropertyBuilder> dictionaryIds = bean.properties.values().stream()
+                    .filter(DataBeanPropertyBuilder::isId)
+                    .collect(Collectors.toList()); // dictionary Properties
+            DataBeanPropertyBuilder property = null;
+            if (dictionaryIds.size() == 1) {
+                List<DataBeanPropertyBuilder> mappedIds = m.properties.stream()
+                        .filter(DataBeanPropertyBuilder::isId)
+                        .collect(Collectors.toList()); // dictionary Properties used in mapping
+                if (mappedIds.size() == dictionaryIds.size()) {
+                    //all in mappings, we can create id for dictionary entry
+                    //TODO can i build id for composite key for CacheEvict?
+                    property = m.mappedProperties.get(m.properties.indexOf(mappedIds.get(0)));
+                }
+            }
+            this.property = property;
+        }
+
+        String cacheKey(ArrayList<DDataMethodParameter> parameters) {
+            Types tu = bean.rootBuilder.environment.getTypeUtils();
+            return property == null ? null : parameters.stream()
+                    .filter(p -> tu.isSubtype(p.type, myType)).findAny()
+                    .map(p -> "#" + p.name + "." + property.name)
+                    .orElse(parameters.stream()
+                            .filter(p -> p.type.toString().equals(myKeyType.toString())).findAny()
+                            .map(p -> "#" + p.name + "." + property.name)
+                            .orElse(null)
+                    );
         }
     }
 }

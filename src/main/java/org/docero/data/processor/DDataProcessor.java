@@ -21,15 +21,10 @@ import java.util.Set;
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class DDataProcessor extends AbstractProcessor {
-    private TypeMirror collectionType;
-    private TypeMirror mapType;
     private DDataBuilder builder;
-    private TypeMirror versionalBeanType;
-    private TypeMirror versionalRepositoryType;
 
     private enum Stage {
         STEP1_ENUM_GEN,
-        STEP1p_REPOSITORIES_GEN,
         STEP2_BEANS_GEN,
         STEP3_MAPS_GEN,
         STEP_END
@@ -64,7 +59,7 @@ public class DDataProcessor extends AbstractProcessor {
                     repositories = roundEnv.getElementsAnnotatedWith(DDataRep.class);
                     for (Element repositoryElement : repositories)
                         if (repositoryElement.getKind() == ElementKind.INTERFACE)
-                            builder.checkRepository((TypeElement) repositoryElement, versionalRepositoryType);
+                            builder.checkRepository((TypeElement) repositoryElement);
                     builder.generateRepositoriesAnnotations();
 
                     stage = Stage.STEP2_BEANS_GEN;
@@ -118,10 +113,9 @@ public class DDataProcessor extends AbstractProcessor {
                     ExecutableElement method = (ExecutableElement) element;
                     String mappingKey = beanElement.asType().toString() + "." +
                             propertyName4Method(method.getSimpleName().toString());
-                    Mapping mapping = null;
                     for (AnnotationMirror annotationMirror : method.getAnnotationMirrors())
                         if (annotationMirror.getAnnotationType().toString().contains("_Map_")) {
-                            mapping = new Mapping(annotationMirror, bean);
+                            Mapping mapping = new Mapping(annotationMirror, bean);
                             if (!mapping.mappedProperties.isEmpty())
                                 builder.mappings.put(mappingKey, mapping);
                             break;

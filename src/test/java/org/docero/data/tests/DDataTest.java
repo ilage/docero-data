@@ -169,6 +169,15 @@ public class DDataTest {
                     "INSERT INTO ddata.\"lgdict\" (id,name) VALUES (1,'БС знач 1');" +
                     "INSERT INTO ddata.\"lgdict\" (id,name) VALUES (2,'БС знач 2');" +
                     "" +
+                    "DROP TABLE IF EXISTS ddata.\"smgraf\";\n" +
+                    "CREATE TABLE ddata.\"smgraf\" (\n" +
+                    "  parent INT NOT NULL," +
+                    "  child INT NOT NULL," +
+                    "  CONSTRAINT smgraf_pk PRIMARY KEY (parent,child)" +
+                    ");" +
+                    "INSERT INTO ddata.\"smgraf\" (parent,child) VALUES (1,1);" +
+                    "INSERT INTO ddata.\"smgraf\" (parent,child) VALUES (1,2);" +
+                    "" +
                     "DROP SEQUENCE ddata.sample_seq;\n" +
                     "\n" +
                     "CREATE SEQUENCE ddata.sample_seq\n" +
@@ -669,6 +678,8 @@ public class DDataTest {
 
     @Autowired
     private DDataDictionary<SmallDict, Integer> smallDictRepo;
+    @Autowired
+    private DDataRepository<SmallDictGraf, SmallDictGraf_Key_> smallDictGrafRepository;
 
     @Test
     @Transactional
@@ -698,10 +709,48 @@ public class DDataTest {
         //SELECT 2 records
         assertTrue(smallDictRepo.list().stream().anyMatch(el -> "new name".equals(el.getName())));
         // NO ANY SELECT
-        smallDictRepo.get(firstId);
+        e = smallDictRepo.get(1);
+        assertEquals(2, e.getGraf().size());
+
+        e = smallDictRepo.get(2);
+        assertEquals(0, e.getGraf().size());
+
+        // insert child for 2
+        smallDictGrafRepository.insert(new SmallDictGraf() {
+            @Override
+            public int getParent() {
+                return 2;
+            }
+
+            @Override
+            public void setParent(int id) {
+
+            }
+
+            @Override
+            public int getChild() {
+                return 1;
+            }
+
+            @Override
+            public void setChild(int id) {
+
+            }
+
+            @Override
+            public SmallDict getLinked() {
+                return null;
+            }
+        });
+        smallDictRepo.list(); // it read beans from select
+        List<SmallDict> l = smallDictRepo.list(); // it read beans from cache
+        e = l.stream().filter(b -> b.getId() == 2).findAny().orElse(null);
+        assertNotNull(e);
+        assertEquals(1, e.getGraf().size());
     }
 
     @Test
+    @org.junit.Ignore
     public void testDictionariesMultithread() throws SQLException, InterruptedException {
         setUp();
         smallDictRepo.list();
@@ -729,7 +778,7 @@ public class DDataTest {
         }
 
         private void yeald() throws InterruptedException {
-            int rnd = r.nextInt()&0x3FF;
+            int rnd = r.nextInt() & 0x3FF;
             Thread.sleep(rnd);
         }
 
@@ -750,7 +799,7 @@ public class DDataTest {
                 e1 = smallDict.list().stream().filter(el -> el.getId() == 1).findAny().orElse(null);
                 LOG.debug(name + " read value as " + e1.getName());
 
-                for(int i=0; i< 5; i++) {
+                for (int i = 0; i < 5; i++) {
                     yeald();
                     smallDict.list();
                 }
