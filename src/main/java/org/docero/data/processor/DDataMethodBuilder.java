@@ -161,12 +161,13 @@ class DDataMethodBuilder {
         String selectId = this.selectId != null ? this.selectId : repositoryBuilder.mappingClassName + "." +
                 methodName + (methodIndex == 0 ? "" : "_" + methodIndex);
         boolean useParameterBean = false;
+        boolean returnSomething = returnType != null && returnType.getKind() != TypeKind.VOID;
         switch (methodType) {
             case GET:
                 cf.print("return getSqlSession().selectOne(\"" + selectId + "\"");
                 break;
             case SELECT:
-                if (returnType != null) {
+                if (returnSomething) {
                     cf.print("return getSqlSession().");
                     if (returnType.toString().contains("java.util.List")) {
                         cf.print("selectList(");
@@ -196,7 +197,7 @@ class DDataMethodBuilder {
                         cf.println("getSqlSession().insert(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                                 methodIndex == 0 ? "" : "_" + methodIndex) + "_" +
                                 item.beanInterfaceShort() + "\", " + beanParameterName + ");");
-                        cf.println("return " + beanParameterName + ";");
+                        if (returnSomething) cf.println("return " + beanParameterName + ";");
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().insert");
@@ -222,7 +223,7 @@ class DDataMethodBuilder {
                         cf.println("getSqlSession().update(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                                 methodIndex == 0 ? "" : "_" + methodIndex) + "_" +
                                 item.beanInterfaceShort() + "\", " + beanParameterName + ");");
-                        cf.println("return;");
+                        if (returnSomething) cf.println("return " + beanParameterName + ";");
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().update");
@@ -312,7 +313,7 @@ class DDataMethodBuilder {
         }
 
         if (cacheFunction != null) cf.println(cacheFunction);
-        if (returnType != null && (methodType == INSERT || methodType == UPDATE))
+        if (returnSomething && (methodType == INSERT || methodType == UPDATE))
             cf.println("return " + beanParameterName + ";");
         cf.endBlock("}");
 

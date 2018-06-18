@@ -141,11 +141,15 @@ class DataBeanPropertyBuilder {
     void buildProperty(JavaClassWriter cf) throws IOException {
         DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
         if (mappedBean != null) {
-            cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
-                    mappedBean.getImplementationName() + ".class)");
-        } else printKnownXmlAdapters(cf, type);
-
-        cf.println("private " + type.toString() + " " + name + ";");
+            if (mappedBean.dictionary != DictionaryType.SMALL) {
+                cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
+                        mappedBean.getImplementationName() + ".class)");
+                cf.println("private " + type.toString() + " " + name + ";");
+            }
+        } else {
+            printKnownXmlAdapters(cf, type);
+            cf.println("private " + type.toString() + " " + name + ";");
+        }
     }
 
     static void printKnownXmlAdapters(JavaClassWriter cf, TypeMirror type) throws IOException {
@@ -161,10 +165,10 @@ class DataBeanPropertyBuilder {
         else if ("java.time.OffsetDateTime".equals(type.toString()))
             cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.time.OffsetDateTime.class, " +
                     "value = org.docero.data.utils.OffsetDateTimeAdapter.class)");
-        else if("java.sql.Date".equals(type.toString()))
+        else if ("java.sql.Date".equals(type.toString()))
             cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.sql.Date.class, " +
                     "value = org.docero.data.utils.SqlDateAdapter.class)");
-        else if("java.sql.Timestamp".equals(type.toString()))
+        else if ("java.sql.Timestamp".equals(type.toString()))
             cf.println("@javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter(type = java.sql.Timestamp.class, " +
                     "value = org.docero.data.utils.TimestampAdapter.class)");
     }
@@ -183,12 +187,15 @@ class DataBeanPropertyBuilder {
                 DataBeanPropertyBuilder mProp = mapping.properties.get(0);
                 String getter = "this.get" +
                         Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1) + "()";
-                if (mProp.type.getKind().isPrimitive())
-                    cf.startBlock("if(" + name + " == null && " + getter + " != 0) {");
-                else
-                    cf.startBlock("if(" + name + " == null && " + getter + " != null) {");
-                cf.println(name + " = cached(" + mappedType + ".class," + getter + ");");
-                cf.endBlock("}");
+                if (mappedBean.dictionary != DictionaryType.SMALL) {
+                    if (mProp.type.getKind().isPrimitive())
+                        cf.startBlock("if(" + name + " == null && " + getter + " != 0) {");
+                    else
+                        cf.startBlock("if(" + name + " == null && " + getter + " != null) {");
+                    cf.println(name + " = cached(" + mappedType + ".class," + getter + ");");
+                    cf.endBlock("}");
+                } else
+                    cf.println(type + " " + name + " = cached(" + mappedType + ".class," + getter + ");");
             }
         }
         cf.println("return " + name + ";");
@@ -203,7 +210,10 @@ class DataBeanPropertyBuilder {
                 type.toString() + " " +
                 name + ") {"
         );
-        cf.println("this." + name + " = " + name + ";");
+        DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
+        if (mappedBean == null || mappedBean.dictionary != DictionaryType.SMALL) {
+            cf.println("this." + name + " = " + name + ";");
+        }
         if (notCollectionOrMap()) {
             Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
             if (mapping != null) mapping.stream()
