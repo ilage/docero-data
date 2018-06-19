@@ -75,8 +75,7 @@ public class DDataDictionariesService {
      * if version in cache equals version from 'versions' property.
      * Property 'lists' contains lists of bean primary keys mapped by bean interface.
      * Not a very important than someone read zero from version or not but in most cases
-     * it will do elements loading faster (it's about d.version_() != 0).
-     *
+     * it will do elements loading faster.
      */
 
     public <T extends Serializable> void updateVersion(Class<T> type) {
