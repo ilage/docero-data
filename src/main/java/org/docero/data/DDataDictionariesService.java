@@ -73,7 +73,8 @@ public class DDataDictionariesService {
 
     public <T extends Serializable> void updateVersion(Class<T> type) {
         DDataDictionary d = dictionaries.get(type);
-        d.version_((int) System.currentTimeMillis());
+        if (d.version_() != 0)
+            d.version_((int) System.currentTimeMillis());
     }
 
     public <T extends Serializable> void clearVersion(Class<T> type) {
