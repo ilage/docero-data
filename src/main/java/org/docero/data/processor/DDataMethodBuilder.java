@@ -131,19 +131,8 @@ class DDataMethodBuilder {
         cf.println("");
         DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
 
-        List<MappedDictionary> dictionariesUpdatedByThis =
-                methodType == GET || bean.dictionary == DictionaryType.SMALL ? null :
-                        searchForDictionariesUseThisBean();
-        if (dictionariesUpdatedByThis != null)
-            for (MappedDictionary d : dictionariesUpdatedByThis) {
-                String cacheKey = d.cacheKey(parameters);
-                if (cacheKey != null)
-                    cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + d.bean.cacheMap +
-                            "\", key=\"" + cacheKey + "\")");
-                else
-                    cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + d.bean.cacheMap +
-                            "\", allEntries=true)");
-            }
+        List<MappedDictionary> dictionariesUpdatedByThis_temp = methodType == GET ? new ArrayList<>() :
+                searchForDictionariesUseThisBean(parameters, methodType == UPDATE);
 
         if (bean.dictionary != DictionaryType.NO && repositoryBuilder.rootBuilder.useSpringCache && methodIndex == 0) {
             switch (methodType) {
@@ -152,14 +141,36 @@ class DDataMethodBuilder {
                             "\", sync=true)");
                     break;
                 case DELETE:
-                    cf.println("@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + bean.cacheMap +
-                            "\")");
+                    dictionariesUpdatedByThis_temp.add(new MappedDictionary(bean, parameters.get(0), parameters, false));
                     break;
                 case INSERT:
                 case UPDATE:
-                    cf.println("@org.springframework.cache.annotation.CachePut(cacheNames=\"" +
-                            bean.cacheMap + "\", key = \"#bean.dDataBeanKey_\")");
+                    if (dictionariesUpdatedByThis_temp.stream().noneMatch(dd -> dd.bean == bean && dd.cacheKey == null))
+                        cf.println("@org.springframework.cache.annotation.CachePut(cacheNames=\"" +
+                                bean.cacheMap + "\", key = \"#bean.dDataBeanKey_\")");
             }
+        }
+
+        List<MappedDictionary> dictionariesUpdatedByThis = dictionariesUpdatedByThis_temp.stream()
+                .filter(d ->
+                        d.cacheKey == null || dictionariesUpdatedByThis_temp.stream()
+                                .noneMatch(dd -> dd.bean == d.bean && dd.cacheKey == null)
+                )
+                .collect(Collectors.toList());
+        if (!dictionariesUpdatedByThis.isEmpty()) {
+            boolean multi = dictionariesUpdatedByThis.size() > 1;
+            if (multi) cf.startBlock("@org.springframework.cache.annotation.Caching(evict = {");
+
+            for (String s : dictionariesUpdatedByThis.stream().map(d ->
+                    d.cacheKey != null ?
+                            "@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + d.bean.cacheMap +
+                                    "\", key=\"" + d.cacheKey + "\")" :
+                            "@org.springframework.cache.annotation.CacheEvict(cacheNames=\"" + d.bean.cacheMap +
+                                    "\", allEntries=true)"
+            ).collect(Collectors.joining(",\n")).split("\\n")) {
+                cf.println(s);
+            }
+            if (multi) cf.endBlock("})");
         }
         cf.startBlock("public " + typeVariables2String() +
                 (returnType == null ? "void" : returnType) + " " + methodName + "(");
@@ -196,7 +207,8 @@ class DDataMethodBuilder {
                 break;
             case INSERT:
                 useParameterBean = true;
-                if (bean.dictionary == DictionaryType.SMALL)
+                if (bean.dictionary == DictionaryType.SMALL && dictionariesUpdatedByThis.stream()
+                        .noneMatch(d -> d.bean == bean))
                     cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 if (repositoryBuilder.versionalType != null) {
                     cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
@@ -222,7 +234,8 @@ class DDataMethodBuilder {
                 break;
             case UPDATE:
                 useParameterBean = true;
-                if (bean.dictionary == DictionaryType.SMALL)
+                if (bean.dictionary == DictionaryType.SMALL && dictionariesUpdatedByThis.stream()
+                        .noneMatch(d -> d.bean == bean))
                     cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 if (repositoryBuilder.versionalType != null) {
                     cf.println(bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().map(p ->
@@ -247,7 +260,8 @@ class DDataMethodBuilder {
                     cacheFunction = "cache(" + beanParameterName + ");";
                 break;
             default:
-                if (bean.dictionary == DictionaryType.SMALL)
+                if (bean.dictionary == DictionaryType.SMALL && dictionariesUpdatedByThis.stream()
+                        .noneMatch(d -> d.bean == bean))
                     cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
                 cf.print("getSqlSession().delete(\"" + selectId + "\"");
         }
@@ -332,7 +346,8 @@ class DDataMethodBuilder {
         if (dictionariesUpdatedByThis != null)
             for (MappedDictionary d : dictionariesUpdatedByThis)
                 if (d.bean.dictionary == DictionaryType.SMALL) {
-                    cf.println("updateVersion(" + d.bean.interfaceType + ".class);");
+                    if (d.cacheKey != null) cf.println("updateVersion(" + d.bean.interfaceType + ".class);");
+                    else cf.println("clearVersion(" + d.bean.interfaceType + ".class);");
                 }
 
         if (returnSomething && (methodType == INSERT || methodType == UPDATE))
@@ -370,7 +385,7 @@ class DDataMethodBuilder {
         }
     }
 
-    private List<MappedDictionary> searchForDictionariesUseThisBean() {
+    private List<MappedDictionary> searchForDictionariesUseThisBean(ArrayList<DDataMethodParameter> parameters, boolean forImmutableOnly) {
         DataBeanBuilder thisBean =
                 repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
         List<MappedDictionary> list = new ArrayList<>();
@@ -378,7 +393,10 @@ class DDataMethodBuilder {
             DataBeanBuilder mappedBean = m.mappedProperties.get(0).dataBean;
             DataBeanBuilder mapFromBean = m.properties.get(0).dataBean;
             if (mappedBean == thisBean)
-                if (mapFromBean.isDictionary()) list.add(new MappedDictionary(mapFromBean, m));
+                if ((thisBean.dictionary == DictionaryType.SMALL &&
+                        mapFromBean.dictionary == DictionaryType.SMALL && m.manyToOne
+                ) || (thisBean.dictionary != DictionaryType.SMALL && mapFromBean.isDictionary())
+                        ) list.add(new MappedDictionary(mapFromBean, m, parameters, forImmutableOnly));
         });
         return list;
     }
@@ -421,12 +439,13 @@ class DDataMethodBuilder {
     }
 
     static class MappedDictionary {
-        final DataBeanBuilder bean;
-        final DataBeanPropertyBuilder property;
         private final TypeMirror myType;
         private final TypeMirror myKeyType;
+        final DataBeanBuilder bean;
+        final String cacheKey;
+        DataBeanPropertyBuilder property;
 
-        MappedDictionary(DataBeanBuilder bean, Mapping m) {
+        MappedDictionary(DataBeanBuilder bean, Mapping m, ArrayList<DDataMethodParameter> parameters, boolean forImmutableOnly) {
             this.bean = bean;
             DataBeanBuilder myBean = m.mappedProperties.get(0).dataBean;
             this.myType = myBean.interfaceType;
@@ -437,7 +456,6 @@ class DDataMethodBuilder {
             List<DataBeanPropertyBuilder> dictionaryIds = bean.properties.values().stream()
                     .filter(DataBeanPropertyBuilder::isId)
                     .collect(Collectors.toList()); // dictionary Properties
-            DataBeanPropertyBuilder property = null;
             if (dictionaryIds.size() == 1) {
                 List<DataBeanPropertyBuilder> mappedIds = m.properties.stream()
                         .filter(DataBeanPropertyBuilder::isId)
@@ -448,19 +466,30 @@ class DDataMethodBuilder {
                     property = m.mappedProperties.get(m.properties.indexOf(mappedIds.get(0)));
                 }
             }
-            this.property = property;
-        }
 
-        String cacheKey(ArrayList<DDataMethodParameter> parameters) {
             Types tu = bean.rootBuilder.environment.getTypeUtils();
-            return property == null ? null : parameters.stream()
+            this.cacheKey = property == null || (forImmutableOnly && !property.isId()) ? null : parameters.stream()
                     .filter(p -> tu.isSubtype(p.type, myType)).findAny()
-                    .map(p -> "#" + p.name + "." + property.name)
+                    .map(p -> p.type.getKind().isPrimitive() || property.isId() ?
+                            "#" + p.name + "." + property.name :
+                            "#" + p.name + "." + property.name + "==null?'null':#" + p.name + "." + property.name
+                    )
                     .orElse(parameters.stream()
-                            .filter(p -> p.type.toString().equals(myKeyType.toString())).findAny()
+                            .filter(p ->
+                                    p.type.toString().equals(myKeyType.toString()) && property.isId()
+                            ).findAny()
                             .map(p -> "#" + p.name + "." + property.name)
                             .orElse(null)
                     );
+        }
+
+        MappedDictionary(DataBeanBuilder bean, DDataMethodParameter dDataMethodParameter, ArrayList<DDataMethodParameter> parameters, boolean forImmutableOnly) {
+            this.bean = bean;
+            this.myType = null;
+            this.myKeyType = null;
+            this.cacheKey = dDataMethodParameter.type.getKind().isPrimitive() ?
+                    "#" + dDataMethodParameter.name :
+                    "#" + dDataMethodParameter.name + "==null?'null':#" + dDataMethodParameter.name;
         }
     }
 }

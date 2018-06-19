@@ -154,11 +154,12 @@ public class DDataTest {
                     "DROP TABLE IF EXISTS ddata.\"smdict\";" +
                     "CREATE TABLE ddata.\"smdict\" (\n" +
                     "  id INT NOT NULL," +
+                    "  parent_id INT,"+
                     "  name VARCHAR,\n" +
                     "  CONSTRAINT smdict_pk PRIMARY KEY (id)\n" +
                     ");" +
-                    "INSERT INTO ddata.\"smdict\" (id,name) VALUES (1,'КС знач 1');" +
-                    "INSERT INTO ddata.\"smdict\" (id,name) VALUES (2,'КС знач 2');" +
+                    "INSERT INTO ddata.\"smdict\" (id,parent_id,name) VALUES (1,null,'КС знач 1');" +
+                    "INSERT INTO ddata.\"smdict\" (id,parent_id,name) VALUES (2,1,'КС знач 2');" +
                     "" +
                     "DROP TABLE IF EXISTS ddata.\"lgdict\";" +
                     "CREATE TABLE ddata.\"lgdict\" (\n" +
@@ -711,9 +712,12 @@ public class DDataTest {
         // NO ANY SELECT
         e = smallDictRepo.get(1);
         assertEquals(2, e.getGraf().size());
+        assertEquals(1, e.getTree().size());
 
         e = smallDictRepo.get(2);
         assertEquals(0, e.getGraf().size());
+        e.setParentId(null);
+        smallDictRepo.update(e);
 
         // insert child for 2
         smallDictGrafRepository.insert(new SmallDictGraf() {
@@ -747,6 +751,9 @@ public class DDataTest {
         e = l.stream().filter(b -> b.getId() == 2).findAny().orElse(null);
         assertNotNull(e);
         assertEquals(1, e.getGraf().size());
+        e = l.stream().filter(b -> b.getId() == 1).findAny().orElse(null);
+        assertNotNull(e);
+        assertEquals(0, e.getTree().size());
     }
 
     @Test

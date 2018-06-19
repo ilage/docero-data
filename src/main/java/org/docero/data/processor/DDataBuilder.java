@@ -180,6 +180,10 @@ class DDataBuilder {
             cf.startBlock("protected <T extends java.io.Serializable> void updateVersion(Class<T> type) {");
             cf.println("DData.updateVersion(type);");
             cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("protected <T extends java.io.Serializable> void clearVersion(Class<T> type) {");
+            cf.println("DData.clearVersion(type);");
+            cf.endBlock("}");
             cf.endBlock("}");
         }
 
@@ -277,6 +281,10 @@ class DDataBuilder {
             cf.println("");
             cf.startBlock("static <T extends java.io.Serializable> void updateVersion(Class<T> type) {");
             cf.println("dictionariesService.updateVersion(type);");
+            cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("static <T extends java.io.Serializable> void clearVersion(Class<T> type) {");
+            cf.println("dictionariesService.clearVersion(type);");
             cf.endBlock("}");
             cf.println("");
             cf.startBlock("static <T extends java.io.Serializable, C extends java.io.Serializable> T cache(Class<T> type, C key) {");

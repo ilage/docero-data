@@ -141,7 +141,7 @@ class DataBeanPropertyBuilder {
     void buildProperty(JavaClassWriter cf) throws IOException {
         DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
         if (mappedBean != null) {
-            if (mappedBean.dictionary != DictionaryType.SMALL) {
+            if (mappedBean.dictionary != DictionaryType.SMALL || isCollection) {
                 cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
                         mappedBean.getImplementationName() + ".class)");
                 cf.println("private " + type.toString() + " " + name + ";");
@@ -187,7 +187,7 @@ class DataBeanPropertyBuilder {
                 DataBeanPropertyBuilder mProp = mapping.properties.get(0);
                 String getter = "this.get" +
                         Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1) + "()";
-                if (mappedBean.dictionary != DictionaryType.SMALL) {
+                if (mappedBean.dictionary != DictionaryType.SMALL || isCollection) {
                     if (mProp.type.getKind().isPrimitive())
                         cf.startBlock("if(" + name + " == null && " + getter + " != 0) {");
                     else
@@ -211,7 +211,7 @@ class DataBeanPropertyBuilder {
                 name + ") {"
         );
         DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
-        if (mappedBean == null || mappedBean.dictionary != DictionaryType.SMALL) {
+        if (mappedBean == null || (mappedBean.dictionary != DictionaryType.SMALL || isCollection)) {
             cf.println("this." + name + " = " + name + ";");
         }
         if (notCollectionOrMap()) {

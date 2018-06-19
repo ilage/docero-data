@@ -30,6 +30,8 @@ abstract class DGen {
         int id;
         @DDataProperty(value = "name", nullable = false)
         String name;
+        @DDataProperty
+        Integer parentId;
     }
     @DGenInterface
     @DDataBean

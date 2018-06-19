@@ -76,6 +76,11 @@ public class DDataDictionariesService {
         d.version_((int) System.currentTimeMillis());
     }
 
+    public <T extends Serializable> void clearVersion(Class<T> type) {
+        DDataDictionary d = dictionaries.get(type);
+        d.version_(0);
+    }
+
     @SuppressWarnings({"unchecked", "JavaReflectionMemberAccess"})
     public <T extends Serializable, C extends Serializable> List<T> list(
             Class<T> type, SqlSession session, String selectId
