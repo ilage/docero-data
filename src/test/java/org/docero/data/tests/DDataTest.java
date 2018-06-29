@@ -26,9 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.sql.DataSource;
 import javax.xml.bind.*;
 
-import java.io.IOException;
-import java.io.StringReader;
-import java.io.StringWriter;
+import java.io.*;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -774,6 +772,27 @@ public class DDataTest {
         tp.submit(new DictionaryTest("test-9"));
         tp.shutdown();
         tp.awaitTermination(10, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void beanSerializationTest() throws SQLException, IOException, ClassNotFoundException {
+        setUp();
+
+        assertNotNull(iSampleRepository);
+        assertNotNull(iInnerRepository);
+
+        Sample bean = iSampleRepository.get(1);
+        assertNotNull(bean);
+        assertEquals(1, bean.getId());
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        oos.writeObject(bean);
+
+        ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(baos.toByteArray()));
+        Sample bean1 = (Sample) ois.readObject();
+        List<? extends Inner> lp = bean1.getListParameter();
+        assertNotNull(lp);
     }
 
     private class DictionaryTest implements Runnable {

@@ -1,9 +1,11 @@
 package org.docero.data.utils;
 
 import org.apache.ibatis.reflection.factory.ObjectFactory;
+
+import java.io.Serializable;
 import java.util.*;
 
-public abstract class DDataAbstractObjectFactory implements ObjectFactory {
+public abstract class DDataAbstractObjectFactory implements ObjectFactory, Serializable {
     public abstract <T> Class<? extends T> getImplementation(Class<T> type);
 
     @SuppressWarnings("unchecked")

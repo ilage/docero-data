@@ -6,6 +6,7 @@ import org.mybatis.spring.transaction.SpringManagedTransactionFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -17,7 +18,6 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.docero.data.*;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 
 @Configuration
 @Import({DDataConfiguration.class})
@@ -57,8 +57,9 @@ public class TestsConfig {
     public SqlSessionFactoryBean sqlSessionFactoryBean(
             DataSource dataSource,
             DDataResources dDataResources,
-            TransactionFactory transactionManager
-    ) throws IOException {
+            TransactionFactory transactionManager,
+            ApplicationContext context
+    ) throws Exception {
         SqlSessionFactoryBean bean = new SqlSessionFactoryBean();
         bean.setConfiguration(new org.apache.ibatis.session.Configuration() {{
             this.setLazyLoadingEnabled(true);
@@ -66,11 +67,15 @@ public class TestsConfig {
             this.setMultipleResultSetsEnabled(true);
             this.getLazyLoadTriggerMethods().clear();
             //this.getLazyLoadTriggerMethods().add("toString");
+            this.setConfigurationFactory(MyBatisSpringConfigurationFactory.class);
         }});
         bean.setDataSource(dataSource);
         bean.setMapperLocations(dDataResources.asArray());
         bean.setTransactionFactory(transactionManager);
         bean.setObjectFactory(DData.getObjectFactory());
+
+        new MyBatisSpringConfigurationFactory().setApplicationContext(context);
+
         return bean;
     }
 }

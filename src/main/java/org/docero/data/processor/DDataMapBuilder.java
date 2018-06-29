@@ -712,7 +712,7 @@ class DDataMapBuilder {
                 {
                     org.w3c.dom.Element sk = (org.w3c.dom.Element)
                             domElement.appendChild(doc.createElement("selectKey"));
-                    sk.setAttribute("keyProperty", prop.columnName);
+                    sk.setAttribute("keyProperty", prop.name);
                     sk.setAttribute("resultType", prop.type.toString());
                     sk.setAttribute("statementType", "PREPARED");
                     if (prop.generatedStrategy != null) {
