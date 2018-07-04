@@ -4,9 +4,6 @@ import org.apache.ibatis.session.SqlSession;
 import org.docero.data.utils.DDataDictionary;
 
 import java.io.Serializable;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -89,7 +86,7 @@ public class DDataDictionariesService {
         d.version_(0);
     }
 
-    @SuppressWarnings({"unchecked", "JavaReflectionMemberAccess"})
+    @SuppressWarnings({"unchecked"})
     public <T extends Serializable, C extends Serializable> List<T> list(
             Class<T> type, SqlSession session, String selectId
     ) {
@@ -97,26 +94,15 @@ public class DDataDictionariesService {
         Integer localListVersion = versions.get(type);
         Integer cv = d.version_();
         if (cv.equals(localListVersion)) {
-            List<T> cached = new ArrayList<>();
-            List<C> keys = lists.get(type);
-            if (keys != null) keys.forEach(id -> cached.add(d.get(id)));
-            return cached;
+            return lists.get(type);
         } else {
             List<T> selected = session.selectList(selectId);
-
+            lists.put(type, selected);
             boolean initialLoad = d.version_() == 0;
-            if (!selected.isEmpty())
-                try {
-                    Method mget = selected.get(0).getClass().getMethod("getDDataBeanKey_");
-                    ArrayList<Serializable> keys = new ArrayList();
-                    if (initialLoad)
-                        for (T bean : selected) keys.add((Serializable) mget.invoke(d.put_(bean)));
-                    else
-                        for (T bean : selected) keys.add((Serializable) mget.invoke(bean));
-                    lists.put(type, keys);
-                } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignore) {
-                }
-            if (initialLoad) cv = d.version_(1);
+            if (initialLoad) {
+                selected.forEach(d::put_);
+                cv = d.version_(1);
+            }
             versions.put(type, cv);
             return selected;
         }
