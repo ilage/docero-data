@@ -37,7 +37,7 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
             ) String listLike, //exists record in list of inner
             @SampleRepository_Filter_(
                     inner = Inner_.TEXT,
-                    option = DDataFilterOption.LIKE_ALL_STARTS
+                    option = DDataFilterOption.LIKE_STARTS
             ) String innerText, //inner text is
             @SampleRepository_Filter_(
                     Sample_.INNER_ID

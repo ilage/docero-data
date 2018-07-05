@@ -25,18 +25,4 @@ public class DDataLike {
         else if (val.endsWith("%")) return val;
         return val + "%";
     }
-
-    public static String[] allStarts(String val) {
-        if (val == null) return null;
-        String[] a = val.split(" ");
-        for (int i = 0; i < a.length; i++) a[i] = starts(a[i]);
-        return a;
-    }
-
-    public static String[] allHas(String val) {
-        if (val == null) return null;
-        String[] a = val.split(" ");
-        for (int i = 0; i < a.length; i++) a[i] = in(a[i]);
-        return a;
-    }
 }

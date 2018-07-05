@@ -934,14 +934,13 @@ class DDataMapBuilder {
                                 (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
                                 jdbcTypeParameterFor("item", filter.variableType)));
                         break;
-                    case ILIKE_ALL_STARTS:
-                    case ILIKE_ALL_HAS:
+                    case ILIKE_HAS_ALL:
                         isCaseIndependentLike = true;
-                    case LIKE_ALL_STARTS:
-                    case LIKE_ALL_HAS:
+                    case LIKE_HAS_ALL:
                         e = doc.createElement("if");
                         e.setAttribute("test", filter.parameter + " != null");
-                        e_like = (org.w3c.dom.Element) e.appendChild(doc.createElement("foreach"));
+                        e_like = (org.w3c.dom.Element)
+                                e.appendChild(doc.createElement("foreach"));
                         e_like.setAttribute("item", "item");
                         e_like.setAttribute("index", "index");
                         e_like.setAttribute("collection", filter.parameter);

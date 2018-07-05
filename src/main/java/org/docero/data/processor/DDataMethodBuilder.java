@@ -304,6 +304,8 @@ class DDataMethodBuilder {
                                 break;
                             case LIKE_HAS:
                             case ILIKE_HAS:
+                            case LIKE_HAS_ALL:
+                            case ILIKE_HAS_ALL:
                                 parameterFunc = "org.docero.data.utils.DDataLike.has(" + parameter.name + ")";
                                 break;
                             case LIKE_ENDS:
@@ -313,14 +315,6 @@ class DDataMethodBuilder {
                             case LIKE_STARTS:
                             case ILIKE_STARTS:
                                 parameterFunc = "org.docero.data.utils.DDataLike.starts(" + parameter.name + ")";
-                                break;
-                            case LIKE_ALL_STARTS:
-                            case ILIKE_ALL_STARTS:
-                                parameterFunc = "org.docero.data.utils.DDataLike.allStarts(" + parameter.name + ")";
-                                break;
-                            case LIKE_ALL_HAS:
-                            case ILIKE_ALL_HAS:
-                                parameterFunc = "org.docero.data.utils.DDataLike.allHas(" + parameter.name + ")";
                                 break;
                         }
                     }
