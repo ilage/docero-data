@@ -348,8 +348,13 @@ class DDataMapBuilder {
                 .filter(DataBeanPropertyBuilder::notIgnored)
                 .map(p -> {
                     DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
-                    return b == null ? null :
-                            new MappedTable(0, index.incrementAndGet(), p, b, fetchOptions, filters);
+                    if (b == null) return null;
+                    else {
+                        Mapping mapping = builder.mappings.get(p.dataBean.interfaceType + "." + p.name);
+                        return new MappedTable(0, index.incrementAndGet(), p, b,
+                                mapping != null && mapping.alwaysLazy ? fetchOptions.withLazy() : fetchOptions,
+                                filters);
+                    }
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList()));
@@ -441,7 +446,13 @@ class DDataMapBuilder {
                                     m.property.mappedType.toString().equals(p.mappedType.toString())))
                     .map(p -> {
                         DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
-                        return b == null ? null : new MappedTable(0, index.incrementAndGet(), p, b, fetchOptions, null);
+                        if(b == null) return null;
+                        else {
+                            Mapping mapping = builder.mappings.get(p.dataBean.interfaceType + "." + p.name);
+                            return new MappedTable(0, index.incrementAndGet(), p, b,
+                                    mapping != null && mapping.alwaysLazy ? fetchOptions.withLazy() : fetchOptions,
+                                    null);
+                        }
                     })
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
@@ -503,7 +514,7 @@ class DDataMapBuilder {
                     if (fetchOptions.fetchType != DDataFetchType.NO)
                         mappedTables.stream()
                                 .filter(MappedTable::notSingleSmallDictionaryValue)
-                                .filter(MappedTable::useInFieldsList)
+                                .filter(MappedTable::useInFieldsListOrFilters)
                                 .forEach(t -> addManagedBeanToFrom(sql, t, fetchOptions));
                     break;
                 case INSERT:
@@ -1134,21 +1145,33 @@ class DDataMapBuilder {
     }
 
     private String jdbcTypeParameterFor(String parameter, TypeMirror type) {
+        return jdbcTypeParameterFor(parameter, type, false);
+    }
+
+    private String jdbcTypeParameterFor(String parameter, TypeMirror type, boolean forLazyLoadSelect) {
+        String s = builder.jdbcTypeFor(type);
         StringBuilder p = new StringBuilder("#{");
         p.append(parameter);
         if (type.getKind() != TypeKind.ARRAY)
             p.append(", javaType=").append(type.getKind().isPrimitive() ?
-                    environment.getTypeUtils().boxedClass((PrimitiveType) type) : type
+                            environment.getTypeUtils().boxedClass((PrimitiveType) type) : (
+                            forLazyLoadSelect ? convertTime(type, s) : type
+                    )
             );
-        String s = builder.jdbcTypeFor(type);
         if (s.length() > 0) p.append(", jdbcType=").append(s);
         return p.append('}').toString();
+    }
+
+    private String convertTime(TypeMirror type, String s) {
+        if("TIMESTAMP".equals(s)) return "java.sql.Timestamp";
+        if("DATE".equals(s)) return "java.sql.Date";
+        if("TIME".equals(s)) return "java.sql.Time";
+        return type.toString();
     }
 
     private void addManagedBeanToFrom(StringBuilder sql, MappedTable mappedTable, FetchOptions fetchOptions) {
         String r = mappedTable.mappedBean.properties.values().stream()
                 .filter(DataBeanPropertyBuilder::notIgnored)
-                .filter(fetchOptions::filter4FieldsList)
                 .filter(this::notManagedBean)
                 .filter(DataBeanPropertyBuilder::notCollectionOrMap)
                 .map(p -> "  " + p.getColumnReader(mappedTable.tableIndex) +
@@ -1273,9 +1296,9 @@ class DDataMapBuilder {
         if (mappedTable.property.isCollectionOrMap()) {
             DataBeanBuilder mappedBean = builder.beansByInterface.get(mappedTable.property.mappedType.toString());
             managed.setAttribute("ofType", mappedBean.getImplementationName());
-            lazy = fetchOptions.fetchType != DDataFetchType.EAGER;
+            lazy = fetchOptions.fetchType != DDataFetchType.EAGER || (mapping != null && mapping.alwaysLazy);
         } else {
-            lazy = fetchOptions.fetchType == DDataFetchType.LAZY;
+            lazy = fetchOptions.fetchType == DDataFetchType.LAZY || (mapping != null && mapping.alwaysLazy);
         }
 
         if (mapping != null && (lazy || trunkLevel < 1)) {
@@ -1341,7 +1364,7 @@ class DDataMapBuilder {
                         return "t0." +
                                 m.mappedProperty.getColumnRef() + " = " +
                                 m.mappedProperty.getColumnWriter(
-                                        jdbcTypeParameterFor(m.property.columnName, propType));
+                                        jdbcTypeParameterFor(m.property.columnName, propType, true));
                     }).collect(Collectors.joining(" AND "))).append("\n");
 
                     if (mappedBean.versionalType != null &&
@@ -1635,6 +1658,16 @@ class DDataMapBuilder {
             order = Collections.emptyMap();
         }
 
+        private FetchOptions(FetchOptions template, DDataFetchType fetchType) {
+            this.fetchType = fetchType == null ? DDataFetchType.COLLECTIONS_ARE_LAZY : fetchType;
+            this.sqlSelect = template.sqlSelect;
+            this.resultMap = template.resultMap;
+            this.ignore = template.ignore;
+            this.eagerTrunkLevel = template.eagerTrunkLevel;
+            this.truncateLazy = template.truncateLazy;
+            this.order = template.order;
+        }
+
         boolean filterIgnored(DataBeanPropertyBuilder property) {
             return !this.ignore.contains(property);
         }
@@ -1657,6 +1690,10 @@ class DDataMapBuilder {
                             builder.beansByInterface.containsKey(property.mappedType.toString())
                     )
             );
+        }
+
+        FetchOptions withLazy() {
+            return new FetchOptions(this, DDataFetchType.LAZY);
         }
     }
 

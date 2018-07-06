@@ -608,7 +608,7 @@ class DataBeanBuilder {
             cf.println("@Retention(RetentionPolicy.SOURCE)");
             cf.println("@Target({ElementType.METHOD,ElementType.FIELD})");
             cf.startBlock("public @interface " + annotName + " {");
-
+            cf.println("/** Bean attribute used for mapping */");
             cf.print(interfaceType + "_[] value()");
             Optional<DataBeanPropertyBuilder> opt = properties.values().stream().filter(DataBeanPropertyBuilder::isId)
                     .filter(p -> !p.isVersionFrom).findAny();
@@ -616,6 +616,14 @@ class DataBeanBuilder {
                 cf.print(" default {" + interfaceType + "_." + opt.get().enumName + "}");
             }
             cf.println(";");
+
+            cf.println("/** Use lazy load option in any method of data repositories */");
+            cf.println("boolean alwaysLazy() default false;");
+            cf.println("/** Mark implementation property as transient " +
+                    "(for ObjectOutputStream and XML serialization)" +
+                    "<p>Do not forget mark method with @JsonIgnore annotation if you don't really want it.</p>" +
+                    "*/");
+            cf.println("boolean markTransient() default false;");
 
             for (DataBeanPropertyBuilder property : properties.values()) {
                 if (property.isCollection()) {
@@ -625,12 +633,14 @@ class DataBeanBuilder {
                         TypeMirror et = environment.getTypeUtils().erasure(typeParams.get(0));
                         DataBeanBuilder manType = beansByInterface.get(et.toString());
                         if (manType != null) {
+                            cf.println("/** */");
                             cf.println(manType.interfaceType + "_[] " + property.name + "() default {};");
                         }
                     }
                 } else {
                     DataBeanBuilder manType = beansByInterface.get(property.type.toString());
                     if (manType != null) {
+                        cf.println("/** */");
                         cf.println(manType.interfaceType + "_[] " + property.name + "() default {};");
                     }
                 }

@@ -141,10 +141,14 @@ class DataBeanPropertyBuilder {
     void buildProperty(JavaClassWriter cf) throws IOException {
         DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
         if (mappedBean != null) {
+            Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
+            boolean isTransient = mapping != null && mapping.markTransient;
+            //if (isTransient) cf.println("@javax.xml.bind.annotation.XmlTransient");
             if (mappedBean.dictionary != DictionaryType.SMALL || isCollection) {
-                cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
-                        mappedBean.getImplementationName() + ".class)");
-                cf.println("private " + type.toString() + " " + name + ";");
+                if (!isTransient)
+                    cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
+                            mappedBean.getImplementationName() + ".class)");
+                cf.println((isTransient ? "private transient " : "private ") + type.toString() + " " + name + ";");
             }
         } else {
             printKnownXmlAdapters(cf, type);
@@ -174,15 +178,22 @@ class DataBeanPropertyBuilder {
     }
 
     void buildGetter(JavaClassWriter cf) throws IOException {
+        DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
+        Mapping mapping = mappedBean == null ? null :
+                this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
+
         cf.println("");
+        if (mapping != null && mapping.markTransient) {
+            if (this.dataBean.rootBuilder.environment.getElementUtils()
+                    .getTypeElement("com.fasterxml.jackson.annotation.JsonIgnore") != null)
+                cf.println("@com.fasterxml.jackson.annotation.JsonIgnore");
+        }
         cf.startBlock("public " +
                 type.toString() + " get" +
                 Character.toUpperCase(name.charAt(0)) +
                 name.substring(1) + "() {"
         );
-        DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
         if (mappedBean != null && !isCollectionOrMap() && mappedBean.dictionary != DictionaryType.NO) {
-            Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
             if (mapping != null) {
                 DataBeanPropertyBuilder mProp = mapping.properties.get(0);
                 String getter = "this.get" +

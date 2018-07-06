@@ -37,7 +37,8 @@ public interface CompositeKeySample extends Serializable {
     @DDataProperty
     @CompositeKeySample_Map_(
             value = {CompositeKeySample_.INNER_ID, CompositeKeySample_.DATE_FROM},
-            inner = {CompositeKeyInner_.ID, CompositeKeyInner_.DATE_FROM}
+            inner = {CompositeKeyInner_.ID, CompositeKeyInner_.DATE_FROM},
+            markTransient = true, alwaysLazy = true
     )
     CompositeKeyInner getInner();
 

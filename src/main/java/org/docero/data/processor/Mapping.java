@@ -16,6 +16,8 @@ class Mapping {
     final List<DataBeanPropertyBuilder> properties = new ArrayList<>();
     final List<DataBeanPropertyBuilder> mappedProperties = new ArrayList<>();
     final boolean manyToOne;
+    final boolean markTransient;
+    final boolean alwaysLazy;
 
     private final DDataBuilder builder;
 
@@ -23,7 +25,8 @@ class Mapping {
         builder = bean.rootBuilder;
         Map<? extends ExecutableElement, ? extends AnnotationValue> map =
                 builder.environment.getElementUtils().getElementValuesWithDefaults(annotationMirror);
-
+        boolean markTransient = false;
+        boolean alwaysLazy = false;
         AtomicBoolean hasCollection = new AtomicBoolean(false);
         for (ExecutableElement executableElement : map.keySet()) {
             String mapKey = executableElement.getSimpleName().toString();
@@ -38,6 +41,10 @@ class Mapping {
                                 .filter(p -> enumName.equals(p.enumName))
                                 .findAny()
                                 .ifPresent(properties::add));
+            } else if ("markTransient".equals(mapKey)) {
+                markTransient = Boolean.parseBoolean(map.get(executableElement).getValue().toString());
+            } else if ("alwaysLazy".equals(mapKey)) {
+                alwaysLazy = Boolean.parseBoolean(map.get(executableElement).getValue().toString());
             } else {
                 //noinspection unchecked
                 ((List) map.get(executableElement).getValue()).stream()
@@ -59,6 +66,8 @@ class Mapping {
             if (properties.size() != mappedProperties.size())
                 mappedProperties.clear();
         }
+        this.markTransient = markTransient;
+        this.alwaysLazy = alwaysLazy;
         manyToOne = hasCollection.get();
     }
 
@@ -68,6 +77,8 @@ class Mapping {
         manyToOne = false;
         mappedBean.properties.values().stream()
                 .filter(p -> p.isId).forEach(mappedProperties::add);
+        markTransient = false;
+        alwaysLazy = false;
     }
 
     private Mapping(DataBeanPropertyBuilder property, DataBeanPropertyBuilder mappedBeanProperty, boolean manyToOne) {
@@ -75,6 +86,8 @@ class Mapping {
         properties.add(property);
         mappedProperties.add(mappedBeanProperty);
         this.manyToOne = manyToOne;
+        markTransient = false;
+        alwaysLazy = false;
     }
 
     class SingleFieldMapping {
