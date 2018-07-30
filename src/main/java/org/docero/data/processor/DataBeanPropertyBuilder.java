@@ -143,15 +143,10 @@ class DataBeanPropertyBuilder {
         if (mappedBean != null) {
             Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
             boolean isTransient = mapping != null && mapping.markTransient;
-            //if (isTransient) cf.println("@javax.xml.bind.annotation.XmlTransient");
             if (mappedBean.dictionary != DictionaryType.SMALL || isCollection) {
-                if (!isTransient)
-                    cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
-                            mappedBean.getImplementationName() + ".class)");
                 cf.println((isTransient ? "private transient " : "private ") + type.toString() + " " + name + ";");
             }
         } else {
-            printKnownXmlAdapters(cf, type);
             cf.println("private " + type.toString() + " " + name + ";");
         }
     }
@@ -183,10 +178,30 @@ class DataBeanPropertyBuilder {
                 this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
 
         cf.println("");
-        if (mapping != null && mapping.markTransient) {
+        boolean isTransient = mapping != null && mapping.markTransient;
+        if (isTransient) {
             if (this.dataBean.rootBuilder.environment.getElementUtils()
                     .getTypeElement("com.fasterxml.jackson.annotation.JsonIgnore") != null)
                 cf.println("@com.fasterxml.jackson.annotation.JsonIgnore");
+            cf.println("@javax.xml.bind.annotation.XmlTransient");
+        } else {
+            if (mappedBean != null) {
+                if (mappedBean.beanPrototype) {
+                    cf.startBlock("@javax.xml.bind.annotation.XmlElements({");
+                    cf.println(this.dataBean.rootBuilder.beansByInterface.values().stream()
+                            .filter(b -> !b.beanPrototype)
+                            .filter(b -> b.getTableRef().equals(mappedBean.getTableRef()))
+                            .map(b -> "@javax.xml.bind.annotation.XmlElement(name=\"" +
+                                    b.name + "\",type = " +
+                                    b.getImplementationName() + ".class)")
+                            .collect(Collectors.joining(",\n\t\t")));
+                    cf.endBlock("})");
+                } else
+                    cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
+                            mappedBean.getImplementationName() + ".class)");
+            } else {
+                printKnownXmlAdapters(cf, type);
+            }
         }
         cf.startBlock("public " +
                 type.toString() + " get" +
@@ -214,6 +229,10 @@ class DataBeanPropertyBuilder {
     }
 
     void buildSetter(JavaClassWriter cf) throws IOException {
+        DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
+        Mapping mapping = mappedBean == null ? null :
+                this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
+
         cf.println("");
         cf.startBlock("public void set" +
                 Character.toUpperCase(name.charAt(0)) +
@@ -221,12 +240,10 @@ class DataBeanPropertyBuilder {
                 type.toString() + " " +
                 name + ") {"
         );
-        DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
         if (mappedBean == null || (mappedBean.dictionary != DictionaryType.SMALL || isCollection)) {
             cf.println("this." + name + " = " + name + ";");
         }
         if (notCollectionOrMap()) {
-            Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
             if (mapping != null) mapping.stream()
                     .forEach(m -> {
                         if (!(m.property.isVersionFrom || m.property.isId))

@@ -33,6 +33,7 @@ class DataBeanBuilder {
     final String discriminatorValue;
     final String xmlNamespace;
     final DataBeanPropertyBuilder discriminatorProperty;
+    final boolean beanPrototype;
 
     DataBeanBuilder(
             TypeElement beanElement, DDataBuilder builder
@@ -46,7 +47,7 @@ class DataBeanBuilder {
         rootBuilder = builder;
         interfaceType = (beanElement.asType());
 
-        DGenClass dGen = null;
+        DGenClass dGen;
         for (TypeMirror typeMirror : beanElement.getInterfaces()) {
             String key = typeMirror.toString();
             if (!key.contains("."))
@@ -75,12 +76,14 @@ class DataBeanBuilder {
                     ddBean.value().replace(' ', '_');
             grown = (ddBean.growth());
             dictionary = (ddBean.dictionary());
+            beanPrototype = false;
         } else {
             schema = discriminatedBean.schema;
             table = discriminatedBean.table;
             name = propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1));
             grown = TableGrowType.NO;
             dictionary = DictionaryType.NO;
+            beanPrototype = true;
         }
         cacheMap = new StringBuilder(interfaceType.toString()).reverse().toString();
 
@@ -219,7 +222,7 @@ class DataBeanBuilder {
             cf.endBlock("*/");
             cf.println("@javax.xml.bind.annotation.XmlRootElement(name=\"" +
                     interfaceType.toString().substring(simpNameDel + 1) + "\")");
-            cf.println("@javax.xml.bind.annotation.XmlAccessorType(javax.xml.bind.annotation.XmlAccessType.FIELD)");
+            cf.println("@javax.xml.bind.annotation.XmlAccessorType(javax.xml.bind.annotation.XmlAccessType.PROPERTY)");
             if (environment.getElementUtils().getTypeElement("com.fasterxml.jackson.annotation.JsonIgnoreProperties") != null)
                 cf.println("@com.fasterxml.jackson.annotation.JsonIgnoreProperties({\"handler\",\"ddataBeanKey_\"})");
             cf.startBlock("public class " +
@@ -233,6 +236,7 @@ class DataBeanBuilder {
 
             cf.println("");
             if (isKeyComposite) {
+                cf.println("@javax.xml.bind.annotation.XmlTransient");
                 cf.startBlock("public " + keyType + " getDDataBeanKey_() {");
                 cf.println("return new " + keyType + "(" +
                         properties.values().stream()
@@ -250,19 +254,21 @@ class DataBeanBuilder {
                         cf.println("return " + actProperty.name + ";");
                         cf.endBlock("}");
                         cf.println("");
+                        DataBeanPropertyBuilder.printKnownXmlAdapters(cf, actProperty.type);
                         cf.startBlock("public void setActualFrom_(" + actProperty.type + " dt) {");
                         cf.println("" + actProperty.name + " = dt;");
                         cf.endBlock("}");
                     }
                     cf.println("");
-                    DataBeanPropertyBuilder.printKnownXmlAdapters(cf, versionalType);
                     cf.println("private " + versionalType + " dDataBeanActualAt_;");
                     cf.println("");
+                    DataBeanPropertyBuilder.printKnownXmlAdapters(cf, versionalType);
                     cf.println("public " + versionalType + " getDDataBeanActualAt_() {return dDataBeanActualAt_;}");
                     cf.println("");
                     cf.println("public void setDDataBeanActualAt_(" + versionalType + " value) {dDataBeanActualAt_=value;}");
                 }
             } else {
+                cf.println("@javax.xml.bind.annotation.XmlTransient");
                 cf.startBlock("final public " + keyType + " getDDataBeanKey_() {");
                 Optional<DataBeanPropertyBuilder> idPropOpt = properties.values().stream().filter(p -> p.isId).findAny();
                 if (idPropOpt.isPresent())
@@ -278,8 +284,8 @@ class DataBeanBuilder {
             }
 
             cf.println("");
-            cf.println("@javax.xml.bind.annotation.XmlTransient");
             cf.println("private int hash_;");
+            //cf.println("@javax.xml.bind.annotation.XmlTransient");
             cf.startBlock("final public int hashCode() {");
             cf.println("if(hash_ == 0) hash_ = getDDataBeanKey_().hashCode();");
             cf.println("return hash_;");

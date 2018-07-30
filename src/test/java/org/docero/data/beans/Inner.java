@@ -20,7 +20,7 @@ public interface Inner extends Serializable {
     void setSampleId(int id);
 
     @DDataProperty
-    @Inner_Map_(value = Inner_.SAMPLE_ID, sample = Sample_.ID)
+    @Inner_Map_(value = Inner_.SAMPLE_ID, sample = Sample_.ID, markTransient = true)
     Sample getSample();
     void setSample(Sample bean);
 
