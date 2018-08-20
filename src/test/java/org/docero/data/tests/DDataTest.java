@@ -236,7 +236,9 @@ public class DDataTest {
             add(ItemInner_WB_.class);
             add(ItemItemSample_WB_.class);
         }}, new ArrayList<DDataFilter>() {{
-            add(new DDataFilter(ItemSample_WB_.ID));
+            add(new DDataFilter(ItemSample_WB_.ID){{
+                setSortAscending(false);
+            }});
             add(new DDataFilter(ItemSample_WB_.ELEM_TYPE));
             add(new DDataFilter(ItemSample_WB_.SM_ID));
 

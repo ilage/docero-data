@@ -20,13 +20,15 @@ public class DDataViewRows {
             for (AbstractDataView.TableCell sort : view.tableCells.values().stream()
                     .filter(AbstractDataView.TableCell::isSorted)
                     .collect(Collectors.toList())) {
+                boolean sortAscending = sort.column == null || sort.column.isSortAscending() == null ?
+                        true : sort.column.isSortAscending();
                 Object v1 = DDataViewRow.getColumnValue((Map<Object, Object>) o1, 0, sort.name);
                 Object v2 = DDataViewRow.getColumnValue((Map<Object, Object>) o2, 0, sort.name);
                 if (v1 == null) {
-                    if (v2 != null) return sort.column.isSortAscending() ? 1 : 0;
+                    if (v2 != null) return sortAscending ? -1 : 1;
                 } else if (v1 instanceof Comparable) {
-                    int cmp = v2 == null ? (sort.column.isSortAscending() ? 0 : 1) : ((Comparable) v1).compareTo(v2);
-                    if (cmp != 0) return sort.column.isSortAscending() ? cmp : -cmp;
+                    int cmp = v2 == null ? 1 : ((Comparable) v1).compareTo(v2);
+                    return sortAscending ? cmp : -cmp;
                 }
             }
             return 0;
