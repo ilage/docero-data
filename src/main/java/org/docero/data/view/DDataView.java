@@ -22,6 +22,7 @@ public class DDataView extends AbstractDataView {
     private final DDataFilter[] columns;
     private DDataFilter filter = new DDataFilter();
     private final Temporal version;
+    private boolean selectAllVersions;
 
     /*private final HashMap<String, DDataAttribute> tableEntities = new HashMap<>();
     final IdentityHashMap<DDataFilter, String> viewPaths = new IdentityHashMap<>();*/
@@ -50,6 +51,18 @@ public class DDataView extends AbstractDataView {
 
     public void setFilter(DDataFilter filter) {
         this.filter = filter;
+    }
+
+    /**
+     * Ignore version for versional beans. Default false.
+     */
+    @Override
+    public boolean selectAllVersions() {
+        return selectAllVersions;
+    }
+
+    public void selectAllVersions(boolean flag) {
+        selectAllVersions = flag;
     }
 
     public long count() throws DDataException {

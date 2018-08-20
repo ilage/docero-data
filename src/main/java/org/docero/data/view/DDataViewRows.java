@@ -25,7 +25,7 @@ public class DDataViewRows {
                 if (v1 == null) {
                     if (v2 != null) return sort.column.isSortAscending() ? 1 : 0;
                 } else if (v1 instanceof Comparable) {
-                    int cmp = ((Comparable) v1).compareTo(v2);
+                    int cmp = v2 == null ? (sort.column.isSortAscending() ? 0 : 1) : ((Comparable) v1).compareTo(v2);
                     if (cmp != 0) return sort.column.isSortAscending() ? cmp : -cmp;
                 }
             }

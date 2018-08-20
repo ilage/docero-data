@@ -136,7 +136,8 @@ abstract class AbstractDataView {
         if (rootEntity.versionFrom != null)
             versionColumn = rootEntity.versionFrom.getColumnName();
         for (DDataAttribute a : rootEntity.attributes)
-            if (a.isPrimaryKey() && !versionColumn.equals(a.getColumnName())) beanKeys.add(a);
+            if (a.isPrimaryKey() && (selectAllVersions() || !versionColumn.equals(a.getColumnName())))
+                beanKeys.add(a);
 
         if (beanKeys.size() == 1) {
             keyType = beanKeys.get(0).getJdbcType();
@@ -144,8 +145,8 @@ abstract class AbstractDataView {
         } else {
             keyType = "VARCHAR";
             return "concat(" + beanKeys.stream()
-                    .map(a -> "CAST(t0.\"" + a.getColumnName() + "\" TO VARCHAR)")
-                    .collect(Collectors.joining(",\":\",")) + ")";
+                    .map(a -> "CAST(t0.\"" + a.getColumnName() + "\" AS VARCHAR)")
+                    .collect(Collectors.joining(",':',")) + ")";
         }
     }
 
@@ -488,6 +489,8 @@ abstract class AbstractDataView {
     private final static DateTimeFormatter sqlTimestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss");
 
     String versionConstraint(Class clazz, int toTableIndex) {
+        if (selectAllVersions()) return "";
+
         DDataAttribute versionFrom = null;
         DDataAttribute versionTo = null;
         try {
@@ -512,6 +515,8 @@ abstract class AbstractDataView {
 
         return sql;
     }
+
+    abstract boolean selectAllVersions();
 
     String typeConstraint(Class clazz, int toTableIndex) {
         DDataAttribute discriminant = null;
