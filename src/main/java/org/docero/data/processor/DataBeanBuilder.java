@@ -377,8 +377,10 @@ class DataBeanBuilder {
             cf.println("public final static Class<" + interfaceType + "> BEAN_INTERFACE = " + interfaceType + ".class;");
             cf.println("public final static " + interfaceType + "_WB_ DISCR_ATTR = " +
                     (discriminatorProperty == null ? "null" : discriminatorProperty.enumName) + ";");
-            cf.println("public final static String DISCR_VAL = \"" +
-                    (discriminatorProperty == null ? "" : discriminatorValue) + "\";");
+            if (discriminatorValue == null || discriminatorProperty == null)
+                cf.println("public final static String DISCR_VAL = null;");
+            else
+                cf.println("public final static String DISCR_VAL = \"" + discriminatorValue + "\";");
             cf.println("public final static " + interfaceType + "_WB_ VERSION_FROM = " +
                     this.properties.values().stream()
                             .filter(p -> p.isVersionFrom).findAny()

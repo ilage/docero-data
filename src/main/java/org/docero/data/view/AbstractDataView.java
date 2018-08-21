@@ -46,8 +46,8 @@ abstract class AbstractDataView {
                 if (field.isEnumConstant())
                     try {
                         DDataAttribute attr = (DDataAttribute) field.get(null);
-                        if (attr.getColumnName() != null && rootEntity.attributes.stream()
-                                .noneMatch(a -> a.getColumnName().equals(attr.getColumnName()))) {
+                        if (attr.getPropertyName() != null && rootEntity.attributes.stream()
+                                .noneMatch(a -> a.getPropertyName().equals(attr.getPropertyName()))) {
                             rootEntity.attributes.add(attr);
                             if (attr.isPrimaryKey()) {
                                 rootEntity.addCell(new TableCell(attr.getPropertyName(), attr,
@@ -527,7 +527,7 @@ abstract class AbstractDataView {
         } catch (IllegalAccessException | NoSuchFieldException ignore) {
         }
 
-        if (discriminant != null)
+        if (discriminant != null && discriminantValue != null)
             return "t" + toTableIndex + ".\"" + discriminant.getColumnName() + "\"=" +
                     (String.class.isAssignableFrom(discriminant.getJavaType()) ?
                             "'" + discriminantValue + "'" :
