@@ -42,20 +42,21 @@ abstract class AbstractDataView {
         String versionColumn = rootEntity.versionFrom == null ? "" : rootEntity.versionFrom.getColumnName();
 
         for (Class<? extends DDataAttribute> root : roots)
-            for (Field field : root.getDeclaredFields())
-                if (field.isEnumConstant())
-                    try {
-                        DDataAttribute attr = (DDataAttribute) field.get(null);
-                        if (attr.getPropertyName() != null && rootEntity.attributes.stream()
-                                .noneMatch(a -> a.getPropertyName().equals(attr.getPropertyName()))) {
-                            rootEntity.attributes.add(attr);
-                            if (attr.isPrimaryKey()) {
-                                rootEntity.addCell(new TableCell(attr.getPropertyName(), attr,
-                                        versionColumn.equals(attr.getColumnName())));
-                            }
-                        }
-                    } catch (IllegalAccessException ignore) {
+            for (DDataAttribute attr : root.getEnumConstants())
+                if (attr.getPropertyName() != null && rootEntity.attributes.stream()
+                        .noneMatch(a -> a.getPropertyName().equals(attr.getPropertyName()) &&
+                                        a.getJavaType().equals(attr.getJavaType()) && (
+                                        (a.joinMapping() == null && attr.joinMapping() == null) ||
+                                                (a.joinMapping() != null && attr.joinMapping() != null &&
+                                                        a.joinMapping().equals(attr.joinMapping()))
+                                )
+                        )) {
+                    rootEntity.attributes.add(attr);
+                    if (attr.isPrimaryKey()) {
+                        rootEntity.addCell(new TableCell(attr.getPropertyName(), attr,
+                                versionColumn.equals(attr.getColumnName())));
                     }
+                }
         tableEntities.put(null, rootEntity);
 
         fillViewEntities(Arrays.asList(columns), null, rootEntity);
