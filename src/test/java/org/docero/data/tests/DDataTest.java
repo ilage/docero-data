@@ -382,7 +382,6 @@ public class DDataTest {
         }});
 
         DDataViewRows vr = view.select(0, 100);
-        vr.setOrder(DDataOrder.asc(HistSample_WB_.ID));
         DDataViewRow row = vr.getRow(0);
         Integer t_sample_id = (Integer) row.getColumnValue(0, HistSample_WB_.ID);
 

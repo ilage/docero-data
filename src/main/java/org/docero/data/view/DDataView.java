@@ -98,30 +98,51 @@ public class DDataView extends AbstractDataView {
         String keySql = getKeySQL();
         String limitedSql = firstLevelSelect(keySql, offset, limit);
 
-        //if(LOG.isDebugEnabled()) LOG.debug("Preparing: "+sql.toString());
-        Map<Object, Object> resultMap = sqlSession.selectMap(
-                "org.docero.data.selectView",
-                Collections.singletonMap("sqlStatement", limitedSql), "dDataBeanKey_");
-        //if(LOG.isDebugEnabled()) LOG.debug("Total: "+resultMap.size());
+        if (LOG.isDebugEnabled()) LOG.debug("Preparing: " + limitedSql);
+        List<Map<String, Object>> resultMap = selectViewData(sqlSession, limitedSql);
+        if (LOG.isDebugEnabled()) LOG.debug("Total: " + resultMap.size());
+
         if (resultMap.size() > 0) {
-            String in_condition = keySql + " IN (" + resultMap.keySet().stream()
+            String in_condition = keySql + " IN (" + resultMap.stream()
+                    .map(v -> v.get("dDataBeanKey_"))
                     .map(k -> DDataTypes.maskedValue(getKeyType(), k.toString()))
                     .collect(Collectors.joining(",")) +
                     ")";
             for (DSQL subSelect : getSubSelects()) {
                 subSelect.WHERE(in_condition);
-                //if(LOG.isDebugEnabled()) LOG.debug("Preparing: "+subSelect.toString());
-                List<Map<Object, Object>> subResult = sqlSession.selectList(
-                        "org.docero.data.selectView",
-                        Collections.singletonMap("sqlStatement", subSelect.toString()));
-                //if(LOG.isDebugEnabled()) LOG.debug("Total: "+subResult.size());
-                for (Map<Object, Object> row : subResult) {
-                    Object key = row.get("dDataBeanKey_");
-                    mergeResultMaps(key, resultMap, row);
-                }
+                if (LOG.isDebugEnabled()) LOG.debug("Preparing: " + subSelect.toString());
+                List<Map<String, Object>> subResult = selectViewData(sqlSession, subSelect.toString());
+                if (LOG.isDebugEnabled()) LOG.debug("Total: " + subResult.size());
+
+                if (!subResult.isEmpty())
+                    for (Map<String, Object> row : subResult)
+                        resultMap.stream()
+                                .filter(m -> m.get("dDataBeanKey_").equals(row.get("dDataBeanKey_")))
+                                .findFirst()
+                                .ifPresent(p -> mergeSubSelect(p, row));
             }
         }
         return new DDataViewRows(this, resultMap);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void mergeSubSelect(Map<String, Object> dest, Map<String, Object> src) {
+        for (Map.Entry<String, Object> e : src.entrySet()) {
+            Object o = dest.get(e.getKey());
+            if (e.getValue() instanceof Map) {
+                if (o == null) {
+                    List<Map<String, Object>> nl = new ArrayList<>();
+                    dest.put(e.getKey(), nl);
+                    nl.add((Map<String, Object>) e.getValue());
+                } else if (o instanceof List) {
+                    ((List) o).add(e.getValue());
+                } else if (o instanceof Map) {
+                    mergeSubSelect((Map<String, Object>) o, (Map<String, Object>) e.getValue());
+                } else
+                    dest.put(e.getKey(), e.getValue());
+            } else
+                dest.put(e.getKey(), e.getValue());
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -162,33 +183,6 @@ public class DDataView extends AbstractDataView {
             return s.substring(0, s.length() - 1) + limits + ";";
         } else {
             return s + limits;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private void mergeResultMaps(Object to_key, Map<Object, Object> to, Object leaf) {
-        if (leaf == null || to_key == null) return;
-        if (leaf instanceof Map && ((Map) leaf).containsKey("!")) {
-            leaf = ((Map) leaf).get("!");
-        }
-        final Object finalLeaf = leaf;
-        Object val = to.get(to_key);
-        if (val == null) {
-            to.put(to_key, new ArrayList<Object>() {{
-                this.add(finalLeaf);
-            }});
-        } else if (val instanceof List) {
-            ((List) val).add(finalLeaf);
-        } else if (val instanceof Map && finalLeaf instanceof Map) {
-            for (Object vk : ((Map) finalLeaf).keySet())
-                if (!"dDataBeanKey_".equals(vk)) {
-                    mergeResultMaps(vk, (Map<Object, Object>) val, ((Map) finalLeaf).get(vk));
-                }
-        } else {
-            to.put(to_key, new ArrayList<Object>() {{
-                this.add(val);
-                this.add(finalLeaf);
-            }});
         }
     }
 
@@ -420,7 +414,7 @@ public class DDataView extends AbstractDataView {
 
     private HashMap<Class, DDataBeanUpdateService> knownUpdaters = new HashMap<>();
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "WeakerAccess"})
     public <T extends Serializable> DDataBeanUpdateService<T> getUpdateServiceFor(Class<T> beanInterface) {
         return (DDataBeanUpdateService<T>) knownUpdaters.get(beanInterface);
     }

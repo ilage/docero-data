@@ -1,5 +1,6 @@
 package org.docero.data.view;
 
+import org.apache.ibatis.session.SqlSession;
 import org.docero.data.utils.DSQL;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
@@ -9,9 +10,16 @@ import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.Temporal;
 import java.util.*;
+import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -563,6 +571,82 @@ abstract class AbstractDataView {
                     }
             }
     }
+
+    /**
+     * Put to map reflecting object properties hierarchy.
+     *
+     * @param map map reflecting object properties hierarchy
+     * @param key point delimited name of property
+     * @param v   value
+     */
+    private void putInHierarchy(Map map, String key, Object v) {
+        String[] p = key.split("\\.");
+        int i = 0;
+        Map m = map;
+        for (; i < p.length - 1; i++)
+            m = (Map) m.computeIfAbsent(p[i], k -> new HashMap<String, Object>());
+        m.put(p[i], v);
+    }
+
+
+    List<Map<String, Object>> selectViewData(SqlSession sqlSession, String limitedSql) throws DDataException {
+        List<Map<String, Object>> results = new ArrayList<>();
+        try {
+            try (PreparedStatement pst = sqlSession.getConnection().prepareStatement(limitedSql)) {
+                //TODO build view from really prepared statement, what can be cached by RDBMS
+                try (ResultSet rs = pst.executeQuery()) {
+                    ResultSetMetaData meta = rs.getMetaData();
+                    int colCount = meta.getColumnCount();
+                    String[] rsColumns = new String[colCount];
+                    for (int i = 0; i < colCount; ) rsColumns[i] = meta.getColumnName(++i);
+
+                    while (rs.next()) {
+                        HashMap<String, Object> row = new HashMap<>();
+                        results.add(row);
+                        for (int i = 0; i < colCount; ) {
+                            String colName = rsColumns[i++];
+                            TableCell column = tableCells.get(colName);
+                            Object colVal;
+                            if (column == null) colVal = rs.getObject(i);
+                            else colVal = getFromResultSet(rs, column.attribute.getJavaType(), i);
+                            putInHierarchy(row, colName, colVal);
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            LOG.error("DDataView: ", e);
+            throw new DDataException("JDBC: " + e.getMessage());
+        }
+        return results;
+    }
+
+    private Object getFromResultSet(ResultSet rs, Class<?> ctype, int i) throws SQLException, DDataException {
+        if (ctype.isAssignableFrom(Integer.class)) return rs.getInt(i);
+        if (ctype.isAssignableFrom(Long.class)) return rs.getLong(i);
+        if (ctype.isAssignableFrom(String.class)) return rs.getString(i);
+        if (ctype.isAssignableFrom(LocalDateTime.class)) {
+            Timestamp ts = rs.getTimestamp(i);
+            return ts == null ? null : ts.toLocalDateTime();
+        }
+        if (ctype.isAssignableFrom(LocalDate.class)) {
+            java.sql.Date ts = rs.getDate(i);
+            return ts == null ? null : ts.toLocalDate();
+        }
+        if (ctype.isAssignableFrom(LocalTime.class)) {
+            Time ts = rs.getTime(i);
+            return ts == null ? null : ts.toLocalTime();
+        }
+        if (ctype.isAssignableFrom(Date.class) || ctype.isAssignableFrom(Timestamp.class))
+            return rs.getTimestamp(i);
+        if (ctype.isAssignableFrom(BigDecimal.class)) return rs.getBigDecimal(i);
+        if (ctype.isAssignableFrom(BigInteger.class)) return rs.getLong(i);
+        if (ctype.isAssignableFrom(Float.class)) return rs.getFloat(i);
+        if (ctype.isAssignableFrom(Double.class)) return rs.getDouble(i);
+
+        throw new DDataException("DDataView unknown dataType: " + ctype);
+    }
+
 
     private class JoinedTable {
         private final int fromTableIndex;
