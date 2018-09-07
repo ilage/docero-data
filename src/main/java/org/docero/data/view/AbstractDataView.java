@@ -615,6 +615,7 @@ abstract class AbstractDataView {
                 }
             }
         } catch (SQLException e) {
+            LOG.error("DDataView: " + limitedSql);
             LOG.error("DDataView: ", e);
             throw new DDataException("JDBC: " + e.getMessage());
         }
@@ -639,12 +640,15 @@ abstract class AbstractDataView {
         }
         if (ctype.isAssignableFrom(Date.class) || ctype.isAssignableFrom(Timestamp.class))
             return rs.getTimestamp(i);
+        if (ctype.isAssignableFrom(java.sql.Date.class)) return rs.getDate(i);
+        if (ctype.isAssignableFrom(java.sql.Time.class)) return rs.getTime(i);
         if (ctype.isAssignableFrom(BigDecimal.class)) return rs.getBigDecimal(i);
-        if (ctype.isAssignableFrom(BigInteger.class)) return rs.getLong(i);
+        if (ctype.isAssignableFrom(BigInteger.class)) return BigInteger.valueOf(rs.getLong(i));
+        if (ctype.isAssignableFrom(Boolean.class)) return rs.getBoolean(i);
         if (ctype.isAssignableFrom(Float.class)) return rs.getFloat(i);
         if (ctype.isAssignableFrom(Double.class)) return rs.getDouble(i);
 
-        throw new DDataException("DDataView unknown dataType: " + ctype);
+        return rs.getObject(i);
     }
 
 
