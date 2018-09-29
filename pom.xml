@@ -23,9 +23,9 @@
 
     <repositories>
         <repository>
-            <id>telda-snapshots</id>
+            <id>ao.snapshots</id>
             <name>telda repository</name>
-            <url>http://172.16.6.184:8081/nexus/content/repositories/snapshots</url>
+            <url>http://192.168.11.101:8081/nexus/repository/maven-snapshots/</url>
         </repository>
     </repositories>
 
@@ -201,9 +201,9 @@
 
     <distributionManagement>
         <repository>
-            <id>telda-snapshots</id>
+            <id>ao.snapshots</id>
             <name>telda repository</name>
-            <url>http://172.16.6.184:8081/nexus/content/repositories/snapshots</url>
+            <url>http://192.168.11.101:8081/nexus/repository/maven-snapshots/</url>
         </repository>
     </distributionManagement>
 </project>
