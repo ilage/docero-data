@@ -7,10 +7,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.ExecutableType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVariable;
+import javax.lang.model.type.*;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import java.io.IOException;
@@ -58,8 +55,8 @@ class DDataMethodBuilder {
             if (ttype.contains("java.util.List")) methodType = MType.SELECT;
             else if (ttype.contains("java.util.Map")) methodType = MType.SELECT;
             else methodType = GET;
-            returnSimpleType = returnType.getKind().isPrimitive() ||
-                    "java.lang.Long".equals(returnType.toString()) ||
+            returnSimpleType = isPrimitive(returnType) ||
+                    "java.lang.BigDecimal".equals(returnType.toString()) ||
                     "java.math.BigInteger".equals(returnType.toString());
         }
         boolean defaultMethod = ("get".equals(methodName) && methodElement.getParameters().size() == 1) || (
@@ -69,6 +66,16 @@ class DDataMethodBuilder {
                 .filter(m -> methodName.equals(m.methodName)).count() + 1;
         SelectId select = methodElement.getAnnotation(SelectId.class);
         selectId = select != null ? select.value() : null;
+    }
+
+    private boolean isPrimitive(TypeMirror returnType) {
+        try {
+            return returnType.getKind().isPrimitive() ||
+                    repositoryBuilder.rootBuilder.environment.getTypeUtils()
+                            .unboxedType(returnType) != null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     DDataMethodBuilder(

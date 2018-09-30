@@ -25,7 +25,7 @@
         <repository>
             <id>ao.snapshots</id>
             <name>telda repository</name>
-            <url>http://192.168.11.101:8081/nexus/repository/maven-snapshots/</url>
+            <url>http://ao.telda.ru/nexus/repository/maven-snapshots/</url>
         </repository>
     </repositories>
 
@@ -34,7 +34,9 @@
             <groupId>org.docero</groupId>
             <artifactId>docero-dgen</artifactId>
             <version>1.0-SNAPSHOT</version>
-            <scope>provided</scope>
+            <!--<scope>provided</scope>-->
+            <scope>system</scope>
+            <systemPath>/home/ilage/IdeaProjects/docero-dgen/target/docero-dgen-1.0-SNAPSHOT.jar</systemPath>
         </dependency>
 
         <dependency>
@@ -203,7 +205,7 @@
         <repository>
             <id>ao.snapshots</id>
             <name>telda repository</name>
-            <url>http://192.168.11.101:8081/nexus/repository/maven-snapshots/</url>
+            <url>http://ao.telda.ru/nexus/repository/maven-snapshots/</url>
         </repository>
     </distributionManagement>
 </project>

@@ -271,6 +271,10 @@ class DDataBuilder {
             cf.println("for(Class<? extends T> type : types) dictionariesService.register(type, repository);");
             cf.endBlock("}");
             cf.println("");
+            cf.startBlock("static <T extends java.io.Serializable, C extends java.io.Serializable> void registerRemote(org.docero.data.DDataRemoteRepository<T, C> repository, Class<T> type) {");
+            cf.println("dictionariesService.register(type, repository);");
+            cf.endBlock("}");
+            cf.println("");
             cf.startBlock("static <T extends java.io.Serializable> void cache(T bean) {");
             cf.println("dictionariesService.put(bean);");
             cf.endBlock("}");

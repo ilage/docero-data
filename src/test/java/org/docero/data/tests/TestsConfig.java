@@ -1,6 +1,9 @@
 package org.docero.data.tests;
 
 import org.apache.ibatis.transaction.TransactionFactory;
+import org.docero.data.rmt.RemoteBean;
+import org.docero.data.rmt.RemoteRepository;
+import org.docero.data.rmt.RemoteRepositoryImpl;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.transaction.SpringManagedTransactionFactory;
 import org.springframework.cache.CacheManager;
@@ -75,6 +78,9 @@ public class TestsConfig {
         bean.setObjectFactory(DData.getObjectFactory());
 
         new MyBatisSpringConfigurationFactory().setApplicationContext(context);
+
+        RemoteRepository remote = new RemoteRepositoryImpl();
+        DData.registerRemote(remote, RemoteBean.class);
 
         return bean;
     }

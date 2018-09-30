@@ -632,6 +632,8 @@ class DataBeanBuilder {
                     "<p>Do not forget mark method with @JsonIgnore annotation if you don't really want it.</p>" +
                     "*/");
             cf.println("boolean markTransient() default false;");
+            cf.println("/** Function name used for remote beans mapping*/");
+            cf.println("String func() default \"\";");
 
             for (DataBeanPropertyBuilder property : properties.values()) {
                 if (property.isCollection()) {

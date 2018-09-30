@@ -4,11 +4,12 @@ import org.apache.ibatis.session.SqlSession;
 import org.docero.data.utils.DDataDictionary;
 
 import java.io.Serializable;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DDataDictionariesService {
-    private final ConcurrentHashMap<Class, DDataDictionary> dictionaries =
+    private final ConcurrentHashMap<Class, Object> dictionaries =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Class, Integer> versions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Class, List> lists = new ConcurrentHashMap<>();
@@ -24,9 +25,17 @@ public class DDataDictionariesService {
      */
     public <T extends Serializable> T create(Class<T> type) {
         @SuppressWarnings("unchecked")
-        DDataRepository<T, ? extends Serializable> d = dictionaries.get(type);
+        Object d = dictionaries.get(type);
         if (d == null) return null;
-        return d.create();
+        try {
+            return d instanceof DDataRepository ?
+                    ((DDataRepository<T, ?>) d).create() :
+                    (d instanceof DDataRemoteRepository ?
+                            type.newInstance() :
+                            null);
+        } catch (InstantiationException | IllegalAccessException e) {
+            return null;
+        }
     }
 
     /**
@@ -36,7 +45,18 @@ public class DDataDictionariesService {
      * @param repository - dictionary repository
      */
     public <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRepository<T, C> repository) {
-        if (repository instanceof DDataDictionary) dictionaries.put(type, (DDataDictionary) repository);
+        if (repository instanceof DDataDictionary)
+            dictionaries.put(type, repository);
+    }
+
+    /**
+     * Add remote repository to list
+     *
+     * @param type       - class of bean implemetation
+     * @param repository - remote repository
+     */
+    public <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRemoteRepository<T, C> repository) {
+        dictionaries.put(type, repository);
     }
 
     /**
@@ -48,9 +68,13 @@ public class DDataDictionariesService {
      */
     public <T extends Serializable, C extends Serializable> T get(Class<T> type, C key) {
         @SuppressWarnings("unchecked")
-        DDataRepository<T, C> d = dictionaries.get(type);
+        Object d = dictionaries.get(type);
         if (d == null) return null;
-        return d.get(key);
+        return d instanceof DDataRepository ?
+                ((DDataRepository<T, C>) d).get(key) :
+                (d instanceof DDataRemoteRepository ?
+                        ((DDataRemoteRepository<T, C>) d).get(key) :
+                        null);
     }
 
     /**
@@ -62,8 +86,9 @@ public class DDataDictionariesService {
     public <T extends Serializable> T put(T bean) {
         if (bean == null) return null;
         @SuppressWarnings("unchecked")
-        DDataDictionary<T, ? extends Serializable> d = dictionaries.get(bean.getClass());
-        if (d != null) d.put_(bean);
+        Object d = dictionaries.get(bean.getClass());
+        if (d != null && d instanceof DDataDictionary)
+            ((DDataDictionary<T, ? extends Serializable>) d).put_(bean);
         return bean;
     }
 
@@ -74,37 +99,53 @@ public class DDataDictionariesService {
      * Not a very important than someone read zero from version or not but in most cases
      * it will do elements loading faster.
      */
-
     public <T extends Serializable> void updateVersion(Class<T> type) {
-        DDataDictionary d = dictionaries.get(type);
-        if (d.version_() != 0)
-            d.version_((int) System.currentTimeMillis());
+        Object d = dictionaries.get(type);
+        if (d instanceof DDataDictionary && ((DDataDictionary) d).version_() != 0)
+            ((DDataDictionary) d).version_((int) System.currentTimeMillis());
     }
 
     public <T extends Serializable> void clearVersion(Class<T> type) {
-        DDataDictionary d = dictionaries.get(type);
-        d.version_(0);
+        Object d = dictionaries.get(type);
+        if (d instanceof DDataDictionary)
+            ((DDataDictionary) d).version_(0);
     }
 
     @SuppressWarnings({"unchecked"})
     public <T extends Serializable, C extends Serializable> List<T> list(
             Class<T> type, SqlSession session, String selectId
     ) {
-        DDataDictionary<T, C> d = dictionaries.get(type);
+        Object o = dictionaries.get(type);
         Integer localListVersion = versions.get(type);
-        Integer cv = d.version_();
-        if (cv.equals(localListVersion)) {
-            return lists.get(type);
-        } else {
-            List<T> selected = session.selectList(selectId);
-            lists.put(type, selected);
-            boolean initialLoad = d.version_() == 0;
-            if (initialLoad) {
-                selected.forEach(d::put_);
-                cv = d.version_(1);
+
+        if (o instanceof DDataRemoteDictionary) {
+            DDataRemoteDictionary<T, C> d = (DDataRemoteDictionary<T, C>) o;
+            Integer cv = d.version_();
+            if (cv.equals(localListVersion)) {
+                return lists.get(type);
+            } else {
+                List<T> selected = session.selectList(selectId);
+                lists.put(type, selected);
+                versions.put(type, cv);
+                return selected;
             }
-            versions.put(type, cv);
-            return selected;
+        } else if (o instanceof DDataDictionary) {
+            DDataDictionary<T, C> d = (DDataDictionary<T, C>) o;
+            Integer cv = d.version_();
+            if (cv.equals(localListVersion)) {
+                return lists.get(type);
+            } else {
+                List<T> selected = session.selectList(selectId);
+                lists.put(type, selected);
+                boolean initialLoad = d.version_() == 0;
+                if (initialLoad) {
+                    selected.forEach(d::put_);
+                    cv = d.version_(1);
+                }
+                versions.put(type, cv);
+                return selected;
+            }
         }
+        return Collections.emptyList();
     }
 }

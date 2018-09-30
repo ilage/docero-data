@@ -15,6 +15,7 @@ import java.util.stream.Stream;
 class Mapping {
     final List<DataBeanPropertyBuilder> properties = new ArrayList<>();
     final List<DataBeanPropertyBuilder> mappedProperties = new ArrayList<>();
+    final String func;
     final boolean manyToOne;
     final boolean markTransient;
     final boolean alwaysLazy;
@@ -27,6 +28,7 @@ class Mapping {
                 builder.environment.getElementUtils().getElementValuesWithDefaults(annotationMirror);
         boolean markTransient = false;
         boolean alwaysLazy = false;
+        String func = null;
         AtomicBoolean hasCollection = new AtomicBoolean(false);
         for (ExecutableElement executableElement : map.keySet()) {
             String mapKey = executableElement.getSimpleName().toString();
@@ -45,6 +47,8 @@ class Mapping {
                 markTransient = Boolean.parseBoolean(map.get(executableElement).getValue().toString());
             } else if ("alwaysLazy".equals(mapKey)) {
                 alwaysLazy = Boolean.parseBoolean(map.get(executableElement).getValue().toString());
+            } else if ("func".equals(mapKey)) {
+                func = map.get(executableElement).getValue().toString();
             } else {
                 //noinspection unchecked
                 ((List) map.get(executableElement).getValue()).stream()
@@ -68,6 +72,7 @@ class Mapping {
         }
         this.markTransient = markTransient;
         this.alwaysLazy = alwaysLazy;
+        this.func = func != null && func.length() == 0 ? null : func;
         manyToOne = hasCollection.get();
     }
 
@@ -79,6 +84,7 @@ class Mapping {
                 .filter(p -> p.isId).forEach(mappedProperties::add);
         markTransient = false;
         alwaysLazy = false;
+        func = null;
     }
 
     private Mapping(DataBeanPropertyBuilder property, DataBeanPropertyBuilder mappedBeanProperty, boolean manyToOne) {
@@ -88,6 +94,7 @@ class Mapping {
         this.manyToOne = manyToOne;
         markTransient = false;
         alwaysLazy = false;
+        func = null;
     }
 
     class SingleFieldMapping {

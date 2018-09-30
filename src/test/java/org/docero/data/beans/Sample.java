@@ -2,6 +2,8 @@ package org.docero.data.beans;
 
 import org.docero.data.DDataBean;
 import org.docero.data.DDataProperty;
+import org.docero.data.rmt.RBean;
+import org.docero.data.rmt.RemoteBean;
 
 import java.util.List;
 
@@ -20,4 +22,7 @@ public interface Sample extends SampleTable {
 
     @Sample_Map_(value = Sample_.ID, item = ItemAbstraction_.ID)
     ItemAbstraction getItem();
+
+    @Sample_Map_(value = Sample_.ID, func = "get")
+    RBean getRemoteBean();
 }
