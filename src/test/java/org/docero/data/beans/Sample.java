@@ -24,5 +24,5 @@ public interface Sample extends SampleTable {
     ItemAbstraction getItem();
 
     @Sample_Map_(value = Sample_.ID, func = "get")
-    RBean getRemoteBean();
+    RemoteBean getRemoteBean();
 }

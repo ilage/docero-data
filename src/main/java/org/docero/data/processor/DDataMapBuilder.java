@@ -446,7 +446,7 @@ class DDataMapBuilder {
                                     m.property.mappedType.toString().equals(p.mappedType.toString())))
                     .map(p -> {
                         DataBeanBuilder b = builder.beansByInterface.get(p.mappedType.toString());
-                        if(b == null) return null;
+                        if (b == null) return null;
                         else {
                             Mapping mapping = builder.mappings.get(p.dataBean.interfaceType + "." + p.name);
                             return new MappedTable(0, index.incrementAndGet(), p, b,
@@ -787,7 +787,8 @@ class DDataMapBuilder {
     }
 
     private boolean notManagedBean(DataBeanPropertyBuilder propertyBuilder) {
-        return !this.builder.beansByInterface.containsKey(propertyBuilder.type.toString());
+        //return !this.builder.beansByInterface.containsKey(propertyBuilder.type.toString());
+        return this.builder.isSimpleMappedType(propertyBuilder.mappedType);
     }
 
     private void buildSelect4DefaultGet(
@@ -1163,9 +1164,9 @@ class DDataMapBuilder {
     }
 
     private String convertTime(TypeMirror type, String s) {
-        if("TIMESTAMP".equals(s)) return "java.sql.Timestamp";
-        if("DATE".equals(s)) return "java.sql.Date";
-        if("TIME".equals(s)) return "java.sql.Time";
+        if ("TIMESTAMP".equals(s)) return "java.sql.Timestamp";
+        if ("DATE".equals(s)) return "java.sql.Date";
+        if ("TIME".equals(s)) return "java.sql.Time";
         return type.toString();
     }
 
@@ -1273,7 +1274,8 @@ class DDataMapBuilder {
                 .filter(DataBeanPropertyBuilder::notIgnored)
                 .filter(p -> !(p.isId || p.isCollectionOrMap()))
                 .filter(fetchOptions::filterIgnored)
-                .filter(p -> !builder.beansByInterface.containsKey(p.type.toString()))
+                .filter(this::notManagedBean)
+                //.filter(p -> !builder.beansByInterface.containsKey(p.type.toString()))
                 .forEach(p -> map.addResult(prefix, p));
     }
 

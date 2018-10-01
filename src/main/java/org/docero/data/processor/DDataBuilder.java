@@ -455,4 +455,17 @@ class DDataBuilder {
             this.componentName = dc.springComponentName().length() > 0 ? dc.springComponentName() : "dData";
         }
     }
+
+    boolean isSimpleMappedType(TypeMirror returnType) {
+        try {
+            return returnType.getKind().isPrimitive() ||
+                    returnType.toString().startsWith("java.lang.") ||
+                    returnType.toString().startsWith("java.time.") ||
+                    returnType.toString().startsWith("java.sql.") ||
+                    "java.math.BigDecimal".equals(returnType.toString()) ||
+                    "java.math.BigInteger".equals(returnType.toString());
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 }

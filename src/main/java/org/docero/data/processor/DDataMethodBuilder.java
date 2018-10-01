@@ -55,9 +55,7 @@ class DDataMethodBuilder {
             if (ttype.contains("java.util.List")) methodType = MType.SELECT;
             else if (ttype.contains("java.util.Map")) methodType = MType.SELECT;
             else methodType = GET;
-            returnSimpleType = isPrimitive(returnType) ||
-                    "java.lang.BigDecimal".equals(returnType.toString()) ||
-                    "java.math.BigInteger".equals(returnType.toString());
+            returnSimpleType = repositoryBuilder.rootBuilder.isSimpleMappedType(returnType);
         }
         boolean defaultMethod = ("get".equals(methodName) && methodElement.getParameters().size() == 1) || (
                 ("update".equals(methodName) || "insert".equals(methodName) || "delete".equals(methodName)
@@ -66,16 +64,6 @@ class DDataMethodBuilder {
                 .filter(m -> methodName.equals(m.methodName)).count() + 1;
         SelectId select = methodElement.getAnnotation(SelectId.class);
         selectId = select != null ? select.value() : null;
-    }
-
-    private boolean isPrimitive(TypeMirror returnType) {
-        try {
-            return returnType.getKind().isPrimitive() ||
-                    repositoryBuilder.rootBuilder.environment.getTypeUtils()
-                            .unboxedType(returnType) != null;
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
     }
 
     DDataMethodBuilder(

@@ -34,9 +34,7 @@
             <groupId>org.docero</groupId>
             <artifactId>docero-dgen</artifactId>
             <version>1.0-SNAPSHOT</version>
-            <!--<scope>provided</scope>-->
-            <scope>system</scope>
-            <systemPath>/home/ilage/IdeaProjects/docero-dgen/target/docero-dgen-1.0-SNAPSHOT.jar</systemPath>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
