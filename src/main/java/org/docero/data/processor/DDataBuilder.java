@@ -149,6 +149,10 @@ class DDataBuilder {
             cf.startBlock("protected <P extends java.io.Serializable> P cached(Class<P> type, java.io.Serializable key) {");
             cf.println("return DData.cache(type, key);");
             cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("protected <P extends java.io.Serializable> P remote(Class<P> type, java.lang.String func, java.io.Serializable... key) {");
+            cf.println("return DData.remote(type, func, key);");
+            cf.endBlock("}");
 
             cf.println("");
             cf.startBlock("protected int compare(Object o1, Object o2) {");
@@ -294,6 +298,10 @@ class DDataBuilder {
             cf.println("");
             cf.startBlock("static <T extends java.io.Serializable, C extends java.io.Serializable> T cache(Class<T> type, C key) {");
             cf.println("return dictionariesService.get(type,key);");
+            cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("static <T extends java.io.Serializable, C extends java.io.Serializable> T remote(Class<T> type, String func, C[] key) {");
+            cf.println("return dictionariesService.get(type,func,key);");
             cf.endBlock("}");
 
             if (environment.getElementUtils().getTypeElement("com.fasterxml.jackson.databind.JsonDeserializer") != null) {

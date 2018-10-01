@@ -4,6 +4,7 @@ import org.docero.data.DDataBean;
 import org.docero.data.DDataProperty;
 import org.docero.data.rmt.RBean;
 import org.docero.data.rmt.RemoteBean;
+import org.docero.data.tests.TestsConfig;
 
 import java.util.List;
 
@@ -23,6 +24,17 @@ public interface Sample extends SampleTable {
     @Sample_Map_(value = Sample_.ID, item = ItemAbstraction_.ID)
     ItemAbstraction getItem();
 
-    @Sample_Map_(value = Sample_.ID, func = "get")
+    @Sample_Map_(value = Sample_.ID)//, func = "get")
     RemoteBean getRemoteBean();
+    //must generate error at compile: void setRemoteBean(RemoteBean v);
+    /*possible solution: default void setRemoteBean(RemoteBean v) {
+        this.setId(v.getRemoteId());
+    }*/
+
+    /**
+     * @return unknown for ddata library property generated with simple getter and setter
+     */
+    TestsConfig getAbstraction();
+
+    void setAbstraction(TestsConfig i);
 }

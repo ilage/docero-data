@@ -152,7 +152,7 @@ public class DDataTest {
                     "DROP TABLE IF EXISTS ddata.\"smdict\";" +
                     "CREATE TABLE ddata.\"smdict\" (\n" +
                     "  id INT NOT NULL," +
-                    "  parent_id INT,"+
+                    "  parent_id INT," +
                     "  name VARCHAR,\n" +
                     "  CONSTRAINT smdict_pk PRIMARY KEY (id)\n" +
                     ");" +
@@ -236,7 +236,7 @@ public class DDataTest {
             add(ItemInner_WB_.class);
             add(ItemItemSample_WB_.class);
         }}, new ArrayList<DDataFilter>() {{
-            add(new DDataFilter(ItemSample_WB_.ID){{
+            add(new DDataFilter(ItemSample_WB_.ID) {{
                 setSortAscending(false);
             }});
             add(new DDataFilter(ItemSample_WB_.ELEM_TYPE));
@@ -562,6 +562,8 @@ public class DDataTest {
         Sample bean = iSampleRepository.get(1);
         assertNotNull(bean);
         assertEquals(1, bean.getId());
+        assertNotNull(bean.getRemoteBean());
+        assertEquals(1, bean.getRemoteBean().getRemoteId());
         Inner ir = bean.getInner();
         assertNotNull(ir);
         assertEquals(1001, ir.getId());

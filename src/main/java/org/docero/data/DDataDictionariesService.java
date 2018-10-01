@@ -4,12 +4,14 @@ import org.apache.ibatis.session.SqlSession;
 import org.docero.data.utils.DDataDictionary;
 
 import java.io.Serializable;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DDataDictionariesService {
-    private final ConcurrentHashMap<Class, Object> dictionaries =
+    private final ConcurrentHashMap<Class, Object> repositories =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Class, Integer> versions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Class, List> lists = new ConcurrentHashMap<>();
@@ -23,9 +25,9 @@ public class DDataDictionariesService {
      * @param type - class of bean
      * @return bean of specified type
      */
+    @SuppressWarnings("unchecked")
     public <T extends Serializable> T create(Class<T> type) {
-        @SuppressWarnings("unchecked")
-        Object d = dictionaries.get(type);
+        Object d = repositories.get(type);
         if (d == null) return null;
         try {
             return d instanceof DDataRepository ?
@@ -46,7 +48,7 @@ public class DDataDictionariesService {
      */
     public <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRepository<T, C> repository) {
         if (repository instanceof DDataDictionary)
-            dictionaries.put(type, repository);
+            repositories.put(type, repository);
     }
 
     /**
@@ -56,7 +58,7 @@ public class DDataDictionariesService {
      * @param repository - remote repository
      */
     public <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRemoteRepository<T, C> repository) {
-        dictionaries.put(type, repository);
+        repositories.put(type, repository);
     }
 
     /**
@@ -66,9 +68,9 @@ public class DDataDictionariesService {
      * @param key  - bean id
      * @return bean of specified type with specified id
      */
+    @SuppressWarnings("unchecked")
     public <T extends Serializable, C extends Serializable> T get(Class<T> type, C key) {
-        @SuppressWarnings("unchecked")
-        Object d = dictionaries.get(type);
+        Object d = repositories.get(type);
         if (d == null) return null;
         return d instanceof DDataRepository ?
                 ((DDataRepository<T, C>) d).get(key) :
@@ -78,15 +80,43 @@ public class DDataDictionariesService {
     }
 
     /**
+     * Get bean by dictionary repository
+     *
+     * @param type class of bean
+     * @param func method name
+     * @param args method parameters
+     * @return bean of specified type with specified id
+     */
+    @SuppressWarnings("unchecked")
+    public <T extends Serializable, C extends Serializable> T get(Class<T> type, String func, Object[] args) {
+        if (args == null) return null;
+        if (func == null && args.length == 1 && args[0] instanceof Serializable)
+            return get(type, (C) args[0]);
+
+        Object d = repositories.get(type);
+        if (d != null && func != null && d instanceof DDataRemoteRepository) {
+            DDataRemoteRepository<T, C> rr = ((DDataRemoteRepository<T, C>) d);
+            Class<?>[] pc = new Class<?>[args.length];
+            for (int i = 0; i < args.length; i++) pc[i] = args[i].getClass();
+            try {
+                Method m = rr.getClass().getMethod(func, pc);
+                return (T) m.invoke(rr, args);
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignore) {
+            }
+        }
+        return null;
+    }
+
+    /**
      * Store bean in dictionary repository cache
      *
      * @param bean - dictionary bean (object)
      * @return bean
      */
+    @SuppressWarnings("unchecked")
     public <T extends Serializable> T put(T bean) {
         if (bean == null) return null;
-        @SuppressWarnings("unchecked")
-        Object d = dictionaries.get(bean.getClass());
+        Object d = repositories.get(bean.getClass());
         if (d != null && d instanceof DDataDictionary)
             ((DDataDictionary<T, ? extends Serializable>) d).put_(bean);
         return bean;
@@ -100,13 +130,13 @@ public class DDataDictionariesService {
      * it will do elements loading faster.
      */
     public <T extends Serializable> void updateVersion(Class<T> type) {
-        Object d = dictionaries.get(type);
+        Object d = repositories.get(type);
         if (d instanceof DDataDictionary && ((DDataDictionary) d).version_() != 0)
             ((DDataDictionary) d).version_((int) System.currentTimeMillis());
     }
 
     public <T extends Serializable> void clearVersion(Class<T> type) {
-        Object d = dictionaries.get(type);
+        Object d = repositories.get(type);
         if (d instanceof DDataDictionary)
             ((DDataDictionary) d).version_(0);
     }
@@ -115,7 +145,7 @@ public class DDataDictionariesService {
     public <T extends Serializable, C extends Serializable> List<T> list(
             Class<T> type, SqlSession session, String selectId
     ) {
-        Object o = dictionaries.get(type);
+        Object o = repositories.get(type);
         Integer localListVersion = versions.get(type);
 
         if (o instanceof DDataRemoteDictionary) {

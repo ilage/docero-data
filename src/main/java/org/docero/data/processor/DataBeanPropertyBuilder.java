@@ -174,8 +174,7 @@ class DataBeanPropertyBuilder {
 
     void buildGetter(JavaClassWriter cf) throws IOException {
         DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
-        Mapping mapping = mappedBean == null ? null :
-                this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
+        Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
 
         cf.println("");
         boolean isTransient = mapping != null && mapping.markTransient;
@@ -208,8 +207,17 @@ class DataBeanPropertyBuilder {
                 Character.toUpperCase(name.charAt(0)) +
                 name.substring(1) + "() {"
         );
-        if (mappedBean != null && !isCollectionOrMap() && mappedBean.dictionary != DictionaryType.NO) {
-            if (mapping != null) {
+        if (mapping != null) {
+            if (mappedBean == null) {
+                cf.println(type + " " + name + " = remote(" + mappedType + ".class," +
+                        (mapping.func == null ? "null," : "\"" + mapping.func + "\",") +
+                        mapping.properties.stream()
+                                .map(p -> "this.get" + Character.toUpperCase(p.name.charAt(0)) + p.name.substring(1) + "()")
+                                .collect(Collectors.joining(", ")) +
+                        ");"
+                );
+                //cf.println(type + " " + name + " = null;");
+            } else if (!isCollectionOrMap() && mappedBean.dictionary != DictionaryType.NO) {
                 DataBeanPropertyBuilder mProp = mapping.properties.get(0);
                 String getter = "this.get" +
                         Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1) + "()";
@@ -230,8 +238,8 @@ class DataBeanPropertyBuilder {
 
     void buildSetter(JavaClassWriter cf) throws IOException {
         DataBeanBuilder mappedBean = this.dataBean.rootBuilder.beansByInterface.get(mappedType.toString());
-        Mapping mapping = mappedBean == null ? null :
-                this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
+        Mapping mapping = this.dataBean.rootBuilder.mappings.get(this.dataBean.interfaceType + "." + this.name);
+        if (mappedBean == null && mapping != null) return; // external data, can't have setter
 
         cf.println("");
         cf.startBlock("public void set" +
@@ -240,7 +248,7 @@ class DataBeanPropertyBuilder {
                 type.toString() + " " +
                 name + ") {"
         );
-        if (mappedBean == null || (mappedBean.dictionary != DictionaryType.SMALL || isCollection)) {
+        if (mappedBean == null || (mappedBean.dictionary != DictionaryType.SMALL || isCollectionOrMap())) {
             cf.println("this." + name + " = " + name + ";");
         }
         if (notCollectionOrMap()) {
