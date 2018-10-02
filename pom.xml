@@ -25,7 +25,7 @@
         <repository>
             <id>ao.snapshots</id>
             <name>telda repository</name>
-            <url>http://ao.telda.ru/nexus/repository/maven-snapshots/</url>
+            <url>http://ao.telda.ru:8081/nexus/repository/maven-snapshots/</url>
         </repository>
     </repositories>
 
@@ -210,7 +210,7 @@
         <repository>
             <id>ao.snapshots</id>
             <name>telda repository</name>
-            <url>http://ao.telda.ru/nexus/repository/maven-snapshots/</url>
+            <url>http://ao.telda.ru:8081/nexus/repository/maven-snapshots/</url>
         </repository>
     </distributionManagement>
 </project>

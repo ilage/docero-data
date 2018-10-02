@@ -502,6 +502,7 @@ class DDataBuilder {
     boolean isSimpleMappedType(TypeMirror returnType) {
         try {
             return returnType.getKind().isPrimitive() ||
+                    returnType.toString().equals("byte[]") ||
                     returnType.toString().startsWith("java.lang.") ||
                     returnType.toString().startsWith("java.time.") ||
                     returnType.toString().startsWith("java.sql.") ||
