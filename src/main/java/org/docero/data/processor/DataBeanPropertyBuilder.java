@@ -15,6 +15,7 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 class DataBeanPropertyBuilder {
@@ -41,7 +42,7 @@ class DataBeanPropertyBuilder {
     final String writerSql;
 
     static DataBeanPropertyBuilder from(
-            DataBeanBuilder bean, DDataProperty ddProperty, ExecutableElement method,
+            DataBeanBuilder bean, DDataProperty ddProperty, boolean isPrototypeId, ExecutableElement method,
             TypeMirror collectionType, TypeMirror mapType, TypeMirror voidType
     ) {
         String sn = method.getSimpleName().toString();
@@ -62,7 +63,7 @@ class DataBeanPropertyBuilder {
             type = method.getReturnType();
         }
         return new DataBeanPropertyBuilder(
-                bean, name, type, ddProperty, method, bean.rootBuilder, collectionType, mapType
+                bean, name, type, ddProperty, isPrototypeId, method, bean.rootBuilder, collectionType, mapType
         );
     }
 
@@ -73,13 +74,13 @@ class DataBeanPropertyBuilder {
         String name = dGen.getName();
         TypeMirror type = dGen.getType();
         return new DataBeanPropertyBuilder(
-                bean, name, type, ddProperty, dGen.getElement(), rootBuilder, collectionType, mapType
+                bean, name, type, ddProperty, false, dGen.getElement(), rootBuilder, collectionType, mapType
         );
     }
 
     private DataBeanPropertyBuilder(
             DataBeanBuilder bean, String name, TypeMirror type,
-            DDataProperty ddProperty, Element element,
+            DDataProperty ddProperty, boolean isPrototypeId, Element element,
             DDataBuilder rootBuilder,
             TypeMirror collectionType,
             TypeMirror mapType) {
@@ -112,8 +113,8 @@ class DataBeanPropertyBuilder {
             isId = ddProperty.id();
             isDiscriminator = ddProperty.discriminator();
         } else {
-            columnName = DataBeanBuilder.propertyName2sqlName(name);
-            isId = ddProperty != null && ddProperty.id();
+            columnName = bean.prototype ? null : DataBeanBuilder.propertyName2sqlName(name);
+            isId = isPrototypeId || (ddProperty != null && ddProperty.id());
             isDiscriminator = ddProperty != null && ddProperty.discriminator();
             readerSql = null;
             writerSql = null;
@@ -129,7 +130,6 @@ class DataBeanPropertyBuilder {
         else mappedType = this.type.getKind().isPrimitive() ?
                     typeUtils.boxedClass((PrimitiveType) this.type).asType() :
                     typeUtils.erasure(this.type);
-
         StringBuilder elemName = new StringBuilder();
         for (char c : name.toCharArray()) {
             if (Character.isUpperCase(c)) elemName.append('_').append(c);
@@ -185,10 +185,10 @@ class DataBeanPropertyBuilder {
             cf.println("@javax.xml.bind.annotation.XmlTransient");
         } else {
             if (mappedBean != null) {
-                if (mappedBean.beanPrototype) {
+                if (mappedBean.abstractBean) {
                     cf.startBlock("@javax.xml.bind.annotation.XmlElements({");
                     cf.println(this.dataBean.rootBuilder.beansByInterface.values().stream()
-                            .filter(b -> !b.beanPrototype)
+                            .filter(b -> !b.abstractBean)
                             .filter(b -> b.getTableRef().equals(mappedBean.getTableRef()))
                             .map(b -> "@javax.xml.bind.annotation.XmlElement(name=\"" +
                                     b.name + "\",type = " +
@@ -300,23 +300,43 @@ class DataBeanPropertyBuilder {
 
     void buildEnumElementWithBeans(
             JavaClassWriter cf,
-            HashMap<String, DataBeanBuilder> beansByInterface,
             HashMap<String, Mapping> mappings,
             ProcessingEnvironment environment
     ) throws IOException {
         TypeMirror typeErasure = environment.getTypeUtils().erasure(isCollection ?
                 ((DeclaredType) type).getTypeArguments().get(0) : type);
-        DataBeanBuilder manType = beansByInterface.get(typeErasure.toString());
+        DataBeanBuilder manType = dataBean.rootBuilder.beansByInterface.get(typeErasure.toString());
         if (manType == null) {
+            DataBeanBuilder pi = dataBean.rootBuilder.prototypesByClass.get(mappedType.toString());
+            if (pi == null) pi = dataBean.rootBuilder.environment.getTypeUtils()
+                    .directSupertypes(mappedType).stream()
+                    .map(dst -> dataBean.rootBuilder.prototypesByClass.get(dst.toString()))
+                    .filter(Objects::nonNull).findAny().orElse(null);
+
             cf.println("/** Value of column " + this.columnName + "*/");
-            cf.println(this.enumName + "(\"" +
-                    this.columnName + "\",\"" +
-                    this.name + "\"," +
-                    (this.type.getKind().isPrimitive() ?
-                            environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
-                            environment.getTypeUtils().erasure(this.type)
-                    ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection +
-                    ", null, null," + this.isId + ", null),");
+            if (pi == null)
+                cf.println(this.enumName + "(" +
+                        (this.columnName == null ? "null" : "\"" + this.columnName + "\"") +
+                        ",\"" +
+                        this.name + "\"," +
+                        (this.type.getKind().isPrimitive() ?
+                                environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
+                                environment.getTypeUtils().erasure(this.type)
+                        ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection +
+                        ", null, null," + this.isId + ", null),");
+            else {
+                Mapping map = mappings.get(dataBean.interfaceType.toString() + "." + this.name);
+                cf.println(this.enumName + "(null,\"" +
+                        this.name + "\"," +
+                        pi.interfaceType + "_WB_.class,\"" +
+                        (this.isSimple() ? "" : "ARRAY") +
+                        "\",false/*is dictionary*/, true" + ", " + this.isCollection +
+                        ",null, new java.util.HashMap<String, String>(){{" +
+                        (map == null ? "" : map.stream()
+                                .map(m -> "put(\"" + m.property.columnName + "\",\"" + m.mappedProperty.columnName + "\");")
+                                .collect(Collectors.joining(" "))) +
+                        "}}" + ", false, " + mappedType + ".class),");
+            }
         } else {
             cf.println("/** Value of column " + this.columnName + "*/");
             Mapping map = mappings.get(dataBean.interfaceType.toString() + "." + this.name);

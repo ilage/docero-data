@@ -1,6 +1,8 @@
 package org.docero.data;
 
 import org.apache.ibatis.session.SqlSession;
+import org.docero.data.remote.DDataRemoteDictionary;
+import org.docero.data.remote.DDataRemoteRepository;
 import org.docero.data.utils.DDataDictionary;
 
 import java.io.Serializable;

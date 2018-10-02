@@ -1,6 +1,7 @@
 package org.docero.data.processor;
 
 import org.docero.data.*;
+import org.docero.data.remote.DDataPrototypeId;
 import org.docero.dgen.processor.DGenClass;
 
 import javax.annotation.processing.ProcessingEnvironment;
@@ -33,19 +34,86 @@ class DataBeanBuilder {
     final String discriminatorValue;
     final String xmlNamespace;
     final DataBeanPropertyBuilder discriminatorProperty;
-    final boolean beanPrototype;
+    final boolean abstractBean;
+    final boolean prototype;
 
-    DataBeanBuilder(
-            TypeElement beanElement, DDataBuilder builder
+    static DataBeanBuilder buildEntity(
+            TypeElement beanElement, DDataBuilder builder, DataBeanBuilder discriminatedBean
     ) {
-        this(beanElement, builder, null);
+        return new DataBeanBuilder(beanElement, builder, discriminatedBean);
     }
 
-    DataBeanBuilder(
+    static DataBeanBuilder buildEntity(
+            TypeElement beanElement, DDataBuilder builder
+    ) {
+        return new DataBeanBuilder(beanElement, builder, null);
+    }
+
+    static DataBeanBuilder buildPrototype(
+            TypeElement beanElement, DDataBuilder builder
+    ) {
+        return new DataBeanBuilder(beanElement, builder);
+    }
+
+    /**
+     * build prototype
+     */
+    private DataBeanBuilder(TypeElement beanElement, DDataBuilder builder) {
+        rootBuilder = builder;
+        interfaceType = (beanElement.asType());
+        prototype = true;
+        schema = null;
+        table = null;
+        name = null;
+        grown = TableGrowType.NO;
+        dictionary = DictionaryType.NO;
+        abstractBean = true;
+        cacheMap = new StringBuilder(interfaceType.toString()).reverse().toString();
+
+        for (Element elt : beanElement.getEnclosedElements())
+            if (elt.getKind() == ElementKind.METHOD &&
+                    !elt.getModifiers().contains(Modifier.DEFAULT) &&
+                    !elt.getModifiers().contains(Modifier.STATIC)
+                    ) {
+                DDataPrototypeId pIsId = elt.getAnnotation(DDataPrototypeId.class);
+                DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(
+                        this, null, pIsId != null,
+                        (ExecutableElement) elt, rootBuilder.collectionType, rootBuilder.mapType, rootBuilder.voidType);
+                if (beanBuilder.type != rootBuilder.voidType)
+                    properties.put(beanBuilder.enumName, beanBuilder);
+            }
+        discriminatorProperty = null;
+        discriminatorValue = null;
+
+        List<DataBeanPropertyBuilder> ids = properties.values().stream()
+                .filter(p -> p.isId)
+                .collect(Collectors.toList());
+        isKeyComposite = false;
+        if (ids.size() == 1) {
+            keyType = ids.get(0).type.getKind().isPrimitive() ?
+                    builder.environment.getTypeUtils().boxedClass((PrimitiveType) ids.get(0).type).toString() :
+                    ids.get(0).type.toString();
+            inversionalKey = keyType;
+        } else {
+            List<DataBeanPropertyBuilder> iids = properties.values().stream()
+                    .filter(p -> p.isId && !p.isVersionFrom)
+                    .collect(Collectors.toList());
+            keyType = null;
+            inversionalKey = null;
+        }
+        versionalType = null;
+        xmlNamespace = null;
+    }
+
+    /**
+     * build entity
+     */
+    private DataBeanBuilder(
             TypeElement beanElement, DDataBuilder builder, DataBeanBuilder discriminatedBean
     ) {
         rootBuilder = builder;
         interfaceType = (beanElement.asType());
+        prototype = false;
 
         DGenClass dGen;
         for (TypeMirror typeMirror : beanElement.getInterfaces()) {
@@ -76,14 +144,14 @@ class DataBeanBuilder {
                     ddBean.value().replace(' ', '_');
             grown = (ddBean.growth());
             dictionary = (ddBean.dictionary());
-            beanPrototype = false;
+            abstractBean = false;
         } else {
             schema = discriminatedBean.schema;
             table = discriminatedBean.table;
             name = propertyName2sqlName(interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1));
             grown = TableGrowType.NO;
             dictionary = DictionaryType.NO;
-            beanPrototype = true;
+            abstractBean = true;
         }
         cacheMap = new StringBuilder(interfaceType.toString()).reverse().toString();
 
@@ -93,7 +161,8 @@ class DataBeanBuilder {
                     !elt.getModifiers().contains(Modifier.STATIC)
                     ) {
                 DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
-                DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(this, ddProperty,
+                DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(
+                        this, ddProperty, false,
                         (ExecutableElement) elt, rootBuilder.collectionType, rootBuilder.mapType, rootBuilder.voidType);
                 if (beanBuilder.type != rootBuilder.voidType)
                     properties.put(beanBuilder.enumName, beanBuilder);
@@ -107,7 +176,8 @@ class DataBeanBuilder {
                 DDataProperty ddProperty = elt.getAnnotation(DDataProperty.class);
                 if (ddProperty != null || ((ExecutableElement) elt).getAnnotationMirrors().stream()
                         .anyMatch(a -> a.getAnnotationType().toString().endsWith("_Map_"))) {
-                    DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(this, ddProperty,
+                    DataBeanPropertyBuilder beanBuilder = DataBeanPropertyBuilder.from(
+                            this, ddProperty, false,
                             (ExecutableElement) elt, rootBuilder.collectionType, rootBuilder.mapType, rootBuilder.voidType);
                     if (!properties.containsKey(beanBuilder.enumName) && beanBuilder.type != rootBuilder.voidType)
                         properties.put(beanBuilder.enumName, beanBuilder);
@@ -199,7 +269,9 @@ class DataBeanBuilder {
     }
 
     String getImplementationName() {
-        return interfaceType + "Impl";
+        return prototype ?
+                interfaceType + "Bean" :
+                interfaceType + "Impl";
     }
 
     String getTableRef() {
@@ -225,58 +297,61 @@ class DataBeanBuilder {
             cf.println("@javax.xml.bind.annotation.XmlAccessorType(javax.xml.bind.annotation.XmlAccessType.PROPERTY)");
             if (environment.getElementUtils().getTypeElement("com.fasterxml.jackson.annotation.JsonIgnoreProperties") != null)
                 cf.println("@com.fasterxml.jackson.annotation.JsonIgnoreProperties({\"handler\",\"ddataBeanKey_\"})");
+            if (prototype)
+                cf.println("@org.docero.data.remote.DDataPrototypeRealization");
             cf.startBlock("public class " +
                     className.substring(simpNameDel + 1)
-                    + " extends " + rootBuilder.basePackage + ".AbstractBean<" +
-                    interfaceType + "> implements " + interfaceType + " {");
+                    + (prototype ? "" : " extends " + rootBuilder.basePackage + ".AbstractBean<" + interfaceType + "> ") +
+                    " implements " + interfaceType + " {");
 
             for (DataBeanPropertyBuilder property : properties.values()) {
                 property.buildProperty(cf);
             }
 
             cf.println("");
-            if (isKeyComposite) {
-                cf.println("@javax.xml.bind.annotation.XmlTransient");
-                cf.startBlock("public " + keyType + " getDDataBeanKey_() {");
-                cf.println("return new " + keyType + "(" +
-                        properties.values().stream()
-                                .filter(p -> p.isId)
-                                .map(p -> p.name).sorted()
-                                .collect(Collectors.joining(", ")) +
-                        ");");
-                cf.endBlock("}");
-                if (versionalType != null) {
-                    DataBeanPropertyBuilder actProperty =
-                            properties.values().stream().filter(p -> p.isVersionFrom).findAny().orElse(null);
-                    if (actProperty != null) {
+            if (!prototype)
+                if (isKeyComposite) {
+                    cf.println("@javax.xml.bind.annotation.XmlTransient");
+                    cf.startBlock("public " + keyType + " getDDataBeanKey_() {");
+                    cf.println("return new " + keyType + "(" +
+                            properties.values().stream()
+                                    .filter(p -> p.isId)
+                                    .map(p -> p.name).sorted()
+                                    .collect(Collectors.joining(", ")) +
+                            ");");
+                    cf.endBlock("}");
+                    if (versionalType != null) {
+                        DataBeanPropertyBuilder actProperty =
+                                properties.values().stream().filter(p -> p.isVersionFrom).findAny().orElse(null);
+                        if (actProperty != null) {
+                            cf.println("");
+                            cf.startBlock("public " + actProperty.type + " getActualFrom_() {");
+                            cf.println("return " + actProperty.name + ";");
+                            cf.endBlock("}");
+                            cf.println("");
+                            DataBeanPropertyBuilder.printKnownXmlAdapters(cf, actProperty.type);
+                            cf.startBlock("public void setActualFrom_(" + actProperty.type + " dt) {");
+                            cf.println("" + actProperty.name + " = dt;");
+                            cf.endBlock("}");
+                        }
                         cf.println("");
-                        cf.startBlock("public " + actProperty.type + " getActualFrom_() {");
-                        cf.println("return " + actProperty.name + ";");
-                        cf.endBlock("}");
+                        cf.println("private " + versionalType + " dDataBeanActualAt_;");
                         cf.println("");
-                        DataBeanPropertyBuilder.printKnownXmlAdapters(cf, actProperty.type);
-                        cf.startBlock("public void setActualFrom_(" + actProperty.type + " dt) {");
-                        cf.println("" + actProperty.name + " = dt;");
-                        cf.endBlock("}");
+                        DataBeanPropertyBuilder.printKnownXmlAdapters(cf, versionalType);
+                        cf.println("public " + versionalType + " getDDataBeanActualAt_() {return dDataBeanActualAt_;}");
+                        cf.println("");
+                        cf.println("public void setDDataBeanActualAt_(" + versionalType + " value) {dDataBeanActualAt_=value;}");
                     }
-                    cf.println("");
-                    cf.println("private " + versionalType + " dDataBeanActualAt_;");
-                    cf.println("");
-                    DataBeanPropertyBuilder.printKnownXmlAdapters(cf, versionalType);
-                    cf.println("public " + versionalType + " getDDataBeanActualAt_() {return dDataBeanActualAt_;}");
-                    cf.println("");
-                    cf.println("public void setDDataBeanActualAt_(" + versionalType + " value) {dDataBeanActualAt_=value;}");
+                } else {
+                    cf.println("@javax.xml.bind.annotation.XmlTransient");
+                    cf.startBlock("final public " + keyType + " getDDataBeanKey_() {");
+                    Optional<DataBeanPropertyBuilder> idPropOpt = properties.values().stream().filter(p -> p.isId).findAny();
+                    if (idPropOpt.isPresent())
+                        cf.println("return " + idPropOpt.get().name + ";");
+                    else
+                        cf.println("return null;");
+                    cf.endBlock("}");
                 }
-            } else {
-                cf.println("@javax.xml.bind.annotation.XmlTransient");
-                cf.startBlock("final public " + keyType + " getDDataBeanKey_() {");
-                Optional<DataBeanPropertyBuilder> idPropOpt = properties.values().stream().filter(p -> p.isId).findAny();
-                if (idPropOpt.isPresent())
-                    cf.println("return " + idPropOpt.get().name + ";");
-                else
-                    cf.println("return null;");
-                cf.endBlock("}");
-            }
 
             for (DataBeanPropertyBuilder property : properties.values()) {
                 property.buildGetter(cf);
@@ -287,7 +362,21 @@ class DataBeanBuilder {
             cf.println("private int hash_;");
             //cf.println("@javax.xml.bind.annotation.XmlTransient");
             cf.startBlock("final public int hashCode() {");
-            cf.println("if(hash_ == 0) hash_ = getDDataBeanKey_().hashCode();");
+            if (prototype) {
+                cf.startBlock("if(hash_ == 0) {");
+                cf.println("int h = 0;");
+                for (DataBeanPropertyBuilder p : properties.values())
+                    if (p.isId)
+                        if (p.type.getKind().isPrimitive())
+                            cf.println("h += " +
+                                    environment.getTypeUtils().boxedClass((PrimitiveType) p.type).toString() +
+                                    ".hashCode(" + p.name + ");"
+                            );
+                        else cf.println("h += " + p.name + " == null ? 0 : " + p.name + ".hashCode();");
+                cf.println("hash_ = h;");
+                cf.endBlock("}");
+            } else
+                cf.println("if(hash_ == 0) hash_ = getDDataBeanKey_().hashCode();");
             cf.println("return hash_;");
             cf.endBlock("}");
 
@@ -330,6 +419,16 @@ class DataBeanBuilder {
             cf.println(notFirst ? "return r;" : "return 0;");
             cf.endBlock("}");
 
+            if (prototype) {
+                cf.startBlock("private int compare(Object o1, Object o2) {");
+                cf.println("if (o1 == null) return o2 == null ? 0 : -1;");
+                cf.println("if (o2 == null) return 1;");
+                cf.println("if (o1 instanceof java.lang.Comparable)");
+                cf.println("  return ((java.lang.Comparable) o1).compareTo(o2);");
+                cf.println("else return 0;");
+                cf.endBlock("}");
+            }
+
             cf.endBlock("}");
         }
     }
@@ -353,7 +452,6 @@ class DataBeanBuilder {
 
     void buildDataReferenceEnum(
             ProcessingEnvironment environment,
-            HashMap<String, DataBeanBuilder> beansByInterface,
             HashMap<String, Mapping> mappings
     ) throws IOException {
         String className = getImplementationName();
@@ -369,11 +467,13 @@ class DataBeanBuilder {
             cf.startBlock("public enum " + enumName + " implements org.docero.data.utils.DDataAttribute {");
 
             for (DataBeanPropertyBuilder property : properties.values())
-                property.buildEnumElementWithBeans(cf, beansByInterface, mappings, environment);
+                property.buildEnumElementWithBeans(cf, mappings, environment);
 
             cf.println("NONE_(null,null,null,null,false,false,false,null,null,false,null);");
             cf.println("");
-            cf.println("public final static String TABLE_NAME = \"" + schema + "." + table + "\";");
+            cf.println("public final static String TABLE_NAME = " + (prototype ?
+                    "null;" :
+                    "\"" + schema + "." + table + "\";"));
             cf.println("public final static Class<" + interfaceType + "> BEAN_INTERFACE = " + interfaceType + ".class;");
             cf.println("public final static " + interfaceType + "_WB_ DISCR_ATTR = " +
                     (discriminatorProperty == null ? "null" : discriminatorProperty.enumName) + ";");
@@ -556,108 +656,110 @@ class DataBeanBuilder {
         /*
             Build Fields Enumeration
         */
-        try (JavaClassWriter cf = new JavaClassWriter(environment, interfaceType + "_")) {
-            final String enumName = interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1) + "_";
-            cf.println("package " +
-                    className.substring(0, simpNameDel) + ";");
-            cf.startBlock("/*");
-            cf.println("Class generated by docero-data processor.");
-            cf.endBlock("*/");
-            cf.startBlock("public enum " + enumName + " implements org.docero.data.utils.DDataBasicAttribute {");
+        if (name != null)
+            try (JavaClassWriter cf = new JavaClassWriter(environment, interfaceType + "_")) {
+                final String enumName = interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1) + "_";
+                cf.println("package " +
+                        className.substring(0, simpNameDel) + ";");
+                cf.startBlock("/*");
+                cf.println("Class generated by docero-data processor.");
+                cf.endBlock("*/");
+                cf.startBlock("public enum " + enumName + " implements org.docero.data.utils.DDataBasicAttribute {");
 
-            for (DataBeanPropertyBuilder property : properties.values())
-                property.buildEnumElement(cf, beansByInterface, environment);
+                for (DataBeanPropertyBuilder property : properties.values())
+                    property.buildEnumElement(cf, beansByInterface, environment);
 
-            cf.println("NONE_(null,null,null,null,false,false,false,false);");
-            cf.println("public final static String TABLE_NAME = \"" + schema + "." + table + "\";");
-            cf.println("public final static Class<" + interfaceType + "> BEAN_INTERFACE = " + interfaceType + ".class;");
-            cf.println("private final String columnName;");
-            cf.println("private final String propertyName;");
-            cf.println("private final Class javaType;");
-            cf.println("private final String jdbcType;");
-            cf.println("private final boolean dictionary;");
-            cf.println("private final boolean mapped;");
-            cf.println("private final boolean collection;");
-            cf.println("private final boolean isPrimaryKey;");
-            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, boolean isPrimaryKey) {");
-            cf.println("this.columnName = columnName;");
-            cf.println("this.propertyName = propertyName;");
-            cf.println("this.javaType = javaType;");
-            cf.println("this.jdbcType = jdbcType;");
-            cf.println("this.dictionary = dictionary;");
-            cf.println("this.mapped = mapped;");
-            cf.println("this.collection = collection;");
-            cf.println("this.isPrimaryKey = isPrimaryKey;");
-            cf.endBlock("}");
-            cf.println("@Override public String getColumnName() {return columnName;}");
-            cf.println("@Override public String getPropertyName() {return propertyName;}");
-            cf.println("@Override public Class getJavaType() {return javaType;}");
-            cf.println("@Override public String getJdbcType() {return jdbcType;}");
-            cf.println("@Override public boolean isDictionary() {return dictionary;}");
-            cf.println("@Override public boolean isMappedBean() {return mapped;}");
-            cf.println("@Override public boolean isCollection() {return collection;}");
-            cf.println("@Override public boolean isPrimaryKey() {return isPrimaryKey;}");
-            cf.endBlock("}");
-        }
+                cf.println("NONE_(null,null,null,null,false,false,false,false);");
+                cf.println("public final static String TABLE_NAME = \"" + schema + "." + table + "\";");
+                cf.println("public final static Class<" + interfaceType + "> BEAN_INTERFACE = " + interfaceType + ".class;");
+                cf.println("private final String columnName;");
+                cf.println("private final String propertyName;");
+                cf.println("private final Class javaType;");
+                cf.println("private final String jdbcType;");
+                cf.println("private final boolean dictionary;");
+                cf.println("private final boolean mapped;");
+                cf.println("private final boolean collection;");
+                cf.println("private final boolean isPrimaryKey;");
+                cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, boolean isPrimaryKey) {");
+                cf.println("this.columnName = columnName;");
+                cf.println("this.propertyName = propertyName;");
+                cf.println("this.javaType = javaType;");
+                cf.println("this.jdbcType = jdbcType;");
+                cf.println("this.dictionary = dictionary;");
+                cf.println("this.mapped = mapped;");
+                cf.println("this.collection = collection;");
+                cf.println("this.isPrimaryKey = isPrimaryKey;");
+                cf.endBlock("}");
+                cf.println("@Override public String getColumnName() {return columnName;}");
+                cf.println("@Override public String getPropertyName() {return propertyName;}");
+                cf.println("@Override public Class getJavaType() {return javaType;}");
+                cf.println("@Override public String getJdbcType() {return jdbcType;}");
+                cf.println("@Override public boolean isDictionary() {return dictionary;}");
+                cf.println("@Override public boolean isMappedBean() {return mapped;}");
+                cf.println("@Override public boolean isCollection() {return collection;}");
+                cf.println("@Override public boolean isPrimaryKey() {return isPrimaryKey;}");
+                cf.endBlock("}");
+            }
         /*
             Build Mapping Annotation
         */
-        try (JavaClassWriter cf = new JavaClassWriter(environment, interfaceType + "_Map_")) {
-            final String annotName = interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1) + "_Map_";
-            cf.println("package " +
-                    className.substring(0, simpNameDel) + ";");
-            cf.startBlock("/*");
-            cf.println("Class generated by docero-data processor.");
-            cf.endBlock("*/");
-            cf.println("import java.lang.annotation.ElementType;");
-            cf.println("import java.lang.annotation.Retention;");
-            cf.println("import java.lang.annotation.RetentionPolicy;");
-            cf.println("import java.lang.annotation.Target;");
-            cf.println("@Retention(RetentionPolicy.SOURCE)");
-            cf.println("@Target({ElementType.METHOD,ElementType.FIELD})");
-            cf.startBlock("public @interface " + annotName + " {");
-            cf.println("/** Bean attribute used for mapping */");
-            cf.print(interfaceType + "_[] value()");
-            Optional<DataBeanPropertyBuilder> opt = properties.values().stream().filter(DataBeanPropertyBuilder::isId)
-                    .filter(p -> !p.isVersionFrom).findAny();
-            if (opt.isPresent()) {
-                cf.print(" default {" + interfaceType + "_." + opt.get().enumName + "}");
-            }
-            cf.println(";");
+        if (name != null)
+            try (JavaClassWriter cf = new JavaClassWriter(environment, interfaceType + "_Map_")) {
+                final String annotName = interfaceType.toString().substring(interfaceType.toString().lastIndexOf('.') + 1) + "_Map_";
+                cf.println("package " +
+                        className.substring(0, simpNameDel) + ";");
+                cf.startBlock("/*");
+                cf.println("Class generated by docero-data processor.");
+                cf.endBlock("*/");
+                cf.println("import java.lang.annotation.ElementType;");
+                cf.println("import java.lang.annotation.Retention;");
+                cf.println("import java.lang.annotation.RetentionPolicy;");
+                cf.println("import java.lang.annotation.Target;");
+                cf.println("@Retention(RetentionPolicy.SOURCE)");
+                cf.println("@Target({ElementType.METHOD,ElementType.FIELD})");
+                cf.startBlock("public @interface " + annotName + " {");
+                cf.println("/** Bean attribute used for mapping */");
+                cf.print(interfaceType + "_[] value()");
+                Optional<DataBeanPropertyBuilder> opt = properties.values().stream().filter(DataBeanPropertyBuilder::isId)
+                        .filter(p -> !p.isVersionFrom).findAny();
+                if (opt.isPresent()) {
+                    cf.print(" default {" + interfaceType + "_." + opt.get().enumName + "}");
+                }
+                cf.println(";");
 
-            cf.println("/** Use lazy load option in any method of data repositories */");
-            cf.println("boolean alwaysLazy() default false;");
-            cf.println("/** Mark implementation property as transient " +
-                    "(for ObjectOutputStream and XML serialization)" +
-                    "<p>Do not forget mark method with @JsonIgnore annotation if you don't really want it.</p>" +
-                    "*/");
-            cf.println("boolean markTransient() default false;");
-            cf.println("/** Function name used for remote beans mapping*/");
-            cf.println("String func() default \"\";");
+                cf.println("/** Use lazy load option in any method of data repositories */");
+                cf.println("boolean alwaysLazy() default false;");
+                cf.println("/** Mark implementation property as transient " +
+                        "(for ObjectOutputStream and XML serialization)" +
+                        "<p>Do not forget mark method with @JsonIgnore annotation if you don't really want it.</p>" +
+                        "*/");
+                cf.println("boolean markTransient() default false;");
+                cf.println("/** Function name used for remote beans mapping*/");
+                cf.println("String func() default \"\";");
 
-            for (DataBeanPropertyBuilder property : properties.values()) {
-                if (property.isCollection()) {
-                    List<? extends TypeMirror> typeParams =
-                            ((DeclaredType) property.type).getTypeArguments();
-                    if (typeParams.size() == 1) {
-                        TypeMirror et = environment.getTypeUtils().erasure(typeParams.get(0));
-                        DataBeanBuilder manType = beansByInterface.get(et.toString());
+                for (DataBeanPropertyBuilder property : properties.values()) {
+                    if (property.isCollection()) {
+                        List<? extends TypeMirror> typeParams =
+                                ((DeclaredType) property.type).getTypeArguments();
+                        if (typeParams.size() == 1) {
+                            TypeMirror et = environment.getTypeUtils().erasure(typeParams.get(0));
+                            DataBeanBuilder manType = beansByInterface.get(et.toString());
+                            if (manType != null) {
+                                cf.println("/** */");
+                                cf.println(manType.interfaceType + "_[] " + property.name + "() default {};");
+                            }
+                        }
+                    } else {
+                        DataBeanBuilder manType = beansByInterface.get(property.type.toString());
                         if (manType != null) {
                             cf.println("/** */");
                             cf.println(manType.interfaceType + "_[] " + property.name + "() default {};");
                         }
                     }
-                } else {
-                    DataBeanBuilder manType = beansByInterface.get(property.type.toString());
-                    if (manType != null) {
-                        cf.println("/** */");
-                        cf.println(manType.interfaceType + "_[] " + property.name + "() default {};");
-                    }
                 }
-            }
 
-            cf.endBlock("}");
-        }
+                cf.endBlock("}");
+            }
     }
 
     static String dateNowFrom(TypeMirror versionalType) {

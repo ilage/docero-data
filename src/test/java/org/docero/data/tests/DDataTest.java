@@ -9,6 +9,7 @@ import org.docero.data.repositories.CompositeKeyRepository;
 import org.docero.data.repositories.MultiTypesRepository;
 import org.docero.data.repositories.SampleRepository;
 import org.docero.data.repositories.VersionalSampleRepository;
+import org.docero.data.rmt.Remote_WB_;
 import org.docero.data.utils.*;
 import org.docero.data.view.*;
 import org.junit.Test;
@@ -213,6 +214,9 @@ public class DDataTest {
             add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             DDataFilter iCols = new DDataFilter(Sample_WB_.INNER);
             iCols.add(new DDataFilter(Inner_WB_.TEXT));
+            add(new DDataFilter(Sample_WB_.REMOTE_BEAN){{
+                //add(new DDataFilter(Remote_WB_.NAME));
+            }});
             add(iCols);
         }});
         view.setFilter(new DDataFilter() {{

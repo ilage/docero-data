@@ -1,6 +1,6 @@
 package org.docero.data.rmt;
 
-import org.docero.data.DDataRemoteRepository;
+import org.docero.data.remote.DDataRemoteRepository;
 
 import javax.jws.WebMethod;
 

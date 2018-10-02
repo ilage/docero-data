@@ -1,4 +1,4 @@
-package org.docero.data;
+package org.docero.data.remote;
 
 import java.io.Serializable;
 

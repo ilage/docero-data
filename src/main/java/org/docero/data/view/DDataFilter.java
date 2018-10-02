@@ -17,6 +17,7 @@ public class DDataFilter {
     private final DDataFilterOperator operator;
     private final Object value;
     private final Object valueTo;
+    private final boolean externalData;
 
     private final List<DDataFilter> filters;
 
@@ -126,6 +127,7 @@ public class DDataFilter {
         filters = new ArrayList<>();
         operator = null;
         value = null;
+        externalData = false;
         valueTo = null;
         attribute = ROOT_FILTER;
     }
@@ -176,13 +178,15 @@ public class DDataFilter {
             throw new DDataException("can't create filter for NULL");
 
         this.attribute = column;
-        if (column.isMappedBean() && attribute.getJavaType().isEnum()) {
+        if (attribute.isMappedBean()) {
             filters = new ArrayList<>();
+            this.externalData = !attribute.getJavaType().isEnum();
             this.operator = operator;
             this.value = value;
             this.valueTo = valueTo;
         } else {
             filters = null;
+            this.externalData = false;
             this.operator = operator;
             this.value = value;
             this.valueTo = valueTo;
@@ -220,7 +224,7 @@ public class DDataFilter {
                 if (field.isEnumConstant()) {
                     @SuppressWarnings("unchecked")
                     DDataAttribute atr = (DDataAttribute) Enum.valueOf((Class<? extends Enum>) attribute.getJavaType(), field.getName());
-                    if (atr.getColumnName().equals(filter.attribute.getColumnName())) {
+                    if (atr.getPropertyName() != null && atr.getPropertyName().equals(filter.attribute.getPropertyName())) {
                         this.filters.add(filter);
                         return this;
                     }
@@ -230,6 +234,10 @@ public class DDataFilter {
 
     public DDataAttribute getAttribute() {
         return attribute;
+    }
+
+    public boolean isExternalData() {
+        return externalData;
     }
 
     public DDataFilterOperator getOperator() {

@@ -84,7 +84,7 @@ abstract class AbstractDataView {
         // mapped beans
         for (DDataFilter column : columns) {
             DDataAttribute attribute = column.getAttribute();
-            if (attribute != null && attribute.isMappedBean()) {
+            if (attribute != null && attribute.isMappedBean() && !column.isExternalData()) {
                 String nameInPath = column.getMapName();
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
                 TableEntity entity = new TableEntity(parent, cp, column);

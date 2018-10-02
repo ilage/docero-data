@@ -80,9 +80,9 @@ class DataRepositoryBuilder {
                     .map(t -> rootBuilder.beansByInterface.get(t.toString()))
                     .map(DataBeanBuilder::getImplementationName)
                     .toArray(String[]::new);
-            if (bean == null) {
+            if (bean == null && rootBuilder.prototypesByClass.get(forInterfaceName.toString()) == null) {
                 // if bean was not created by any extending beans (not single interface in declaration)
-                bean = new DataBeanBuilder(
+                bean = DataBeanBuilder.buildEntity(
                         rootBuilder.environment.getElementUtils().getTypeElement(forInterfaceName.toString()),
                         rootBuilder,
                         rootBuilder.beansByInterface.get(forMultiplyInterfaces.get(0).toString()));

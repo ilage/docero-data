@@ -1,4 +1,6 @@
-package org.docero.data;
+package org.docero.data.remote;
+
+import org.docero.data.DictionaryType;
 
 import java.io.Serializable;
 import java.util.List;

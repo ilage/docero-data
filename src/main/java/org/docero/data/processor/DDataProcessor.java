@@ -1,12 +1,14 @@
 package org.docero.data.processor;
 
+import org.atteo.classindex.ClassIndex;
 import org.docero.data.DDataBean;
 import org.docero.data.DDataRep;
+import org.docero.data.remote.DDataPrototype;
+import org.docero.data.remote.DDataPrototypeRealization;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
-import javax.lang.model.type.TypeMirror;
 import java.util.HashMap;
 import java.util.Set;
 
@@ -46,13 +48,23 @@ public class DDataProcessor extends AbstractProcessor {
                 case STEP1_ENUM_GEN:
                     builder.checkBasePackage(roundEnv);
 
+                    for (Class<?> cProto : ClassIndex.getAnnotated(DDataPrototypeRealization.class))
+                        builder.checkPrototypeClass(cProto);
+                    for (Element element : roundEnv.getElementsAnnotatedWith(DDataPrototypeRealization.class))
+                        builder.checkPrototypeClass((TypeElement) element);
+
+                    Set<? extends Element> prototypes = roundEnv.getElementsAnnotatedWith(DDataPrototype.class);
+                    for (Element beanElement : prototypes)
+                        if (beanElement.getEnclosingElement().getKind() == ElementKind.PACKAGE)
+                            builder.checkInterface((TypeElement) beanElement, true);
+
                     Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
                     for (Element beanElement : entities)
                         if (beanElement.getEnclosingElement().getKind() != ElementKind.PACKAGE)
                             builder.checkDGenInterface((TypeElement) beanElement);
                     for (Element beanElement : entities)
                         if (beanElement.getEnclosingElement().getKind() == ElementKind.PACKAGE)
-                            builder.checkInterface((TypeElement) beanElement);
+                            builder.checkInterface((TypeElement) beanElement, false);
 
                     builder.generateBeansAnnotations();
 
@@ -77,7 +89,8 @@ public class DDataProcessor extends AbstractProcessor {
                     break;
                 case STEP3_MAPS_GEN:
                     if (new DDataMapBuilder(builder, this.processingEnv).build(listClasses())) {
-                        builder.buildDataReferenceEnums();
+                        builder.buildDataReferenceEnums(builder.prototypesToGenerate);
+                        builder.buildDataReferenceEnums(builder.beansByInterface.values());
                         stage = Stage.STEP_END;
                     }
                     break;

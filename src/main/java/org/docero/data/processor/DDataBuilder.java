@@ -20,6 +20,8 @@ import java.util.stream.Collectors;
 class DDataBuilder {
     final ProcessingEnvironment environment;
     final HashMap<String, DataBeanBuilder> beansByInterface = new HashMap<>();
+    final HashMap<String, DataBeanBuilder> prototypesByClass = new HashMap<>();
+    final ArrayList<DataBeanBuilder> prototypesToGenerate = new ArrayList<>();
     final HashMap<String, DGenClass> dGenInterface = new HashMap<>();
     final ArrayList<DataRepositoryBuilder> repositories = new ArrayList<>();
     final ArrayList<BatchRepositoryBuilder> batchRepositories = new ArrayList<>();
@@ -75,12 +77,46 @@ class DDataBuilder {
         System.err.println("DDataProcessor Exception: " + message);
     }
 
-    void checkInterface(TypeElement beanElement) {
+    void checkPrototypeClass(Class<?> pClass) {
+        try {
+            TypeElement beanElement = environment.getElementUtils().getTypeElement(
+                    pClass.getInterfaces()[0].getCanonicalName()
+            );
+            prototypesByClass.put(pClass.getCanonicalName(),
+                    DataBeanBuilder.buildPrototype(beanElement, this));
+        } catch (Exception e) {
+            logError("error processing " + pClass);
+            throw e;
+        }
+    }
+
+    /**
+     * works only in this project, allows test bean implementations marked as DDataPrototypeRealization
+     */
+    void checkPrototypeClass(TypeElement implElement) {
+        try {
+            //String typeName = implElement.asType().toString();
+            //packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
+            TypeElement beanElement = environment.getElementUtils().getTypeElement(
+                    implElement.getInterfaces().get(0).toString()
+            );
+            DataBeanBuilder value = DataBeanBuilder.buildPrototype(beanElement, this);
+            prototypesByClass.put(implElement.asType().toString(), value);
+        } catch (Exception e) {
+            logError("error processing " + implElement);
+            throw e;
+        }
+    }
+
+    void checkInterface(TypeElement beanElement, boolean isPrototype) {
         try {
             String typeName = beanElement.asType().toString();
             packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-            DataBeanBuilder value = new DataBeanBuilder(beanElement, this);
-            beansByInterface.put(value.interfaceType.toString(), value);
+            DataBeanBuilder value = isPrototype ?
+                    DataBeanBuilder.buildPrototype(beanElement, this) :
+                    DataBeanBuilder.buildEntity(beanElement, this);
+            if (isPrototype) prototypesToGenerate.add(value);
+            else beansByInterface.put(value.interfaceType.toString(), value);
         } catch (Exception e) {
             logError("error processing " + beanElement);
             throw e;
@@ -192,9 +228,8 @@ class DDataBuilder {
             cf.endBlock("}");
         }
 
-        for (DataBeanBuilder bean : beansByInterface.values()) {
-            bean.buildImplementation(environment);
-        }
+        for (DataBeanBuilder bean : beansByInterface.values()) bean.buildImplementation(environment);
+        for (DataBeanBuilder bean : prototypesToGenerate) bean.buildImplementation(environment);
     }
 
     void generateDdata() throws IOException {
@@ -275,7 +310,7 @@ class DDataBuilder {
             cf.println("for(Class<? extends T> type : types) dictionariesService.register(type, repository);");
             cf.endBlock("}");
             cf.println("");
-            cf.startBlock("static <T extends java.io.Serializable, C extends java.io.Serializable> void registerRemote(org.docero.data.DDataRemoteRepository<T, C> repository, Class<T> type) {");
+            cf.startBlock("static <T extends java.io.Serializable, C extends java.io.Serializable> void registerRemote(org.docero.data.remote.DDataRemoteRepository<T, C> repository, Class<T> type) {");
             cf.println("dictionariesService.register(type, repository);");
             cf.endBlock("}");
             cf.println("");
@@ -408,10 +443,10 @@ class DDataBuilder {
         return "";
     }
 
-    void buildDataReferenceEnums() throws IOException {
-        for (DataBeanBuilder dataBeanBuilder : beansByInterface.values())
+    void buildDataReferenceEnums(Collection<DataBeanBuilder> col) throws IOException {
+        for (DataBeanBuilder dataBeanBuilder : col)
             try {
-                dataBeanBuilder.buildDataReferenceEnum(environment, beansByInterface, mappings);
+                dataBeanBuilder.buildDataReferenceEnum(environment, mappings);
             } catch (Exception e) {
                 logError("error build enums for " + dataBeanBuilder.interfaceType);
                 throw e;

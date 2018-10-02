@@ -2,9 +2,7 @@ package org.docero.data.beans;
 
 import org.docero.data.DDataBean;
 import org.docero.data.DDataProperty;
-import org.docero.data.rmt.RBean;
 import org.docero.data.rmt.RemoteBean;
-import org.docero.data.tests.TestsConfig;
 
 import java.util.List;
 
@@ -34,7 +32,7 @@ public interface Sample extends SampleTable {
     /**
      * @return unknown for ddata library property generated with simple getter and setter
      */
-    TestsConfig getAbstraction();
+    /*List<RemoteBean> getAbstraction();
 
-    void setAbstraction(TestsConfig i);
+    void setAbstraction(List<RemoteBean> i);*/
 }
