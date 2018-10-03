@@ -1,5 +1,6 @@
 package org.docero.data.view;
 
+import org.docero.data.remote.DDataPrototypeRealization;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
 
@@ -180,7 +181,7 @@ public class DDataFilter {
         this.attribute = column;
         if (attribute.isMappedBean()) {
             filters = new ArrayList<>();
-            this.externalData = !attribute.getJavaType().isEnum();
+            this.externalData = attribute.getBeanInterface().isAnnotationPresent(DDataPrototypeRealization.class);
             this.operator = operator;
             this.value = value;
             this.valueTo = valueTo;

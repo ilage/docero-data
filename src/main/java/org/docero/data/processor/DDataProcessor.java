@@ -1,10 +1,8 @@
 package org.docero.data.processor;
 
-import org.atteo.classindex.ClassIndex;
 import org.docero.data.DDataBean;
 import org.docero.data.DDataRep;
 import org.docero.data.remote.DDataPrototype;
-import org.docero.data.remote.DDataPrototypeRealization;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
@@ -18,6 +16,7 @@ import java.util.Set;
  * Created by i.vasyashin on 01.09.2017.
  */
 @SupportedAnnotationTypes({
+        "org.docero.data.remote.DDataPrototype",
         "org.docero.data.DDataBean",
         "org.docero.data.DDataRep"
 })
@@ -47,11 +46,6 @@ public class DDataProcessor extends AbstractProcessor {
             switch (stage) {
                 case STEP1_ENUM_GEN:
                     builder.checkBasePackage(roundEnv);
-
-                    for (Class<?> cProto : ClassIndex.getAnnotated(DDataPrototypeRealization.class))
-                        builder.checkPrototypeClass(cProto);
-                    for (Element element : roundEnv.getElementsAnnotatedWith(DDataPrototypeRealization.class))
-                        builder.checkPrototypeClass((TypeElement) element);
 
                     Set<? extends Element> prototypes = roundEnv.getElementsAnnotatedWith(DDataPrototype.class);
                     for (Element beanElement : prototypes)

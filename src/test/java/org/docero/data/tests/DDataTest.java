@@ -215,7 +215,7 @@ public class DDataTest {
             DDataFilter iCols = new DDataFilter(Sample_WB_.INNER);
             iCols.add(new DDataFilter(Inner_WB_.TEXT));
             add(new DDataFilter(Sample_WB_.REMOTE_BEAN){{
-                //add(new DDataFilter(Remote_WB_.NAME));
+                add(new DDataFilter(Remote_WB_.NAME));
             }});
             add(iCols);
         }});

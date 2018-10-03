@@ -1,10 +1,13 @@
 package org.docero.data.remote;
 
-import java.io.Serializable;
+import javax.jws.WebMethod;
+import javax.jws.WebParam;
+import javax.xml.bind.annotation.XmlTransient;
 
-public interface DDataRemoteRepository<T extends Serializable, C extends Serializable> {
-    T get(C id);
-    T insert(T bean);
-    T update(T bean);
-    void delete(C id);
+@XmlTransient
+public interface DDataRemoteRepository<T, C> {
+    @WebMethod T get(@WebParam C id);
+    @WebMethod T insert(T bean);
+    @WebMethod T update(T bean);
+    @WebMethod void delete(@WebParam C id);
 }

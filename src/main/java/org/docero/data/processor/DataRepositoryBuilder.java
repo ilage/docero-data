@@ -4,6 +4,7 @@ import org.docero.data.DDataRep;
 import org.docero.data.DDataRepository;
 import org.docero.data.DDataVersionalRepository;
 import org.docero.data.DictionaryType;
+import org.docero.data.remote.DDataPrototypeRealization;
 import org.docero.data.utils.DDataDictionary;
 
 import javax.annotation.processing.ProcessingEnvironment;
@@ -80,10 +81,11 @@ class DataRepositoryBuilder {
                     .map(t -> rootBuilder.beansByInterface.get(t.toString()))
                     .map(DataBeanBuilder::getImplementationName)
                     .toArray(String[]::new);
-            if (bean == null && rootBuilder.prototypesByClass.get(forInterfaceName.toString()) == null) {
+            TypeElement mte = rootBuilder.environment.getElementUtils().getTypeElement(forInterfaceName.toString());
+            if (bean == null && mte!=null && mte.getAnnotation(DDataPrototypeRealization.class) == null) {
                 // if bean was not created by any extending beans (not single interface in declaration)
                 bean = DataBeanBuilder.buildEntity(
-                        rootBuilder.environment.getElementUtils().getTypeElement(forInterfaceName.toString()),
+                        mte,
                         rootBuilder,
                         rootBuilder.beansByInterface.get(forMultiplyInterfaces.get(0).toString()));
                 rootBuilder.beansByInterface.put(forInterfaceName.toString(), bean);

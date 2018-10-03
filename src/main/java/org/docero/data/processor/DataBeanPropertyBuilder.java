@@ -4,11 +4,13 @@ import org.docero.data.DDataProperty;
 import org.docero.data.DictionaryType;
 import org.docero.data.GeneratedValue;
 import org.docero.data.GenerationType;
+import org.docero.data.remote.DDataPrototypeRealization;
 import org.docero.dgen.processor.DGenProperty;
 
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
@@ -307,14 +309,9 @@ class DataBeanPropertyBuilder {
                 ((DeclaredType) type).getTypeArguments().get(0) : type);
         DataBeanBuilder manType = dataBean.rootBuilder.beansByInterface.get(typeErasure.toString());
         if (manType == null) {
-            DataBeanBuilder pi = dataBean.rootBuilder.prototypesByClass.get(mappedType.toString());
-            if (pi == null) pi = dataBean.rootBuilder.environment.getTypeUtils()
-                    .directSupertypes(mappedType).stream()
-                    .map(dst -> dataBean.rootBuilder.prototypesByClass.get(dst.toString()))
-                    .filter(Objects::nonNull).findAny().orElse(null);
-
+            TypeElement mte = dataBean.rootBuilder.environment.getElementUtils().getTypeElement(mappedType.toString());
             cf.println("/** Value of column " + this.columnName + "*/");
-            if (pi == null)
+            if (mte==null || mte.getAnnotation(DDataPrototypeRealization.class)==null)
                 cf.println(this.enumName + "(" +
                         (this.columnName == null ? "null" : "\"" + this.columnName + "\"") +
                         ",\"" +
@@ -326,9 +323,13 @@ class DataBeanPropertyBuilder {
                         ", null, null," + this.isId + ", null),");
             else {
                 Mapping map = mappings.get(dataBean.interfaceType.toString() + "." + this.name);
+                String protoPkg = mte.getEnclosingElement().toString();
+                TypeMirror protoType = mte.getInterfaces().stream()
+                        .filter(t -> t.toString().startsWith(protoPkg))
+                        .findAny().orElse(null);
                 cf.println(this.enumName + "(null,\"" +
                         this.name + "\"," +
-                        pi.interfaceType + "_WB_.class,\"" +
+                        protoType + "_WB_.class,\"" +
                         (this.isSimple() ? "" : "ARRAY") +
                         "\",false/*is dictionary*/, true" + ", " + this.isCollection +
                         ",null, new java.util.HashMap<String, String>(){{" +

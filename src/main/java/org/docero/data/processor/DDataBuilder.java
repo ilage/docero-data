@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 class DDataBuilder {
     final ProcessingEnvironment environment;
     final HashMap<String, DataBeanBuilder> beansByInterface = new HashMap<>();
-    final HashMap<String, DataBeanBuilder> prototypesByClass = new HashMap<>();
     final ArrayList<DataBeanBuilder> prototypesToGenerate = new ArrayList<>();
     final HashMap<String, DGenClass> dGenInterface = new HashMap<>();
     final ArrayList<DataRepositoryBuilder> repositories = new ArrayList<>();
@@ -75,37 +74,6 @@ class DDataBuilder {
     void logError(String message) {
         environment.getMessager().printMessage(Diagnostic.Kind.ERROR, message);
         System.err.println("DDataProcessor Exception: " + message);
-    }
-
-    void checkPrototypeClass(Class<?> pClass) {
-        try {
-            TypeElement beanElement = environment.getElementUtils().getTypeElement(
-                    pClass.getInterfaces()[0].getCanonicalName()
-            );
-            prototypesByClass.put(pClass.getCanonicalName(),
-                    DataBeanBuilder.buildPrototype(beanElement, this));
-        } catch (Exception e) {
-            logError("error processing " + pClass);
-            throw e;
-        }
-    }
-
-    /**
-     * works only in this project, allows test bean implementations marked as DDataPrototypeRealization
-     */
-    void checkPrototypeClass(TypeElement implElement) {
-        try {
-            //String typeName = implElement.asType().toString();
-            //packages.add(typeName.substring(0, typeName.lastIndexOf('.')));
-            TypeElement beanElement = environment.getElementUtils().getTypeElement(
-                    implElement.getInterfaces().get(0).toString()
-            );
-            DataBeanBuilder value = DataBeanBuilder.buildPrototype(beanElement, this);
-            prototypesByClass.put(implElement.asType().toString(), value);
-        } catch (Exception e) {
-            logError("error processing " + implElement);
-            throw e;
-        }
     }
 
     void checkInterface(TypeElement beanElement, boolean isPrototype) {
@@ -174,6 +142,10 @@ class DDataBuilder {
     }
 
     void generateImplementation() throws IOException {
+        for (DataBeanBuilder bean : prototypesToGenerate) bean.buildImplementation(environment);
+
+        if(beansByInterface.isEmpty()) return;
+
         try (JavaClassWriter cf = new JavaClassWriter(environment, basePackage + ".AbstractBean")) {
             cf.println("package " + basePackage + ";");
             cf.startBlock("/*");
@@ -229,7 +201,6 @@ class DDataBuilder {
         }
 
         for (DataBeanBuilder bean : beansByInterface.values()) bean.buildImplementation(environment);
-        for (DataBeanBuilder bean : prototypesToGenerate) bean.buildImplementation(environment);
     }
 
     void generateDdata() throws IOException {
@@ -244,6 +215,8 @@ class DDataBuilder {
         for (BatchRepositoryBuilder batchRepository : batchRepositories) {
             batchRepository.generate();
         }
+
+        if(beansByInterface.isEmpty()) return;
 
         try (JavaClassWriter cf = new JavaClassWriter(environment, basePackage + ".DDataObjectFactory")) {
             cf.println("package " + basePackage + ";");
