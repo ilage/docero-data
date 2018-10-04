@@ -10,10 +10,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.*;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -79,9 +76,13 @@ public class TestsConfig {
 
         new MyBatisSpringConfigurationFactory().setApplicationContext(context);
 
-        RemoteRepository remote = new RemoteRepositoryImpl();
-        DData.registerRemote(remote, RemoteBean.class);
-
         return bean;
+    }
+
+    @DependsOn("dData")
+    @Bean
+    public RemoteRepository remoteRepository() {
+        RemoteRepository remote = new RemoteRepositoryImpl();
+        return DData.registerRemote(remote, RemoteBean.class);
     }
 }

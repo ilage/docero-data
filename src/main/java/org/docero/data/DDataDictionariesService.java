@@ -1,6 +1,7 @@
 package org.docero.data;
 
 import org.apache.ibatis.session.SqlSession;
+import org.docero.data.remote.CachingRemoteRepository;
 import org.docero.data.remote.DDataRemoteDictionary;
 import org.docero.data.remote.DDataRemoteRepository;
 import org.docero.data.utils.DDataDictionary;
@@ -8,6 +9,7 @@ import org.docero.data.utils.DDataDictionary;
 import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,9 +60,18 @@ public class DDataDictionariesService {
      *
      * @param type       - class of bean implemetation
      * @param repository - remote repository
+     * @return caching proxy for remote repository access
      */
-    public <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRemoteRepository<T, C> repository) {
-        repositories.put(type, repository);
+    @SuppressWarnings("unchecked")
+    public <T extends Serializable, C extends Serializable, R extends DDataRemoteRepository<T, C>>
+    R register(Class<? extends T> type, R repository) {
+        R proxy = (R) Proxy.newProxyInstance(
+                CachingRemoteRepository.class.getClassLoader(),
+                repository.getClass().getInterfaces(),
+                new CachingRemoteRepository(repository, type)
+        );
+        repositories.put(type, proxy);
+        return proxy;
     }
 
     /**
@@ -77,7 +88,7 @@ public class DDataDictionariesService {
         return d instanceof DDataRepository ?
                 ((DDataRepository<T, C>) d).get(key) :
                 (d instanceof DDataRemoteRepository ?
-                        get((DDataRemoteRepository<T, C>) d, null, new Object[]{key}) :
+                        callRemote((DDataRemoteRepository<T, C>) d, null, new Object[]{key}) :
                         null);
     }
 
@@ -94,12 +105,12 @@ public class DDataDictionariesService {
         if (args == null) return null;
         Object d = repositories.get(type);
         if (d != null && d instanceof DDataRemoteRepository)
-            return get((DDataRemoteRepository<T, C>) d, func, args);
+            return callRemote((DDataRemoteRepository<T, C>) d, func, args);
         return null;
     }
 
     @SuppressWarnings("unchecked")
-    private <T extends Serializable, C extends Serializable> T get(
+    private <T extends Serializable, C extends Serializable> T callRemote(
             DDataRemoteRepository<T, C> rr, String func, Object[] args
     ) {
         Class<?>[] pc = new Class<?>[args.length];
