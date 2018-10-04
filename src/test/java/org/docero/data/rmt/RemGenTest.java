@@ -9,6 +9,10 @@ public interface RemGenTest {
     int getId();
     void setId(int v);
 
+    @DDataPrototypeId
+    long getBeanId();
+    void setBeanId(long v);
+
     String getName();
     void setName(String v);
 

@@ -122,7 +122,9 @@ class DDataBuilder {
     }
 
     void generateBeansAnnotations() throws IOException {
-        for (DataBeanBuilder bean : beansByInterface.values())
+        ArrayList<DataBeanBuilder> beans = new ArrayList<>(beansByInterface.values());
+        beans.addAll(prototypesToGenerate);
+        for (DataBeanBuilder bean : beans)
             try {
                 bean.buildAnnotationsAndEnums(environment, beansByInterface);
             } catch (Exception e) {

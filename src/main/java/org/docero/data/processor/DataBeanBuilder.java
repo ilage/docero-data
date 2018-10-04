@@ -1,6 +1,7 @@
 package org.docero.data.processor;
 
 import org.docero.data.*;
+import org.docero.data.remote.DDataPrototype;
 import org.docero.data.remote.DDataPrototypeId;
 import org.docero.dgen.processor.DGenClass;
 
@@ -36,6 +37,7 @@ class DataBeanBuilder {
     final DataBeanPropertyBuilder discriminatorProperty;
     final boolean abstractBean;
     final boolean prototype;
+    private final TypeMirror prototypeExtention;
 
     static DataBeanBuilder buildEntity(
             TypeElement beanElement, DDataBuilder builder, DataBeanBuilder discriminatedBean
@@ -62,6 +64,7 @@ class DataBeanBuilder {
         rootBuilder = builder;
         interfaceType = (beanElement.asType());
         prototype = true;
+        prototypeExtention = null;
         schema = null;
         table = null;
         name = null;
@@ -84,24 +87,22 @@ class DataBeanBuilder {
             }
         discriminatorProperty = null;
         discriminatorValue = null;
+        versionalType = null;
 
         List<DataBeanPropertyBuilder> ids = properties.values().stream()
                 .filter(p -> p.isId)
                 .collect(Collectors.toList());
-        isKeyComposite = false;
         if (ids.size() == 1) {
+            isKeyComposite = false;
             keyType = ids.get(0).type.getKind().isPrimitive() ?
                     builder.environment.getTypeUtils().boxedClass((PrimitiveType) ids.get(0).type).toString() :
                     ids.get(0).type.toString();
             inversionalKey = keyType;
         } else {
-            List<DataBeanPropertyBuilder> iids = properties.values().stream()
-                    .filter(p -> p.isId && !p.isVersionFrom)
-                    .collect(Collectors.toList());
-            keyType = null;
-            inversionalKey = null;
+            isKeyComposite = true;
+            keyType = interfaceType + "_Key_";
+            inversionalKey = keyType;
         }
-        versionalType = null;
         xmlNamespace = null;
     }
 
@@ -115,6 +116,7 @@ class DataBeanBuilder {
         interfaceType = (beanElement.asType());
         prototype = false;
 
+        TypeMirror prototypeInterface = null;
         DGenClass dGen;
         for (TypeMirror typeMirror : beanElement.getInterfaces()) {
             String key = typeMirror.toString();
@@ -131,7 +133,10 @@ class DataBeanBuilder {
                 });
                 break;
             }
+            if (typeMirror.getAnnotation(DDataPrototype.class) != null)
+                prototypeInterface = typeMirror;
         }
+        prototypeExtention = prototypeInterface;
 
         DDataBean ddBean = beanElement.getAnnotation(DDataBean.class);
         if (ddBean != null) {
@@ -309,49 +314,49 @@ class DataBeanBuilder {
             }
 
             cf.println("");
-            if (!prototype)
-                if (isKeyComposite) {
+            if (isKeyComposite) {
+                if (!prototype && prototypeExtention == null)
                     cf.println("@javax.xml.bind.annotation.XmlTransient");
-                    cf.startBlock("public " + keyType + " getDDataBeanKey_() {");
-                    cf.println("return new " + keyType + "(" +
-                            properties.values().stream()
-                                    .filter(p -> p.isId)
-                                    .map(p -> p.name).sorted()
-                                    .collect(Collectors.joining(", ")) +
-                            ");");
-                    cf.endBlock("}");
-                    if (versionalType != null) {
-                        DataBeanPropertyBuilder actProperty =
-                                properties.values().stream().filter(p -> p.isVersionFrom).findAny().orElse(null);
-                        if (actProperty != null) {
-                            cf.println("");
-                            cf.startBlock("public " + actProperty.type + " getActualFrom_() {");
-                            cf.println("return " + actProperty.name + ";");
-                            cf.endBlock("}");
-                            cf.println("");
-                            DataBeanPropertyBuilder.printKnownXmlAdapters(cf, actProperty.type);
-                            cf.startBlock("public void setActualFrom_(" + actProperty.type + " dt) {");
-                            cf.println("" + actProperty.name + " = dt;");
-                            cf.endBlock("}");
-                        }
+                cf.startBlock("public " + keyType + " getDDataBeanKey_() {");
+                cf.println("return new " + keyType + "(" +
+                        properties.values().stream()
+                                .filter(p -> p.isId)
+                                .map(p -> p.name).sorted()
+                                .collect(Collectors.joining(", ")) +
+                        ");");
+                cf.endBlock("}");
+                if (versionalType != null) {
+                    DataBeanPropertyBuilder actProperty =
+                            properties.values().stream().filter(p -> p.isVersionFrom).findAny().orElse(null);
+                    if (actProperty != null) {
                         cf.println("");
-                        cf.println("private " + versionalType + " dDataBeanActualAt_;");
+                        cf.startBlock("public " + actProperty.type + " getActualFrom_() {");
+                        cf.println("return " + actProperty.name + ";");
+                        cf.endBlock("}");
                         cf.println("");
-                        DataBeanPropertyBuilder.printKnownXmlAdapters(cf, versionalType);
-                        cf.println("public " + versionalType + " getDDataBeanActualAt_() {return dDataBeanActualAt_;}");
-                        cf.println("");
-                        cf.println("public void setDDataBeanActualAt_(" + versionalType + " value) {dDataBeanActualAt_=value;}");
+                        DataBeanPropertyBuilder.printKnownXmlAdapters(cf, actProperty.type);
+                        cf.startBlock("public void setActualFrom_(" + actProperty.type + " dt) {");
+                        cf.println("" + actProperty.name + " = dt;");
+                        cf.endBlock("}");
                     }
-                } else {
-                    cf.println("@javax.xml.bind.annotation.XmlTransient");
-                    cf.startBlock("final public " + keyType + " getDDataBeanKey_() {");
-                    Optional<DataBeanPropertyBuilder> idPropOpt = properties.values().stream().filter(p -> p.isId).findAny();
-                    if (idPropOpt.isPresent())
-                        cf.println("return " + idPropOpt.get().name + ";");
-                    else
-                        cf.println("return null;");
-                    cf.endBlock("}");
+                    cf.println("");
+                    cf.println("private " + versionalType + " dDataBeanActualAt_;");
+                    cf.println("");
+                    DataBeanPropertyBuilder.printKnownXmlAdapters(cf, versionalType);
+                    cf.println("public " + versionalType + " getDDataBeanActualAt_() {return dDataBeanActualAt_;}");
+                    cf.println("");
+                    cf.println("public void setDDataBeanActualAt_(" + versionalType + " value) {dDataBeanActualAt_=value;}");
                 }
+            } else {
+                cf.println("@javax.xml.bind.annotation.XmlTransient");
+                cf.startBlock("final public " + keyType + " getDDataBeanKey_() {");
+                Optional<DataBeanPropertyBuilder> idPropOpt = properties.values().stream().filter(p -> p.isId).findAny();
+                if (idPropOpt.isPresent())
+                    cf.println("return " + idPropOpt.get().name + ";");
+                else
+                    cf.println("return null;");
+                cf.endBlock("}");
+            }
 
             for (DataBeanPropertyBuilder property : properties.values()) {
                 property.buildGetter(cf);
@@ -568,60 +573,76 @@ class DataBeanBuilder {
             }
 
         if (isKeyComposite)
-            try (JavaClassWriter cf = new JavaClassWriter(environment, keyType)) {
-                cf.println("package " +
-                        className.substring(0, simpNameDel) + ";");
-                cf.startBlock("/*");
-                cf.println("Class generated by docero-data processor.");
-                cf.endBlock("*/");
-                cf.startBlock("public class " + keyType.substring(simpNameDel + 1) + " implements java.io.Serializable {");
-                List<DataBeanPropertyBuilder> ids = properties.values().stream()
-                        .filter(p -> p.isId)
-                        .sorted(Comparator.comparing(p -> p.name))
-                        .collect(Collectors.toList());
-                for (DataBeanPropertyBuilder property : ids) {
-                    cf.println("private final " + property.type + " " + property.name + ";");
-                    cf.println("public " + property.type + " get" +
-                            Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
-                            "() { return " + property.name + "; }");
+            if (prototype || prototypeExtention == null)
+                try (JavaClassWriter cf = new JavaClassWriter(environment, keyType)) {
+                    cf.println("package " +
+                            className.substring(0, simpNameDel) + ";");
+                    cf.startBlock("/*");
+                    cf.println("Class generated by docero-data processor.");
+                    cf.endBlock("*/");
+                    cf.startBlock("public class " + keyType.substring(simpNameDel + 1) + " implements java.io.Serializable {");
+                    List<DataBeanPropertyBuilder> ids = properties.values().stream()
+                            .filter(p -> p.isId)
+                            .sorted(Comparator.comparing(p -> p.name))
+                            .collect(Collectors.toList());
+                    for (DataBeanPropertyBuilder property : ids) {
+                        cf.println("private final " + property.type + " " + property.name + ";");
+                        cf.println("public " + property.type + " get" +
+                                Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
+                                "() { return " + property.name + "; }");
+                        cf.println("");
+                    }
+                    cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
+                            ids.stream().map(p -> p.type + " " + p.name)
+                                    .collect(Collectors.joining(",")) + ") {");
+                    for (DataBeanPropertyBuilder property : ids)
+                        cf.println("this." + property.name + " = " + property.name + ";");
+                    cf.endBlock("}");
+
                     cf.println("");
-                }
-                cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
-                        ids.stream().map(p -> p.type + " " + p.name)
-                                .collect(Collectors.joining(",")) + ") {");
-                for (DataBeanPropertyBuilder property : ids)
-                    cf.println("this." + property.name + " = " + property.name + ";");
-                cf.endBlock("}");
+                    cf.println("private int hash_;");
+                    cf.startBlock("public int hashCode() {");
+                    cf.println("if(hash_ == 0) hash_ = " + ids.stream().map(p -> {
+                        if (p.type.getKind().isPrimitive())
+                            return environment.getTypeUtils().boxedClass((PrimitiveType) p.type) +
+                                    ".hashCode(" + p.name + ")";
+                        else return "(" + p.name + " == null ? 0 : " + p.name + ".hashCode())";
+                    }).collect(Collectors.joining(" ^ ")) + ";");
+                    cf.println("return hash_;");
+                    cf.endBlock("}");
 
-                cf.println("");
-                cf.println("private int hash_;");
-                cf.startBlock("public int hashCode() {");
-                cf.println("if(hash_ == 0) hash_ = " + ids.stream().map(p -> {
-                    if (p.type.getKind().isPrimitive())
-                        return environment.getTypeUtils().boxedClass((PrimitiveType) p.type) +
-                                ".hashCode(" + p.name + ")";
-                    else return "(" + p.name + " == null ? 0 : " + p.name + ".hashCode())";
-                }).collect(Collectors.joining(" ^ ")) + ";");
-                cf.println("return hash_;");
-                cf.endBlock("}");
+                    cf.println("");
+                    cf.startBlock("public boolean equals(Object o) {");
+                    cf.println("return o!=null && o instanceof " + keyType + " && " +
+                            ids.stream().map(p -> {
+                                if (p.type.getKind().isPrimitive()) return p.name + "==((" + keyType + ")o)." + p.name;
+                                else return "((" + p.name + "==null && ((" + keyType + ")o)." + p.name + "==null )||(" +
+                                        p.name + "!=null && " + p.name + ".equals(o)" + "))";
+                            }).collect(Collectors.joining(" && ")) +
+                            ";");
+                    cf.endBlock("}");
 
-                cf.println("");
-                cf.startBlock("public boolean equals(Object o) {");
-                cf.println("return o!=null && o instanceof " + keyType + " && " +
-                        ids.stream().map(p -> {
-                            if (p.type.getKind().isPrimitive()) return p.name + "==((" + keyType + ")o)." + p.name;
-                            else return "((" + p.name + "==null && ((" + keyType + ")o)." + p.name + "==null )||(" +
-                                    p.name + "!=null && " + p.name + ".equals(o)" + "))";
-                        }).collect(Collectors.joining(" && ")) +
-                        ";");
-                cf.endBlock("}");
-
-                if (versionalType != null) {
-                    if (!ids.get(ids.size() - 1).isVersionFrom) {
+                    if (versionalType != null) {
+                        if (!ids.get(ids.size() - 1).isVersionFrom) {
+                            cf.println("");
+                            cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
+                                    inversionalKey + " key, " +
+                                    versionalType + " at) {");
+                            for (DataBeanPropertyBuilder property : ids)
+                                if (!property.isVersionFrom)
+                                    cf.println("this." + property.name + " = key" +
+                                            (inversionalKey.endsWith("_") ? ".get" +
+                                                    Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
+                                                    "()" :
+                                                    "") +
+                                            ";");
+                            cf.println(ids.stream().filter(p -> p.isVersionFrom).findAny().map(p ->
+                                    "this." + p.name + " = at;").orElse(""));
+                            cf.endBlock("}");
+                        }
                         cf.println("");
                         cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
-                                inversionalKey + " key, " +
-                                versionalType + " at) {");
+                                inversionalKey + " key) {");
                         for (DataBeanPropertyBuilder property : ids)
                             if (!property.isVersionFrom)
                                 cf.println("this." + property.name + " = key" +
@@ -631,28 +652,23 @@ class DataBeanBuilder {
                                                 "") +
                                         ";");
                         cf.println(ids.stream().filter(p -> p.isVersionFrom).findAny().map(p ->
-                                "this." + p.name + " = at;").orElse(""));
+                                "this." + p.name + " = " + dateNowFrom(versionalType) + ";").orElse(""));
                         cf.endBlock("}");
                     }
-                    cf.println("");
-                    cf.startBlock("public " + keyType.substring(simpNameDel + 1) + "(" +
-                            inversionalKey + " key) {");
-                    for (DataBeanPropertyBuilder property : ids)
-                        if (!property.isVersionFrom)
-                            cf.println("this." + property.name + " = key" +
-                                    (inversionalKey.endsWith("_") ? ".get" +
-                                            Character.toUpperCase(property.name.charAt(0)) + property.name.substring(1) +
-                                            "()" :
-                                            "") +
-                                    ";");
-                    cf.println(ids.stream().filter(p -> p.isVersionFrom).findAny().map(p ->
-                            "this." + p.name + " = " + dateNowFrom(versionalType) + ";").orElse(""));
+
                     cf.endBlock("}");
                 }
-
-                cf.endBlock("}");
-            }
-
+            else
+                try (JavaClassWriter cf = new JavaClassWriter(environment, keyType)) {
+                    cf.println("package " +
+                            className.substring(0, simpNameDel) + ";");
+                    cf.startBlock("/*");
+                    cf.println("Class generated by docero-data processor.");
+                    cf.endBlock("*/");
+                    cf.startBlock("public class " + keyType.substring(simpNameDel + 1) +
+                            " extends " + prototypeExtention + "_Key_ {");
+                    cf.endBlock("}");
+                }
         /*
             Build Fields Enumeration
         */
