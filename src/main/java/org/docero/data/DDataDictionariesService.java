@@ -77,7 +77,7 @@ public class DDataDictionariesService {
         return d instanceof DDataRepository ?
                 ((DDataRepository<T, C>) d).get(key) :
                 (d instanceof DDataRemoteRepository ?
-                        ((DDataRemoteRepository<T, C>) d).get(key) :
+                        get((DDataRemoteRepository<T, C>) d, null, new Object[]{key}) :
                         null);
     }
 
@@ -92,21 +92,24 @@ public class DDataDictionariesService {
     @SuppressWarnings("unchecked")
     public <T extends Serializable, C extends Serializable> T get(Class<T> type, String func, Object[] args) {
         if (args == null) return null;
-        if (func == null && args.length == 1 && args[0] instanceof Serializable)
-            return get(type, (C) args[0]);
-
         Object d = repositories.get(type);
-        if (d != null && func != null && d instanceof DDataRemoteRepository) {
-            DDataRemoteRepository<T, C> rr = ((DDataRemoteRepository<T, C>) d);
-            Class<?>[] pc = new Class<?>[args.length];
-            for (int i = 0; i < args.length; i++) pc[i] = args[i].getClass();
-            try {
-                Method m = rr.getClass().getMethod(func, pc);
-                return (T) m.invoke(rr, args);
-            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignore) {
-            }
-        }
+        if (d != null && d instanceof DDataRemoteRepository)
+            return get((DDataRemoteRepository<T, C>) d, func, args);
         return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T extends Serializable, C extends Serializable> T get(
+            DDataRemoteRepository<T, C> rr, String func, Object[] args
+    ) {
+        Class<?>[] pc = new Class<?>[args.length];
+        for (int i = 0; i < args.length; i++) pc[i] = args[i].getClass();
+        try {
+            Method m = rr.getClass().getMethod(func == null ? "get" : func, pc);
+            return (T) m.invoke(rr, args);
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ignore) {
+            return null;
+        }
     }
 
     /**
