@@ -84,41 +84,48 @@ abstract class AbstractDataView {
         // mapped beans
         for (DDataFilter column : columns) {
             DDataAttribute attribute = column.getAttribute();
-            if (attribute != null && attribute.isMappedBean() && !column.isExternalData()) {
+            if (attribute != null && attribute.isMappedBean()) {
                 String nameInPath = column.getMapName();
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
+
                 TableEntity entity = new TableEntity(parent, cp, column);
                 parent.addEntity(entity);
                 String versionColumn = entity.versionFrom == null ? "" : entity.versionFrom.getColumnName();
-                for (DDataAttribute entityAttr : entity.attributes) {
-                    Map.Entry<String, String> columnNamesInMapping = attribute.joinMapping().entrySet().stream()
-                            .filter(es -> es.getValue().equals(entityAttr.getColumnName()))
-                            .findAny().orElse(null);
-                    if (entityAttr.isPrimaryKey() || columnNamesInMapping != null) {
-                        TableCell idCell = new TableCell(cp + "." + entityAttr.getPropertyName(), entityAttr,
-                                versionColumn.equals(entityAttr.getColumnName()));
-                        entity.addCell(idCell);
-                        if (columnNamesInMapping != null) {
-                            TableCell parentMapCell = parent.cells.stream()
-                                    .filter(c -> c.attribute.getColumnName().equals(columnNamesInMapping.getKey()))
-                                    .findAny().orElse(null);
-                            if (parentMapCell == null) {
-                                DDataAttribute parentMapAttr = parent.attributes.stream()
-                                        .filter(c -> c.getColumnName().equals(columnNamesInMapping.getKey()))
+
+                if (!column.isExternalData())
+                    for (DDataAttribute entityAttr : entity.attributes) {
+                        Map.Entry<String, String> columnNamesInMapping = attribute.joinMapping().entrySet().stream()
+                                .filter(es -> es.getValue().equals(entityAttr.getColumnName()))
+                                .findAny().orElse(null);
+                        if (entityAttr.isPrimaryKey() || columnNamesInMapping != null) {
+                            TableCell idCell = new TableCell(cp + "." + entityAttr.getPropertyName(), entityAttr,
+                                    versionColumn.equals(entityAttr.getColumnName()));
+                            entity.addCell(idCell);
+                            if (columnNamesInMapping != null) {
+                                TableCell parentMapCell = parent.cells.stream()
+                                        .filter(c -> c.attribute.getColumnName().equals(columnNamesInMapping.getKey()))
                                         .findAny().orElse(null);
-                                assert parentMapAttr != null;
-                                parent.addCell(parentMapCell = new TableCell(
-                                        (path == null ? "" : path + ".") + parentMapAttr.getPropertyName(),
-                                        parentMapAttr,
-                                        false
-                                ));
+                                if (parentMapCell == null) {
+                                    DDataAttribute parentMapAttr = parent.attributes.stream()
+                                            .filter(c -> c.getColumnName().equals(columnNamesInMapping.getKey()))
+                                            .findAny().orElse(null);
+                                    assert parentMapAttr != null;
+                                    parent.addCell(parentMapCell = new TableCell(
+                                            (path == null ? "" : path + ".") + parentMapAttr.getPropertyName(),
+                                            parentMapAttr,
+                                            false
+                                    ));
+                                }
+                                parent.mappings.put(parentMapCell, idCell);
                             }
-                            parent.mappings.put(parentMapCell, idCell);
                         }
                     }
+                else {
+                    //TODO build {'path.to.mapping-id'[],'path.to.property',beanRepository,beanPropertyName}
+                    
                 }
 
-                if (column.getFilters() != null)
+                if (!column.isExternalData() && column.getFilters() != null)
                     fillViewEntities(column.getFilters(), cp, entity);
             } else if (attribute == null && column.getFilters() != null)
                 fillViewEntities(column.getFilters(), path, parent);
@@ -170,7 +177,7 @@ abstract class AbstractDataView {
     private void addColumnToViewSql(
             DSQL sql, DDataAttribute parentAttribute,
             DDataFilter column, String path, String uniqPath, int fromTableIndex,
-            HashSet<Integer> alreadyJoined, HashSet<String> columnsInSelect
+            final HashSet<Integer> alreadyJoined, final HashSet<String> columnsInSelect
     ) {
         List<DDataAttribute> classAttrubutes = parentAttribute == null ?
                 rootEntity.attributes :
@@ -185,17 +192,21 @@ abstract class AbstractDataView {
             }
 
         if (attribute != null && attribute.getColumnName() != null) {
-            String pathAttributeName = path + column.getMapName();
-            String pathAttributeKey = pathAttributeName + PROP_PATCH_DELIMITER;
-            String uniqKey = uniqPath + column.getMapName() + ":" +
+            final String pathAttributeName = path + column.getMapName();
+            final String pathAttributeKey = pathAttributeName + PROP_PATCH_DELIMITER;
+            final String uniqKey = uniqPath + column.getMapName() + ":" +
                     attribute.getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
 
             if (attribute.isMappedBean()) {
-                JoinedTable table = allJoins.get(uniqKey);
-                if (table == null) {
-                    table = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), attribute);
-                    allJoins.put(uniqKey, table);
+                JoinedTable jtable = allJoins.get(uniqKey);
+                if (jtable == null) {
+                    jtable = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), attribute);
+                    allJoins.put(uniqKey, jtable);
                 }
+                final JoinedTable table = jtable;
+                SelectForTableBuilder selectBuilder = new SelectForTableBuilder(
+                        sql, table, columnsInSelect, alreadyJoined, pathAttributeKey, uniqKey
+                );
 
                 if (!attribute.isCollection() && column.hasFilters()) {
                     if (!alreadyJoined.contains(table.tableIndex)) {
@@ -210,19 +221,7 @@ abstract class AbstractDataView {
                         if (col.getAttribute().isMappedBean()) {
                             // add non id mapping columns used by col.attribute.joinMapping.keySet
                             for (String columnName : col.getAttribute().joinMapping().keySet()) {
-                                DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(attribute.getJavaType(), columnName);
-                                if (mapAttr != null) {
-                                    String mapKey = pathAttributeKey + mapAttr.getPropertyName();
-                                    if (!columnsInSelect.contains(mapKey))
-                                        try {
-                                            addColumnToViewSql(sql, attribute,
-                                                    new DDataFilter(mapAttr),
-                                                    pathAttributeKey, uniqKey, table.tableIndex,
-                                                    alreadyJoined, columnsInSelect);
-                                            columnsInSelect.add(mapKey);
-                                        } catch (DDataException ignore) {
-                                        }
-                                }
+                                selectBuilder.addNonIdAttribute(attribute, columnName);
                             }
                         }
                     }
@@ -262,19 +261,7 @@ abstract class AbstractDataView {
                 // add non id mapping columns used by parentAttribute.joinMapping.values
                 if (parentAttribute != null)
                     for (String columnName : parentAttribute.joinMapping().values()) {
-                        DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(attribute.getJavaType(), columnName);
-                        if (mapAttr != null) {
-                            String mapKey = pathAttributeKey + mapAttr.getPropertyName();
-                            if (!columnsInSelect.contains(mapKey))
-                                try {
-                                    addColumnToViewSql(sql, attribute,
-                                            new DDataFilter(mapAttr),
-                                            pathAttributeKey, uniqKey, table.tableIndex,
-                                            alreadyJoined, columnsInSelect);
-                                    columnsInSelect.add(mapKey);
-                                } catch (DDataException ignore) {
-                                }
-                        }
+                        selectBuilder.addNonIdAttribute(attribute, columnName);
                     }
             } else if (column.getOperator() != null) {
                 addFilterSql(sql, column, column.getAttribute().getClass(),
@@ -610,6 +597,8 @@ abstract class AbstractDataView {
                             if (column == null) colVal = rs.getObject(i);
                             else colVal = getFromResultSet(rs, column.attribute.getJavaType(), i);
                             putInHierarchy(row, colName, colVal);
+                            //TODO add remote bean for selected row by
+                            // {'path.to.mapping-id'[],'path.to.property',beanRepository,beanPropertyName}
                         }
                     }
                 }
@@ -773,6 +762,50 @@ abstract class AbstractDataView {
         void addEntity(TableEntity entity) {
             entities.add(entity);
             tableEntities.put(entity.name, entity);
+        }
+    }
+
+    class SelectForTableBuilder {
+        final DSQL sql;
+        final HashSet<String> columnsInSelect;
+        final HashSet<Integer> alreadyJoined;
+        final String pathAttributeKey;
+        final String uniqKey;
+        final JoinedTable table;
+
+        SelectForTableBuilder(
+                DSQL sql,
+                JoinedTable table,
+                HashSet<String> columnsInSelect,
+                HashSet<Integer> alreadyJoined,
+                String pathAttributeKey,
+                String uniqKey
+        ) {
+            this.sql = sql;
+            this.columnsInSelect = columnsInSelect;
+            this.alreadyJoined = alreadyJoined;
+            this.pathAttributeKey = pathAttributeKey;
+            this.uniqKey = uniqKey;
+            this.table = table;
+        }
+
+        void addNonIdAttribute(
+                DDataAttribute attribute,
+                String columnName
+        ) {
+            DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(attribute.getJavaType(), columnName);
+            if (mapAttr != null) {
+                String mapKey = pathAttributeKey + mapAttr.getPropertyName();
+                if (!columnsInSelect.contains(mapKey))
+                    try {
+                        addColumnToViewSql(sql, attribute,
+                                new DDataFilter(mapAttr),
+                                pathAttributeKey, uniqKey, table.tableIndex,
+                                alreadyJoined, columnsInSelect);
+                        columnsInSelect.add(mapKey);
+                    } catch (DDataException ignore) {
+                    }
+            }
         }
     }
 }

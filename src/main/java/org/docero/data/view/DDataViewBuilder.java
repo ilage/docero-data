@@ -8,6 +8,7 @@ import org.mybatis.spring.support.SqlSessionDaoSupport;
 import java.time.temporal.Temporal;
 import java.util.List;
 
+@SuppressWarnings({"unchecked", "unused"})
 public class DDataViewBuilder extends SqlSessionDaoSupport {
     public DDataViewBuilder(SqlSessionFactory sqlSessionFactory) {
         super.setSqlSessionFactory(sqlSessionFactory);

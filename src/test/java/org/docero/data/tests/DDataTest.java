@@ -212,7 +212,7 @@ public class DDataTest {
             add(new DDataFilter(Sample_WB_.STR_PARAMETER));
             DDataFilter iCols = new DDataFilter(Sample_WB_.INNER);
             iCols.add(new DDataFilter(Inner_WB_.TEXT));
-            add(new DDataFilter(Sample_WB_.REMOTE_BEAN){{
+            add(new DDataFilter(Sample_WB_.REMOTE_BEAN) {{
                 add(new DDataFilter(Remote_WB_.NAME));
             }});
             add(iCols);
@@ -229,8 +229,13 @@ public class DDataTest {
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
             }});
         }});
-        assertEquals(2, view.select(0, 100).size());
+        DDataViewRows rows = view.select(0, 100);
+        assertEquals(2, rows.size());
         assertEquals(2, view.count());
+        DDataViewRow row = rows.getRow(0);
+        assertNotNull(row);
+        String n = (String) row.getColumnValue(0, Sample_WB_.REMOTE_BEAN, Remote_WB_.NAME);
+        //assertNotNull(n);
 
         //DataViewBuilder viewBuilder = new DataViewBuilder(sqlSessionFactory);
         view = viewBuilder.build(new ArrayList<Class<? extends DDataAttribute>>() {{
@@ -291,7 +296,6 @@ public class DDataTest {
         }});
         DDataViewRows viewResult = view.select(0, 100);
         assertEquals(3, viewResult.size());
-        DDataViewRow row;
         Map<Object, Object> map;
         assertNotNull(row = viewResult.getRow((Object) 3));
         Object[] v = row.getColumn(ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.TEXT);
@@ -839,6 +843,7 @@ public class DDataTest {
             }
             LOG.debug(name + " finished");
         }
+
     }
 
     @Test
