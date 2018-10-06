@@ -198,6 +198,7 @@ class DDataMapBuilder {
                         DataRepositoryBuilder r = builder.repositoriesByBean.get(bean.interfaceType.toString());
                         cf.println(r.repositoryInterface + " " + r.repositoryVariableName + ",");
                     }
+                cf.println("org.docero.data.view.DDataViewBuilder dataViewBuilder,");
                 cf.println("org.springframework.context.ApplicationContext context");
                 cf.endBlock(")");
                 cf.startBlock("{");
@@ -209,6 +210,7 @@ class DDataMapBuilder {
                                 bean.interfaceType + ".class, " +
                                 bean.getImplementationName() + ".class);");
                     }
+                cf.println("DData.register(dataViewBuilder);");
                 cf.println("return new DData();");
                 cf.endBlock("}");
 

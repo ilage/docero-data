@@ -1,15 +1,17 @@
 package org.docero.data.view;
 
 import org.apache.ibatis.session.SqlSession;
-import org.docero.data.utils.DSQL;
+import org.docero.data.DDataDictionariesService;
 import org.docero.data.utils.DDataAttribute;
 import org.docero.data.utils.DDataException;
 import org.docero.data.utils.DDataTypes;
+import org.docero.data.utils.DSQL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.*;
@@ -33,6 +35,7 @@ abstract class AbstractDataView {
 
     private final TableEntity rootEntity;
     private final HashMap<String, TableEntity> tableEntities = new HashMap<>();
+    private final DDataDictionariesService dictionariesService;
     final Class<? extends DDataAttribute>[] roots;
     final HashMap<String, TableCell> tableCells = new HashMap<>();
 
@@ -40,11 +43,13 @@ abstract class AbstractDataView {
     private HashSet<Integer> joinedInRootQuery;
     private HashSet<String> columnsInRoot;
     private final HashMap<String, JoinedTable> allJoins = new HashMap();
+    private final HashMap<String, List<RemoteBeanRef>> remoteBeans = new HashMap<>();
 
     abstract Temporal version();
 
-    AbstractDataView(Class<? extends DDataAttribute>[] roots, DDataFilter[] columns) {
+    AbstractDataView(Class<? extends DDataAttribute>[] roots, DDataFilter[] columns, DDataDictionariesService dictionariesService) {
         this.roots = roots;
+        this.dictionariesService = dictionariesService;
 
         rootEntity = new TableEntity(roots[0]);
         String versionColumn = rootEntity.versionFrom == null ? "" : rootEntity.versionFrom.getColumnName();
@@ -121,8 +126,17 @@ abstract class AbstractDataView {
                         }
                     }
                 else {
-                    //TODO build {'path.to.mapping-id'[],'path.to.property',beanRepository,beanPropertyName}
-                    
+                    RemoteBeanRef rbr = new RemoteBeanRef(path, nameInPath, attribute.getBeanInterface(), null);
+                    for (DDataAttribute entityAttr : parent.attributes) {
+                        Map.Entry<String, String> columnNamesInMapping = attribute.joinMapping().entrySet().stream()
+                                .filter(es -> es.getValue().equals(entityAttr.getColumnName()))
+                                .findAny().orElse(null);
+                        if (columnNamesInMapping != null)
+                            parent.cells.stream()
+                                    .filter(c -> c.attribute.getColumnName().equals(columnNamesInMapping.getValue()))
+                                    .findAny().ifPresent(c -> rbr.addParameter(c.name));
+                    }
+                    remoteBeans.computeIfAbsent(path, k -> new ArrayList<>()).add(rbr);
                 }
 
                 if (!column.isExternalData() && column.getFilters() != null)
@@ -590,6 +604,8 @@ abstract class AbstractDataView {
                     while (rs.next()) {
                         HashMap<String, Object> row = new HashMap<>();
                         results.add(row);
+                        HashSet<String> processedRemotes =
+                                dictionariesService == null || remoteBeans.isEmpty() ? null : new HashSet<>();
                         for (int i = 0; i < colCount; ) {
                             String colName = rsColumns[i++];
                             TableCell column = tableCells.get(colName);
@@ -597,8 +613,21 @@ abstract class AbstractDataView {
                             if (column == null) colVal = rs.getObject(i);
                             else colVal = getFromResultSet(rs, column.attribute.getJavaType(), i);
                             putInHierarchy(row, colName, colVal);
-                            //TODO add remote bean for selected row by
-                            // {'path.to.mapping-id'[],'path.to.property',beanRepository,beanPropertyName}
+                            if (processedRemotes != null) {
+                                String path = colName.indexOf('.') > 0 ?
+                                        colName.substring(0, colName.lastIndexOf('.')) :
+                                        null;
+                                if (!processedRemotes.contains(path)) {
+                                    processedRemotes.add(path);
+                                    List<RemoteBeanRef> rbl = remoteBeans.get(path);
+                                    if (rbl != null)
+                                        for (RemoteBeanRef remoteBeanRef : rbl) {
+                                            putInHierarchy(row,
+                                                    (path == null ? "" : path + ".") + remoteBeanRef.nameInPath,
+                                                    getRemoteBeanValue(remoteBeanRef, rs, rsColumns));
+                                        }
+                                }
+                            }
                         }
                     }
                 }
@@ -609,6 +638,42 @@ abstract class AbstractDataView {
             throw new DDataException("JDBC: " + e.getMessage());
         }
         return results;
+    }
+
+    private HashMap<String, Object> getRemoteBeanValue(RemoteBeanRef remoteBeanRef, ResultSet rs, String[] rsColumns) throws SQLException, DDataException {
+        Object[] args = new Object[remoteBeanRef.parameters.size()];
+        for (int i = 0; i < args.length; i++) {
+            TableCell column = tableCells.get(remoteBeanRef.parameters.get(i));
+            int j = 0;
+            for (; j < rsColumns.length; )
+                if (rsColumns[j++].equals(column.name)) break;
+            Object colVal;
+            if (column == null) colVal = rs.getObject(i);
+            else colVal = getFromResultSet(rs, column.attribute.getJavaType(), j);
+            args[i] = colVal;
+        }
+        Object o = dictionariesService.get(
+                remoteBeanRef.type,
+                remoteBeanRef.func,
+                args);
+        HashMap<String, Object> result = new HashMap<String, Object>();
+        for (Method method : remoteBeanRef.type.getMethods())
+            if (method.getParameterCount() == 0)
+                try {
+                    String p = method.getName();
+                    if (method.getName().startsWith("get")
+                            && !"getDDataBeanKey_".equals(p)
+                            && !"getClass".equals(p)) {
+                        p = Character.toLowerCase(p.charAt(3)) + p.substring(4);
+                        result.put(p, method.invoke(o));
+                    } else if (method.getName().startsWith("is")) {
+                        p = Character.toLowerCase(p.charAt(2)) + p.substring(3);
+                        result.put(p, method.invoke(o));
+                    }
+                } catch (Exception e) {
+                    LOG.warn("error access to remote bean", e);
+                }
+        return result;
     }
 
     private Object getFromResultSet(ResultSet rs, Class<?> ctype, int i) throws SQLException, DDataException {
@@ -806,6 +871,25 @@ abstract class AbstractDataView {
                     } catch (DDataException ignore) {
                     }
             }
+        }
+    }
+
+    private class RemoteBeanRef {
+        final String path;
+        final String nameInPath;
+        final List<String> parameters = new ArrayList<>();
+        private final Class type;
+        private final String func;
+
+        RemoteBeanRef(String path, String nameInPath, Class type, String func) {
+            this.path = path;
+            this.nameInPath = nameInPath;
+            this.type = type;
+            this.func = func;
+        }
+
+        void addParameter(String parameterPath) {
+            parameters.add(parameterPath);
         }
     }
 }

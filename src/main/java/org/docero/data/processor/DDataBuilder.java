@@ -313,6 +313,10 @@ class DDataBuilder {
             cf.startBlock("static <T extends java.io.Serializable, C extends java.io.Serializable> T remote(Class<T> type, String func, C[] key) {");
             cf.println("return dictionariesService.get(type,func,key);");
             cf.endBlock("}");
+            cf.println("");
+            cf.startBlock("static void register(org.docero.data.view.DDataViewBuilder dataViewBuilder) {");
+            cf.println("dataViewBuilder.dictionariesService(dictionariesService);");
+            cf.endBlock("}");
 
             if (environment.getElementUtils().getTypeElement("com.fasterxml.jackson.databind.JsonDeserializer") != null) {
                 cf.println("");

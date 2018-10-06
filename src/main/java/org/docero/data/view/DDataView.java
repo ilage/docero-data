@@ -1,6 +1,7 @@
 package org.docero.data.view;
 
 import org.apache.ibatis.session.SqlSession;
+import org.docero.data.DDataDictionariesService;
 import org.docero.data.GeneratedValue;
 import org.docero.data.utils.*;
 import org.slf4j.Logger;
@@ -30,10 +31,11 @@ public class DDataView extends AbstractDataView {
     final List<Sort> sortedPaths = new ArrayList<>();*/
 
     DDataView(
-            SqlSession sqlSession, Class<? extends DDataAttribute>[] roots,
+            SqlSession sqlSession, DDataDictionariesService dictionariesService,
+            Class<? extends DDataAttribute>[] roots,
             DDataFilter[] columns, Temporal version
     ) throws DDataException {
-        super(roots, columns);
+        super(roots, columns, dictionariesService);
         this.sqlSession = sqlSession;
         this.columns = columns;
         if (columns.length > 0 && Arrays.stream(columns).noneMatch(c -> c.isSortAscending() != null))

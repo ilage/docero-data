@@ -65,6 +65,8 @@ public class DDataTest {
     private SampleBatchOps sampleBatchOps;
     @Autowired
     private MultiTypesRepository multiTypesRepository;
+    @Autowired
+    private DDataViewBuilder viewBuilder;
 
     @SuppressWarnings("SqlNoDataSourceInspection")
     public void setUp() throws SQLException {
@@ -206,7 +208,6 @@ public class DDataTest {
     public void viewTest() throws SQLException, DDataException {
         setUp();
 
-        DDataViewBuilder viewBuilder = new DDataViewBuilder(sqlSessionFactory);
         DDataView view = viewBuilder.build(Sample_WB_.class, new ArrayList<DDataFilter>() {{
             add(new DDataFilter(Sample_WB_.ID));
             add(new DDataFilter(Sample_WB_.STR_PARAMETER));
@@ -235,7 +236,7 @@ public class DDataTest {
         DDataViewRow row = rows.getRow(0);
         assertNotNull(row);
         String n = (String) row.getColumnValue(0, Sample_WB_.REMOTE_BEAN, Remote_WB_.NAME);
-        //assertNotNull(n);
+        assertNotNull(n);
 
         //DataViewBuilder viewBuilder = new DataViewBuilder(sqlSessionFactory);
         view = viewBuilder.build(new ArrayList<Class<? extends DDataAttribute>>() {{
@@ -373,7 +374,6 @@ public class DDataTest {
 
         LocalDateTime beforeUpdate = LocalDateTime.now().minusSeconds(1);
 
-        DDataViewBuilder viewBuilder = new DDataViewBuilder(sqlSessionFactory);
         DDataView view = viewBuilder.build(HistSample_WB_.class, new ArrayList<DDataFilter>() {{
             add(new DDataFilter(HistSample_WB_.VALUE));
             add(new DDataFilter(HistSample_WB_.INNER) {{
