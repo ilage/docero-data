@@ -24,6 +24,7 @@ import java.util.*;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @SuppressWarnings("unchecked")
 abstract class AbstractDataView {
@@ -59,9 +60,9 @@ abstract class AbstractDataView {
                 if (attr.getPropertyName() != null && rootEntity.attributes.stream()
                         .noneMatch(a -> a.getPropertyName().equals(attr.getPropertyName()) &&
                                         a.getJavaType().equals(attr.getJavaType()) && (
-                                        (a.joinMapping() == null && attr.joinMapping() == null) ||
-                                                (a.joinMapping() != null && attr.joinMapping() != null &&
-                                                        a.joinMapping().equals(attr.joinMapping()))
+                                        (a.joinBy() == null && attr.joinBy() == null) ||
+                                                (a.joinBy() != null && attr.joinBy() != null &&
+                                                        Arrays.equals(a.joinBy(), attr.joinBy()))
                                 )
                         )) {
                     rootEntity.attributes.add(attr);
@@ -99,20 +100,19 @@ abstract class AbstractDataView {
 
                 if (!column.isExternalData())
                     for (DDataAttribute entityAttr : entity.attributes) {
-                        Map.Entry<String, String> columnNamesInMapping = attribute.joinMapping().entrySet().stream()
-                                .filter(es -> es.getValue().equals(entityAttr.getColumnName()))
-                                .findAny().orElse(null);
-                        if (entityAttr.isPrimaryKey() || columnNamesInMapping != null) {
+                        int idx = indexOf(attribute.joinOn(), entityAttr.getColumnName());
+                        String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
+                        if (entityAttr.isPrimaryKey() || joinBy != null) {
                             TableCell idCell = new TableCell(cp + "." + entityAttr.getPropertyName(), entityAttr,
                                     versionColumn.equals(entityAttr.getColumnName()));
                             entity.addCell(idCell);
-                            if (columnNamesInMapping != null) {
+                            if (joinBy != null) {
                                 TableCell parentMapCell = parent.cells.stream()
-                                        .filter(c -> c.attribute.getColumnName().equals(columnNamesInMapping.getKey()))
+                                        .filter(c -> c.attribute.getColumnName().equals(joinBy))
                                         .findAny().orElse(null);
                                 if (parentMapCell == null) {
                                     DDataAttribute parentMapAttr = parent.attributes.stream()
-                                            .filter(c -> c.getColumnName().equals(columnNamesInMapping.getKey()))
+                                            .filter(c -> c.getColumnName().equals(joinBy))
                                             .findAny().orElse(null);
                                     assert parentMapAttr != null;
                                     parent.addCell(parentMapCell = new TableCell(
@@ -126,14 +126,14 @@ abstract class AbstractDataView {
                         }
                     }
                 else {
-                    RemoteBeanRef rbr = new RemoteBeanRef(path, nameInPath, attribute.getBeanInterface(), null);
+                    RemoteBeanRef rbr = new RemoteBeanRef(path, nameInPath, attribute.getBeanInterface(),
+                            attribute.joinOn() == null ? null : attribute.joinOn()[0]);
                     for (DDataAttribute entityAttr : parent.attributes) {
-                        Map.Entry<String, String> columnNamesInMapping = attribute.joinMapping().entrySet().stream()
-                                .filter(es -> es.getValue().equals(entityAttr.getColumnName()))
-                                .findAny().orElse(null);
-                        if (columnNamesInMapping != null)
+                        int idx = indexOf(attribute.joinBy(), entityAttr.getColumnName());
+                        String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
+                        if (joinBy != null)
                             parent.cells.stream()
-                                    .filter(c -> c.attribute.getColumnName().equals(columnNamesInMapping.getValue()))
+                                    .filter(c -> c.attribute.getColumnName().equals(joinBy))
                                     .findAny().ifPresent(c -> rbr.addParameter(c.name));
                     }
                     remoteBeans.computeIfAbsent(path, k -> new ArrayList<>()).add(rbr);
@@ -144,6 +144,14 @@ abstract class AbstractDataView {
             } else if (attribute == null && column.getFilters() != null)
                 fillViewEntities(column.getFilters(), path, parent);
         }
+    }
+
+    private int indexOf(String[] names, String name) {
+        if (names != null && name != null)
+            for (int i = 0; i < names.length; i++) {
+                if (Objects.equals(name, names[i])) return i;
+            }
+        return -1;
     }
 
     TableEntity getEntityForPath(String s) {
@@ -234,7 +242,7 @@ abstract class AbstractDataView {
 
                         if (col.getAttribute().isMappedBean()) {
                             // add non id mapping columns used by col.attribute.joinMapping.keySet
-                            for (String columnName : col.getAttribute().joinMapping().keySet()) {
+                            for (String columnName : col.getAttribute().joinBy()) {
                                 selectBuilder.addNonIdAttribute(attribute, columnName);
                             }
                         }
@@ -274,7 +282,7 @@ abstract class AbstractDataView {
                 }
                 // add non id mapping columns used by parentAttribute.joinMapping.values
                 if (parentAttribute != null)
-                    for (String columnName : parentAttribute.joinMapping().values()) {
+                    for (String columnName : parentAttribute.joinOn()) {
                         selectBuilder.addNonIdAttribute(attribute, columnName);
                     }
             } else if (column.getOperator() != null) {
@@ -338,7 +346,7 @@ abstract class AbstractDataView {
                     }
                 }
             // add non id mapping columns used by column.byAttribute.joinMapping.values
-            for (String columnName : column.byAttribute.joinMapping().values()) {
+            for (String columnName : column.byAttribute.joinOn()) {
                 DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(column.clazz, columnName);
                 if (mapAttr != null) {
                     String mapKey = column.path + mapAttr.getPropertyName();
@@ -485,8 +493,9 @@ abstract class AbstractDataView {
                 sql.WHERE("EXISTS(" + new DSQL() {{
                     SELECT("*");
                     FROM(filter.getAttribute().joinTable() + " t" + finalN);
-                    WHERE(filter.getAttribute().joinMapping().entrySet().stream()
-                            .map(m -> "t" + fromTableIndex + "." + m.getKey() + "=t" + finalN + "." + m.getValue())
+                    WHERE(IntStream.range(0, filter.getAttribute().joinBy().length)
+                            .mapToObj(i -> "t" + fromTableIndex + "." + filter.getAttribute().joinBy()[i] +
+                                    "=t" + finalN + "." + filter.getAttribute().joinOn()[i])
                             .collect(Collectors.joining(" AND ")));
                     String verSql = versionAndTypeConstraint(filter.getAttribute().getJavaType(), finalN);
                     if (verSql.length() > 0) WHERE(verSql);
@@ -656,23 +665,24 @@ abstract class AbstractDataView {
                 remoteBeanRef.type,
                 remoteBeanRef.func,
                 args);
-        HashMap<String, Object> result = new HashMap<String, Object>();
-        for (Method method : remoteBeanRef.type.getMethods())
-            if (method.getParameterCount() == 0)
-                try {
-                    String p = method.getName();
-                    if (method.getName().startsWith("get")
-                            && !"getDDataBeanKey_".equals(p)
-                            && !"getClass".equals(p)) {
-                        p = Character.toLowerCase(p.charAt(3)) + p.substring(4);
-                        result.put(p, method.invoke(o));
-                    } else if (method.getName().startsWith("is")) {
-                        p = Character.toLowerCase(p.charAt(2)) + p.substring(3);
-                        result.put(p, method.invoke(o));
+        HashMap<String, Object> result = new HashMap<>();
+        if (o != null)
+            for (Method method : remoteBeanRef.type.getMethods())
+                if (method.getParameterCount() == 0)
+                    try {
+                        String p = method.getName();
+                        if (method.getName().startsWith("get")
+                                && !"getDDataBeanKey_".equals(p)
+                                && !"getClass".equals(p)) {
+                            p = Character.toLowerCase(p.charAt(3)) + p.substring(4);
+                            result.put(p, method.invoke(o));
+                        } else if (method.getName().startsWith("is")) {
+                            p = Character.toLowerCase(p.charAt(2)) + p.substring(3);
+                            result.put(p, method.invoke(o));
+                        }
+                    } catch (Exception e) {
+                        LOG.warn("error access to remote bean", e);
                     }
-                } catch (Exception e) {
-                    LOG.warn("error access to remote bean", e);
-                }
         return result;
     }
 
@@ -716,9 +726,9 @@ abstract class AbstractDataView {
             this.tableIndex = tableIndex;
             if (attribute != null) {
                 String joinSql = attribute.joinTable() + " t" + tableIndex + " ON (" +
-                        attribute.joinMapping().entrySet().stream()
-                                .map(m -> "t" + fromTableIndex + "." + m.getKey() +
-                                        "=t" + tableIndex + "." + m.getValue())
+                        IntStream.range(0, attribute.joinBy().length)
+                                .mapToObj(i -> "t" + fromTableIndex + "." + attribute.joinBy()[i] +
+                                        "=t" + tableIndex + "." + attribute.joinOn()[i])
                                 .collect(Collectors.joining(" AND "));
                 String verSql = versionAndTypeConstraint(attribute.getJavaType(), tableIndex);
                 this.joinSql = joinSql + (verSql.length() > 0 ? " AND " + verSql : "") + ")";

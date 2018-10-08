@@ -25,7 +25,8 @@ public enum Remote_WB_ implements org.docero.data.utils.DDataAttribute {
     private final boolean mapped;
     private final boolean collection;
     private final String joinTable;
-    private final java.util.Map<String,String> joinMap;
+    private final String[] joinBy;
+    private final String[] joinOn;
     private final boolean isPrimaryKey;
     private Remote_WB_ (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, String joinTable, java.util.Map<String,String> joinMap, boolean isPrimaryKey, Class<? extends java.io.Serializable> interfaceType) {
         this.columnName = columnName;
@@ -36,7 +37,8 @@ public enum Remote_WB_ implements org.docero.data.utils.DDataAttribute {
         this.mapped = mapped;
         this.collection = collection;
         this.joinTable = joinTable;
-        this.joinMap = joinMap;
+        this.joinBy = null;
+        this.joinOn = null;
         this.isPrimaryKey = isPrimaryKey;
         this.interfaceType = interfaceType;
     }
@@ -48,7 +50,8 @@ public enum Remote_WB_ implements org.docero.data.utils.DDataAttribute {
     @Override public boolean isMappedBean() {return mapped;}
     @Override public boolean isCollection() {return collection;}
     @Override public String joinTable() {return joinTable;}
-    @Override public java.util.Map<String,String> joinMapping() {return joinMap;}
+    @Override public String[] joinBy() {return joinBy;}
+    @Override public String[] joinOn() {return joinOn;}
     @Override public boolean isPrimaryKey() {return isPrimaryKey;}
     @Override public Class<? extends java.io.Serializable> getBeanInterface() {return interfaceType;}
 }

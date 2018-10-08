@@ -143,10 +143,14 @@ class DDataBuilder {
             }
     }
 
-    void generateImplementation() throws IOException {
-        for (DataBeanBuilder bean : prototypesToGenerate) bean.buildImplementation(environment);
+    void generatePrototypes() throws IOException {
+        for (DataBeanBuilder bean : prototypesToGenerate)
+            bean.buildImplementation(environment);
+        buildDataReferenceEnums(prototypesToGenerate);
+    }
 
-        if(beansByInterface.isEmpty()) return;
+    void generateImplementation() throws IOException {
+        if (beansByInterface.isEmpty()) return;
 
         try (JavaClassWriter cf = new JavaClassWriter(environment, basePackage + ".AbstractBean")) {
             cf.println("package " + basePackage + ";");
@@ -218,7 +222,7 @@ class DDataBuilder {
             batchRepository.generate();
         }
 
-        if(beansByInterface.isEmpty()) return;
+        if (beansByInterface.isEmpty()) return;
 
         try (JavaClassWriter cf = new JavaClassWriter(environment, basePackage + ".DDataObjectFactory")) {
             cf.println("package " + basePackage + ";");

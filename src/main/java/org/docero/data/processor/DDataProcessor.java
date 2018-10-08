@@ -51,6 +51,7 @@ public class DDataProcessor extends AbstractProcessor {
                     for (Element beanElement : prototypes)
                         if (beanElement.getEnclosingElement().getKind() == ElementKind.PACKAGE)
                             builder.checkInterface((TypeElement) beanElement, true);
+                    builder.generatePrototypes();
 
                     Set<? extends Element> entities = roundEnv.getElementsAnnotatedWith(DDataBean.class);
                     for (Element beanElement : entities)
@@ -83,7 +84,6 @@ public class DDataProcessor extends AbstractProcessor {
                     break;
                 case STEP3_MAPS_GEN:
                     if (new DDataMapBuilder(builder, this.processingEnv).build(listClasses())) {
-                        builder.buildDataReferenceEnums(builder.prototypesToGenerate);
                         builder.buildDataReferenceEnums(builder.beansByInterface.values());
                         stage = Stage.STEP_END;
                     }

@@ -5,6 +5,7 @@ import java.util.Map;
 
 public interface DDataAttribute extends DDataBasicAttribute {
     String joinTable();
-    Map<String,String> joinMapping();
+    String[] joinBy();
+    String[] joinOn();
     Class<? extends Serializable> getBeanInterface();
 }

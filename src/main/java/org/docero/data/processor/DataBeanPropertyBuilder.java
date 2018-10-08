@@ -311,7 +311,7 @@ class DataBeanPropertyBuilder {
         if (manType == null) {
             TypeElement mte = dataBean.rootBuilder.environment.getElementUtils().getTypeElement(mappedType.toString());
             cf.println("/** Value of column " + this.columnName + "*/");
-            if (mte==null || mte.getAnnotation(DDataPrototypeRealization.class)==null)
+            if (mte == null || mte.getAnnotation(DDataPrototypeRealization.class) == null)
                 cf.println(this.enumName + "(" +
                         (this.columnName == null ? "null" : "\"" + this.columnName + "\"") +
                         ",\"" +
@@ -320,7 +320,7 @@ class DataBeanPropertyBuilder {
                                 environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                                 environment.getTypeUtils().erasure(this.type)
                         ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection +
-                        ", null, null," + this.isId + ", null),");
+                        ", null, null, null," + this.isId + ", null),");
             else {
                 Mapping map = mappings.get(dataBean.interfaceType.toString() + "." + this.name);
                 String protoPkg = mte.getEnclosingElement().toString();
@@ -332,11 +332,13 @@ class DataBeanPropertyBuilder {
                         protoType + "_WB_.class,\"" +
                         (this.isSimple() ? "" : "ARRAY") +
                         "\",false/*is dictionary*/, true" + ", " + this.isCollection +
-                        ",null, new java.util.HashMap<String, String>(){{" +
-                        (map == null ? "" : map.stream()
-                                .map(m -> "put(\"" + m.property.columnName + "\",\"" + m.mappedProperty.columnName + "\");")
-                                .collect(Collectors.joining(" "))) +
-                        "}}" + ", false, " + mappedType + ".class),");
+                        ",null, " +
+                        (map == null ? "null" : "new String[]{" + map.stream()
+                                .map(m -> "\"" + m.property.columnName + "\"")
+                                .collect(Collectors.joining(",")) + "}") +
+                        ", " +
+                        (map == null || map.func == null ? "null" : "new String[]{" + map.func + "}") +
+                        ", false, " + mappedType + ".class),");
             }
         } else {
             cf.println("/** Value of column " + this.columnName + "*/");
@@ -346,11 +348,16 @@ class DataBeanPropertyBuilder {
                     this.name + "\"," +
                     manType.interfaceType + "_WB_.class,\"" + (this.isSimple() ? "" : "ARRAY") +
                     "\"," + manType.isDictionary() + ", true" + ", " + this.isCollection +
-                    ",\"" + manType.getTableRef().replace("\"", "\\\"") + "\", new java.util.HashMap<String, String>(){{" +
-                    (map == null ? "" : map.stream()
-                            .map(m -> "put(\"" + m.property.columnName + "\",\"" + m.mappedProperty.columnName + "\");")
-                            .collect(Collectors.joining(" "))) +
-                    "}}" + ", false, " + mappedType + ".class),");
+                    ",\"" + manType.getTableRef().replace("\"", "\\\"") +
+                    "\", " +
+                    (map == null ? "null" : "new String[]{" + map.stream()
+                            .map(m -> "\"" + m.property.columnName + "\"")
+                            .collect(Collectors.joining(",")) + "}") +
+                    "," +
+                    (map == null ? "null" : "new String[]{" + map.stream()
+                            .map(m -> "\"" + m.mappedProperty.columnName + "\"")
+                            .collect(Collectors.joining(",")) + "}") +
+                    ", false, " + mappedType + ".class),");
         }
     }
 

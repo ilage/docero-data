@@ -69,7 +69,12 @@ public class DDataFilter {
         }
 
         @Override
-        public Map<String, String> joinMapping() {
+        public String[] joinBy() {
+            return null;
+        }
+
+        @Override
+        public String[] joinOn() {
             return null;
         }
 
