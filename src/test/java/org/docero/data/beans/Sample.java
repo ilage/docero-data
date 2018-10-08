@@ -14,6 +14,10 @@ public interface Sample extends SampleTable {
 
     void setInner(Inner inner);
 
+    @DDataProperty
+    Integer getRemoteId();
+    void setRemoteId(Integer v);
+
     @Sample_Map_(listParameter = Inner_.SAMPLE_ID)
     List<? extends Inner> getListParameter();
 
@@ -22,7 +26,7 @@ public interface Sample extends SampleTable {
     @Sample_Map_(value = Sample_.ID, item = ItemAbstraction_.ID)
     ItemAbstraction getItem();
 
-    @Sample_Map_(value = Sample_.ID)//, func = "get")
+    @Sample_Map_(value = Sample_.REMOTE_ID)//, func = "get")
     RemoteBean getRemoteBean();
     //must generate error at compile: void setRemoteBean(RemoteBean v);
     /*possible solution: default void setRemoteBean(RemoteBean v) {
@@ -32,7 +36,7 @@ public interface Sample extends SampleTable {
     /**
      * @return unknown for ddata library property generated with simple getter and setter
      */
-    /*List<RemoteBean> getAbstraction();
+    List<RemoteBean> getAbstraction();
 
-    void setAbstraction(List<RemoteBean> i);*/
+    void setAbstraction(List<RemoteBean> i);
 }

@@ -77,6 +77,7 @@ public class DDataTest {
                     "  id INT NOT NULL,\n" +
                     "  s VARCHAR(125),\n" +
                     "  i INT,\n" +
+                    "  remote_id INT,\n" +
                     "  hash BYTEA,\n" +
                     "  CONSTRAINT \"sample_pkey\" PRIMARY KEY (id)\n" +
                     ");\n" +
@@ -88,8 +89,8 @@ public class DDataTest {
                     "  sample_id INT,\n" +
                     "  CONSTRAINT \"inner_pkey\" PRIMARY KEY (id)\n" +
                     ");" +
-                    "INSERT INTO ddata.\"sample\" (id, s, i) VALUES (1,'s1',1001);\n" +
-                    "INSERT INTO ddata.\"sample\" (id, s, i) VALUES (2,'s2',1003);\n" +
+                    "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (1,'s1',1001,2);\n" +
+                    "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (2,'s2',1003,1);\n" +
                     "\n" +
                     "DROP FUNCTION ddata.sample_proc(integer);\n" +
                     "\n" +
@@ -569,7 +570,7 @@ public class DDataTest {
         assertNotNull(bean);
         assertEquals(1, bean.getId());
         assertNotNull(bean.getRemoteBean());
-        assertEquals(1, bean.getRemoteBean().getRemoteId());
+        assertEquals(2, bean.getRemoteBean().getRemoteId());
         Inner ir = bean.getInner();
         assertNotNull(ir);
         assertEquals(1001, ir.getId());
@@ -808,7 +809,7 @@ public class DDataTest {
         private final String name;
         private final Random r = new Random();
 
-        public DictionaryTest(String name) {
+        DictionaryTest(String name) {
             this.name = name;
         }
 
@@ -821,6 +822,7 @@ public class DDataTest {
         public void run() {
             LOG.debug(name + " started");
             try {
+                @SuppressWarnings("unchecked")
                 DDataDictionary<SmallDict, Integer> smallDict = (DDataDictionary<SmallDict, Integer>)
                         springContext.getBean("smallDictRepository");
 
@@ -832,6 +834,7 @@ public class DDataTest {
                 yeald();
 
                 e1 = smallDict.list().stream().filter(el -> el.getId() == 1).findAny().orElse(null);
+                assert (e1 != null);
                 LOG.debug(name + " read value as " + e1.getName());
 
                 for (int i = 0; i < 5; i++) {

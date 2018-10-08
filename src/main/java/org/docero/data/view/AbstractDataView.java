@@ -76,7 +76,7 @@ abstract class AbstractDataView {
         fillViewEntities(Arrays.asList(columns), null, rootEntity);
     }
 
-    private void fillViewEntities(List<DDataFilter> columns, String path, TableEntity parent) {
+    private void fillViewEntities(List<DDataFilter> columns, String path, final TableEntity parent) {
         // basic values
         for (DDataFilter column : columns) {
             DDataAttribute attribute = column.getAttribute();
@@ -108,11 +108,11 @@ abstract class AbstractDataView {
                             entity.addCell(idCell);
                             if (joinBy != null) {
                                 TableCell parentMapCell = parent.cells.stream()
-                                        .filter(c -> c.attribute.getColumnName().equals(joinBy))
+                                        .filter(c -> joinBy.equals(c.attribute.getColumnName()))
                                         .findAny().orElse(null);
                                 if (parentMapCell == null) {
                                     DDataAttribute parentMapAttr = parent.attributes.stream()
-                                            .filter(c -> c.getColumnName().equals(joinBy))
+                                            .filter(c -> joinBy.equals(c.getColumnName()))
                                             .findAny().orElse(null);
                                     assert parentMapAttr != null;
                                     parent.addCell(parentMapCell = new TableCell(
@@ -131,10 +131,19 @@ abstract class AbstractDataView {
                     for (DDataAttribute entityAttr : parent.attributes) {
                         int idx = indexOf(attribute.joinBy(), entityAttr.getColumnName());
                         String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
-                        if (joinBy != null)
-                            parent.cells.stream()
-                                    .filter(c -> c.attribute.getColumnName().equals(joinBy))
-                                    .findAny().ifPresent(c -> rbr.addParameter(c.name));
+                        if (joinBy != null) {
+                            TableCell parentMapCell = parent.cells.stream()
+                                    .filter(c -> joinBy.equals(c.attribute.getColumnName()))
+                                    .findAny().orElseGet(() -> {
+                                        TableCell pmc = new TableCell(
+                                                (path == null ? "" : path + ".") + entityAttr.getPropertyName(),
+                                                entityAttr,
+                                                false);
+                                        parent.addCell(pmc);
+                                        return pmc;
+                                    });
+                            rbr.addParameter(parentMapCell.name);
+                        }
                     }
                     remoteBeans.computeIfAbsent(path, k -> new ArrayList<>()).add(rbr);
                 }
@@ -213,13 +222,29 @@ abstract class AbstractDataView {
                 break;
             }
 
-        if (attribute != null && attribute.getColumnName() != null) {
+        if (attribute != null) {
             final String pathAttributeName = path + column.getMapName();
             final String pathAttributeKey = pathAttributeName + PROP_PATCH_DELIMITER;
             final String uniqKey = uniqPath + column.getMapName() + ":" +
                     attribute.getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
 
-            if (attribute.isMappedBean()) {
+            if (attribute.getColumnName() == null) {
+                //add ids if not present in columnsInSelect
+                if (column.isExternalData())
+                    for (String joinBy : column.getAttribute().joinBy()) {
+                        DDataAttribute attr = classAttrubutes.stream()
+                                .filter(a -> joinBy.equals(a.getColumnName()))
+                                .findAny().orElse(null);
+                        if (attr != null) {
+                            String idKey = path + attr.getPropertyName();
+                            if (!columnsInSelect.contains(idKey)) {
+                                columnsInSelect.add(idKey);
+                                String val = "t" + fromTableIndex + ".\"" + attr.getColumnName() + "\"";
+                                sql.SELECT(val + " AS \"" + idKey + "\"");
+                            }
+                        }
+                    }
+            } else if (attribute.isMappedBean()) {
                 JoinedTable jtable = allJoins.get(uniqKey);
                 if (jtable == null) {
                     jtable = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), attribute);
@@ -240,7 +265,7 @@ abstract class AbstractDataView {
                                 col, pathAttributeKey, uniqKey,
                                 table.tableIndex, alreadyJoined, columnsInSelect);
 
-                        if (col.getAttribute().isMappedBean()) {
+                        if (col.getAttribute().isMappedBean() && !col.isExternalData()) {
                             // add non id mapping columns used by col.attribute.joinMapping.keySet
                             for (String columnName : col.getAttribute().joinBy()) {
                                 selectBuilder.addNonIdAttribute(attribute, columnName);
@@ -715,7 +740,6 @@ abstract class AbstractDataView {
         return rs.getObject(i);
     }
 
-
     private class JoinedTable {
         private final int fromTableIndex;
         private final int tableIndex;
@@ -773,12 +797,9 @@ abstract class AbstractDataView {
             this.attribute = attribute;
             this.isVersion = isVersion;
         }
-
-        boolean isSorted() {
-            return column != null && column.isSortAscending() != null;
-        }
     }
 
+    @SuppressWarnings("JavaReflectionMemberAccess")
     class TableEntity {
         final TableEntity parent;
         final String name;
