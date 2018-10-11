@@ -301,7 +301,7 @@ class DataBeanBuilder {
                     interfaceType.toString().substring(simpNameDel + 1) + "\")");
             cf.println("@javax.xml.bind.annotation.XmlAccessorType(javax.xml.bind.annotation.XmlAccessType.PROPERTY)");
             if (environment.getElementUtils().getTypeElement("com.fasterxml.jackson.annotation.JsonIgnoreProperties") != null)
-                cf.println("@com.fasterxml.jackson.annotation.JsonIgnoreProperties({\"handler\",\"dDataBeanKey_\"})");
+                cf.println("@com.fasterxml.jackson.annotation.JsonIgnoreProperties({\"handler\",\"ddataBeanKey_\"})");
             if (prototype)
                 cf.println("@org.docero.data.remote.DDataPrototypeRealization");
             cf.startBlock("public class " +
