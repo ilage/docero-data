@@ -787,13 +787,13 @@ class DataBeanBuilder {
 
     static String dateNowFrom(TypeMirror versionalType) {
         if ("java.time.LocalDateTime".equals(versionalType.toString()))
-            return "java.time.LocalDateTime.now()";
+            return "org.docero.data.utils.TemporalDataOperations.LocalDateTime.get()";
         else if ("java.time.LocalDate".equals(versionalType.toString()))
-            return "java.time.LocalDate.now()";
+            return "org.docero.data.utils.TemporalDataOperations.LocalDate.get()";
         else if ("java.util.Date".equals(versionalType.toString()))
-            return "new java.util.Date()";
+            return "org.docero.data.utils.TemporalDataOperations.Date.get()";
         else if ("java.sql.Timestamp".equals(versionalType.toString()))
-            return "new java.sql.Timestamp(System.currentTimeMillis())";
+            return "org.docero.data.utils.TemporalDataOperations.Timestamp.get()";
         return null;
     }
 
