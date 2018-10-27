@@ -109,9 +109,14 @@ class BatchRepositoryBuilder {
                 cf.endBlock("}");
                 cf.println("");
                 cf.startBlock("@Override public void setSqlSessionTemplate(SqlSessionTemplate sqlSessionTemplate) {");
-                cf.println("if (sqlSessionTemplate.getExecutorType()==ExecutorType.BATCH) " +
-                        "super.setSqlSessionTemplate(sqlSessionTemplate);");
-                cf.println("else throw new IllegalArgumentException(\"invalid sqlSessionTemplate for BATCH operations\");");
+                //cf.startBlock("if (sqlSessionTemplate.getExecutorType()==ExecutorType.BATCH) {");
+                cf.println("super.setSqlSessionTemplate(sqlSessionTemplate);");
+                for (BeanData d : supported.values()) {
+                    cf.println("((org.mybatis.spring.support.SqlSessionDaoSupport)" + d.repository.repositoryVariableName +
+                            ").setSqlSessionTemplate(sqlSessionTemplate);");
+                }
+                //cf.endBlock("}");
+                //cf.println("else throw new IllegalArgumentException(\"invalid sqlSessionTemplate for BATCH operations\");");
                 cf.endBlock("}");
             }
             cf.println("");
@@ -136,7 +141,10 @@ class BatchRepositoryBuilder {
 
             cf.println("");
             cf.startBlock("@Override public java.util.List<org.apache.ibatis.executor.BatchResult> flushStatements() {");
-            cf.println("return super.getSqlSession().flushStatements();");
+            cf.println("return ((org.mybatis.spring.SqlSessionTemplate)getSqlSession())" +
+                    ".getExecutorType()==ExecutorType.BATCH ? " +
+                    "super.getSqlSession().flushStatements() : " +
+                    "java.util.Collections.emptyList();");
             cf.endBlock("}");
 
             cf.println("");

@@ -21,6 +21,7 @@ class PreparedUpdates {
     final String entityPropertyPath;
 
     private final DDataView dDataView;
+    /** ids without version */
     private final List<DDataAttribute> ids = new ArrayList<>();
     private final List<AbstractDataView.TableCell> props = new ArrayList<>();
     private final AbstractDataView.TableEntity entity;
@@ -73,6 +74,7 @@ class PreparedUpdates {
         if (entity.versionFrom != null) { //versional bean
             int pIdx = 1;
             if (entity.versionTo != null) {
+                //UPDATE some SET versionTo=? WHERE id...=? AND version=?;
                 fillStatement(ps, pIdx++, entity.versionTo, dateNow);
                 for (DDataAttribute id : ids)
                     fillStatement(ps, pIdx++, id,
@@ -82,18 +84,16 @@ class PreparedUpdates {
                         row.getColumnValue(updatedIndex,
                                 expandPath(entityPropertyPath, entity.versionFrom.getPropertyName())));
             }
-
+            //INSERT INTO some (<columns>) SELECT <columns without updated>, ?..., version
             for (AbstractDataView.TableCell prop : props)
                 fillStatement(ps, pIdx++, prop.attribute,
                         row.getColumnValue(updatedIndex, prop.name));
-
             for (PreparedMap m : mappings) {
                 fillStatement(ps, pIdx++, m.to.attribute,
                         row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.from.name));
             }
-
             fillStatement(ps, pIdx++, entity.versionFrom, dateNow);
-
+            //FROM some WHERE id...=? AND version=?
             for (DDataAttribute id : ids)
                 fillStatement(ps, pIdx++, id,
                         row.getColumnValue(updatedIndex,
@@ -105,7 +105,7 @@ class PreparedUpdates {
             if (LOG.isTraceEnabled()) {
                 LOG.trace(ps.toString());
                 LOG.trace("Parameters: " + (entity.versionTo != null ? (
-                                "NOW()," +
+                                "NOW(?)," +
                                         ids.stream().map(id ->
                                                 row.getColumnValue(updatedIndex,
                                                         expandPath(entityPropertyPath, id.getPropertyName()))
@@ -127,7 +127,7 @@ class PreparedUpdates {
                                                 .map(val -> val == null ? "NULL" : val.toString())
                                                 .collect(Collectors.joining(","))
                                 ) +
-                                ",NOW()," +
+                                ",NOW(?)," +
                                 ids.stream().map(id ->
                                         row.getColumnValue(updatedIndex,
                                                 expandPath(entityPropertyPath, id.getPropertyName())))
@@ -391,7 +391,7 @@ class PreparedUpdates {
                             row.getColumnValue(updatedIndex, expandPath(entityPropertyPath, id.getPropertyName())))
                             .map(val -> val == null ? "NULL" : val.toString())
                             .collect(Collectors.joining(",")) +
-                    (entity.versionFrom == null ? "" : ",NOW()")
+                    (entity.versionFrom == null ? "" : ",NOW(?)")
             );
         }
         pi.executeUpdate();

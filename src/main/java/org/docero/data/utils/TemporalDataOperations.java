@@ -1,5 +1,7 @@
 package org.docero.data.utils;
 
+import java.time.ZoneId;
+
 public class TemporalDataOperations {
     public static class LocalDateTime implements AutoCloseable {
         private final static ThreadLocal<java.time.LocalDateTime> temporal = new ThreadLocal<>();
@@ -62,6 +64,10 @@ public class TemporalDataOperations {
             temporal.set(val);
         }
 
+        public Date(java.time.LocalDateTime val) {
+            temporal.set(java.util.Date.from(val.atZone(ZoneId.systemDefault()).toInstant()));
+        }
+
         @Override
         public void close() {
             temporal.remove();
@@ -69,7 +75,7 @@ public class TemporalDataOperations {
 
         public static java.util.Date get() {
             java.util.Date ts = temporal.get();
-            return ts == null ? new java.util.Date(System.currentTimeMillis()) : ts;
+            return ts == null ? new java.util.Date() : ts;
         }
     }
 }

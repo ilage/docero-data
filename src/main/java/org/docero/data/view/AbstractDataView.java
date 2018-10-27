@@ -530,7 +530,7 @@ abstract class AbstractDataView {
         }
     }
 
-    private final static DateTimeFormatter sqlTimestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd hh:mm:ss");
+    private final static DateTimeFormatter sqlTimestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     String versionConstraint(Class clazz, int toTableIndex) {
         if (selectAllVersions()) return "";
