@@ -298,7 +298,7 @@ class DDataMapBuilder {
             throw new Exception("not found info about method '" + methodElement.getSimpleName() +
                     " of " + repository.repositoryInterface);
 
-        if (method.selectId == null) {
+        if (method.selectId == null && method.insertId == null && method.updateId == null && method.deleteId == null) {
             ArrayList<FilterOption> filters = new ArrayList<>();
             VariableElement order = null;
             for (VariableElement variableElement : methodElement.getParameters()) {
@@ -338,6 +338,12 @@ class DDataMapBuilder {
     ) throws Exception {
         if (method.selectId != null)
             userMappingFiles.add(method.selectId.substring(0, method.selectId.lastIndexOf('.')));
+        if (method.insertId != null)
+            userMappingFiles.add(method.insertId.substring(0, method.insertId.lastIndexOf('.')));
+        if (method.updateId != null)
+            userMappingFiles.add(method.updateId.substring(0, method.updateId.lastIndexOf('.')));
+        if (method.deleteId != null)
+            userMappingFiles.add(method.deleteId.substring(0, method.deleteId.lastIndexOf('.')));
 
         List<FilterOption> filters = method.getFilters();
         VariableElement order = method.getOrder();

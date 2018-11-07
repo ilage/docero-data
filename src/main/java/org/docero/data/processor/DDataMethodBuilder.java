@@ -1,7 +1,6 @@
 package org.docero.data.processor;
 
-import org.docero.data.DictionaryType;
-import org.docero.data.SelectId;
+import org.docero.data.*;
 
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
@@ -30,6 +29,9 @@ class DDataMethodBuilder {
     final MType methodType;
     final boolean returnSimpleType;
     final String selectId;
+    final String updateId;
+    final String insertId;
+    final String deleteId;
     private List<DDataMapBuilder.FilterOption> filters = Collections.emptyList();
     private VariableElement order;
 
@@ -44,14 +46,28 @@ class DDataMethodBuilder {
         throwTypes = methodElement.getThrownTypes();
         typeVariables = ((ExecutableType) methodElement.asType()).getTypeVariables();
         if (returnNothing) {
+            InsertId insert = methodElement.getAnnotation(InsertId.class);
+            insertId = insert != null ? insert.value() : null;
+            UpdateId update = methodElement.getAnnotation(UpdateId.class);
+            updateId = update != null ? update.value() : null;
+            DeleteId delete = methodElement.getAnnotation(DeleteId.class);
+            deleteId = delete != null ? delete.value() : null;
+            selectId = null;
             String nameString = methodName.toLowerCase();
-            this.methodType = nameString.contains("insert") ? MType.INSERT : (
-                    nameString.contains("update") ? MType.UPDATE :
+
+            this.methodType = insertId != null || nameString.contains("insert") ? MType.INSERT : (
+                    updateId != null || nameString.contains("update") ? MType.UPDATE :
                             MType.DELETE
             );
             returnSimpleType = false;
         } else {
+            SelectId select = methodElement.getAnnotation(SelectId.class);
+            selectId = select != null ? select.value() : null;
+            updateId = null;
+            insertId = null;
+            deleteId = null;
             String ttype = returnType.toString();
+
             if (ttype.contains("java.util.List")) methodType = MType.SELECT;
             else if (ttype.contains("java.util.Map")) methodType = MType.SELECT;
             else methodType = GET;
@@ -62,8 +78,6 @@ class DDataMethodBuilder {
                 ) && returnNothing && methodElement.getParameters().size() == 1);
         methodIndex = defaultMethod ? 0 : repositoryBuilder.methods.stream()
                 .filter(m -> methodName.equals(m.methodName)).count() + 1;
-        SelectId select = methodElement.getAnnotation(SelectId.class);
-        selectId = select != null ? select.value() : null;
     }
 
     DDataMethodBuilder(
@@ -117,6 +131,9 @@ class DDataMethodBuilder {
                 );
         }
         selectId = null;
+        insertId = null;
+        deleteId = null;
+        updateId = null;
     }
 
     void build(JavaClassWriter cf) throws IOException {
@@ -181,6 +198,12 @@ class DDataMethodBuilder {
         String beanParameterName = parameters.size() == 1 ? parameters.get(0).name : null;
         String selectId = this.selectId != null ? this.selectId : repositoryBuilder.mappingClassName + "." +
                 methodName + (methodIndex == 0 ? "" : "_" + methodIndex);
+        String insertId = this.insertId != null ? this.insertId : repositoryBuilder.mappingClassName + "." +
+                methodName + (methodIndex == 0 ? "" : "_" + methodIndex);
+        String updateId = this.updateId != null ? this.updateId : repositoryBuilder.mappingClassName + "." +
+                methodName + (methodIndex == 0 ? "" : "_" + methodIndex);
+        String deleteId = this.deleteId != null ? this.deleteId : repositoryBuilder.mappingClassName + "." +
+                methodName + (methodIndex == 0 ? "" : "_" + methodIndex);
         boolean useParameterBean = false;
         boolean returnSomething = returnType != null && returnType.getKind() != TypeKind.VOID;
         switch (methodType) {
@@ -223,7 +246,7 @@ class DDataMethodBuilder {
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().insert");
-                cf.print("(\"" + selectId + "\"");
+                cf.print("(\"" + insertId + "\"");
                 if (bean.dictionary != DictionaryType.NO && !repositoryBuilder.rootBuilder.useSpringCache)
                     cacheFunction = "cache(" + beanParameterName + ");";
                 break;
@@ -250,15 +273,15 @@ class DDataMethodBuilder {
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().update");
-                cf.print("(\"" + selectId + "\"");
+                cf.print("(\"" + updateId + "\"");
                 if (bean.dictionary != DictionaryType.NO && !repositoryBuilder.rootBuilder.useSpringCache)
                     cacheFunction = "cache(" + beanParameterName + ");";
                 break;
-            default:
+            default: // DELETE
                 if (bean.dictionary == DictionaryType.SMALL && dictionariesUpdatedByThis.stream()
                         .noneMatch(d -> d.bean == bean))
                     cf.println("updateVersion(" + repositoryBuilder.forInterfaceName() + ".class);");
-                cf.print("getSqlSession().delete(\"" + selectId + "\"");
+                cf.print("getSqlSession().delete(\"" + deleteId + "\"");
         }
 
         if (parameters.size() > 0) {
