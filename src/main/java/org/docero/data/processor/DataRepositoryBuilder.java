@@ -355,10 +355,16 @@ class DataRepositoryBuilder {
             cf.println("String resultMap() default \"\";");
 
             cf.startBlock("/**");
-            cf.println("Fields what being not loaded at all, nor EAGER, nor LAZY");
+            cf.println("Fields what being not loaded (inserted and updated) at all, nor EAGER, nor LAZY");
             cf.println("@return ignored fields");
             cf.endBlock("*/");
             cf.println(forInterfaceName + "_[] ignore() default " + forInterfaceName + "_.NONE_;");
+
+            cf.startBlock("/**");
+            cf.println("Fields what only being loaded, inserted and updated. If set, 'ignore' property being not used");
+            cf.println("@return exclusively fields");
+            cf.endBlock("*/");
+            cf.println(forInterfaceName + "_[] exclusively() default " + forInterfaceName + "_.NONE_;");
 
             cf.startBlock("/**");
             cf.println("Level for EAGER loaded beans mappedElements and collections attributes<br>");

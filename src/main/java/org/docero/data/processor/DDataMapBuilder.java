@@ -791,7 +791,9 @@ class DDataMapBuilder {
     }
 
     private boolean filterIgnored(FetchOptions fetchOptions, DataBeanPropertyBuilder p) {
-        return fetchOptions.ignore.stream().noneMatch(f -> f.name.equals(p.name));
+        return fetchOptions.exclusively.isEmpty() ?
+                fetchOptions.ignore.stream().noneMatch(f -> f.name.equals(p.name)) :
+                fetchOptions.exclusively.stream().anyMatch(f -> f.name.equals(p.name));
     }
 
     private boolean notManagedBean(DataBeanPropertyBuilder propertyBuilder) {
@@ -1554,6 +1556,7 @@ class DDataMapBuilder {
         final String sqlSelect;
         final String resultMap;
         final List<DataBeanPropertyBuilder> ignore;
+        final List<DataBeanPropertyBuilder> exclusively;
         final int eagerTrunkLevel;
         final boolean truncateLazy;
         final Map<DataBeanPropertyBuilder, String> order;
@@ -1580,6 +1583,26 @@ class DDataMapBuilder {
             final List<Object> ignoreList = (ignoreObj != null && ignoreObj instanceof List) ?
                     (List) ignoreObj : Collections.emptyList();
             ignore = ignoreList.stream()
+                    .map(Object::toString)
+                    .map(s -> {
+                        int i = s.lastIndexOf('.');
+                        if (i > 0) return s.substring(i + 1);
+                        else return s;
+                    })
+                    .map(name -> bean.properties.values().stream()
+                            .filter(p -> p.enumName.equals(name))
+                            .findAny().orElse(null))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+            Object onlyObj = fetchProps.keySet().stream()
+                    .filter(k -> "exclusively".equals(k.getSimpleName().toString()))
+                    .findAny()
+                    .map(k -> fetchProps.get(k).getValue())
+                    .orElse(null);
+            final List<Object> onlyList = (onlyObj != null && onlyObj instanceof List) ?
+                    (List) onlyObj : Collections.emptyList();
+            exclusively = onlyList.stream()
                     .map(Object::toString)
                     .map(s -> {
                         int i = s.lastIndexOf('.');
@@ -1663,6 +1686,7 @@ class DDataMapBuilder {
             sqlSelect = "";
             resultMap = "";
             ignore = Collections.emptyList();
+            exclusively = Collections.emptyList();
             eagerTrunkLevel = trunkLevel;
             truncateLazy = false;
             order = Collections.emptyMap();
@@ -1673,25 +1697,32 @@ class DDataMapBuilder {
             this.sqlSelect = template.sqlSelect;
             this.resultMap = template.resultMap;
             this.ignore = template.ignore;
+            this.exclusively = template.exclusively;
             this.eagerTrunkLevel = template.eagerTrunkLevel;
             this.truncateLazy = template.truncateLazy;
             this.order = template.order;
         }
 
+        boolean isIgnored(DataBeanPropertyBuilder property) {
+            return this.exclusively.isEmpty() ?
+                    this.ignore.contains(property) :
+                    !this.exclusively.contains(property);
+        }
+
         boolean filterIgnored(DataBeanPropertyBuilder property) {
-            return !this.ignore.contains(property);
+            return !isIgnored(property);
         }
 
         boolean filter4ResultMap(DataBeanPropertyBuilder property) {
             return !(this.fetchType == DDataFetchType.NO ||
-                    this.ignore.contains(property) ||
+                    isIgnored(property) ||
                     (this.fetchType == DDataFetchType.COLLECTIONS_ARE_NO && property.isCollectionOrMap())
             );
         }
 
         boolean filter4FieldsList(DataBeanPropertyBuilder property) {
             return !(this.fetchType == DDataFetchType.NO ||
-                    this.ignore.contains(property) ||
+                    isIgnored(property) ||
                     ((
                             this.fetchType == DDataFetchType.COLLECTIONS_ARE_LAZY ||
                                     this.fetchType == DDataFetchType.COLLECTIONS_ARE_NO
