@@ -614,7 +614,7 @@ abstract class AbstractDataView {
      * @param key point delimited name of property
      * @param v   value
      */
-    private void putInHierarchy(Map map, String key, Object v) {
+    static void putInHierarchy(Map map, String key, Object v) {
         String[] p = key.split("\\.");
         int i = 0;
         Map m = map;

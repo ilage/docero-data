@@ -344,6 +344,10 @@ public class DDataTest {
 
         assertEquals(viewResult.size(), viewResult.toList().size());
 
+        List<Map<String, Object>> sl = viewResult.toListStrict();
+        assertEquals(viewResult.size(), sl.size());
+        assertTrue(sl.stream().allMatch(e -> e.get("dDataBeanKey_") != null));
+
         assertEquals("updated text value", iInnerRepository.get(inner_id).getText());
 
         ItemSample sample_o = multiTypesRepository.get(sample_id);
