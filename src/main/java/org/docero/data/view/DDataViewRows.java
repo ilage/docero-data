@@ -26,7 +26,8 @@ public class DDataViewRows {
                     Object[] colVal = row.getColumn(tableCell.name);
                     if (colVal != null && colVal.length > 0 && !(colVal.length == 1 && colVal[0] == null)) {
                         //String colName = tableCell.column.getMapName();
-                        AbstractDataView.putInHierarchy(v, tableCell.name, colVal);
+                        AbstractDataView.putInHierarchy(v, tableCell.name,
+                                colVal.length == 1 ? colVal[0] : colVal);
                     }
                 }
             return v;
