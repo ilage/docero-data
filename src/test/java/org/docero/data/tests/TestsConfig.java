@@ -1,9 +1,11 @@
 package org.docero.data.tests;
 
 import org.apache.ibatis.transaction.TransactionFactory;
+import org.apache.ibatis.type.TypeHandler;
 import org.docero.data.rmt.RemoteBean;
 import org.docero.data.rmt.RemoteRepository;
 import org.docero.data.rmt.RemoteRepositoryImpl;
+import org.docero.data.utils.UUIDTypeHandler;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.transaction.SpringManagedTransactionFactory;
 import org.springframework.cache.CacheManager;
@@ -73,7 +75,7 @@ public class TestsConfig {
         bean.setMapperLocations(dDataResources.asArray());
         bean.setTransactionFactory(transactionManager);
         bean.setObjectFactory(DData.getObjectFactory());
-
+        bean.setTypeHandlers(new TypeHandler[]{new UUIDTypeHandler()});
         new MyBatisSpringConfigurationFactory().setApplicationContext(context);
 
         return bean;

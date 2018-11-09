@@ -8,6 +8,7 @@ import org.docero.data.beans.Sample;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.UUID;
 
 @DDataRep("samples")
 public interface SampleRepository extends DDataRepository<Sample, Integer> {
@@ -99,4 +100,8 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
                     listParameter = Inner_.ID
             ) Integer listId
     );
+
+    List<Sample> listByUUid(@SampleRepository_Filter_(
+            value = Sample_.UUID
+    ) UUID uuid);
 }

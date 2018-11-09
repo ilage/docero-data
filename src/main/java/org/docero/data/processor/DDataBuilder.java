@@ -490,7 +490,8 @@ class DDataBuilder {
                     returnType.toString().startsWith("java.time.") ||
                     returnType.toString().startsWith("java.sql.") ||
                     "java.math.BigDecimal".equals(returnType.toString()) ||
-                    "java.math.BigInteger".equals(returnType.toString());
+                    "java.math.BigInteger".equals(returnType.toString()) ||
+                    "java.util.UUID".equals(returnType.toString());
         } catch (IllegalArgumentException e) {
             return false;
         }

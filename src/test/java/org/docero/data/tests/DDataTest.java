@@ -79,6 +79,7 @@ public class DDataTest {
                     "  i INT,\n" +
                     "  remote_id INT,\n" +
                     "  hash BYTEA,\n" +
+                    "  uuid UUID, \n" +
                     "  CONSTRAINT \"sample_pkey\" PRIMARY KEY (id)\n" +
                     ");\n" +
                     "\n" +
@@ -621,9 +622,13 @@ public class DDataTest {
         sample.setId(3);
         sample.setInner(iInnerRepository.get(1002));
         sample.setHash(new byte[]{0, 1, 0, 1, 0});
+        sample.setUuid(UUID.randomUUID());
         iSampleRepository.insert(sample);
 
         sl = iSampleRepository.list(null, null, null, null, 1002, null);
+        assertEquals(1, sl.size());
+
+        sl = iSampleRepository.listByUUid(sample.getUuid());
         assertEquals(1, sl.size());
 
         sample = iSampleRepository.get(sample.getId());

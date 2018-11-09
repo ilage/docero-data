@@ -6,6 +6,7 @@ import org.docero.data.GeneratedValue;
 import org.docero.dgen.DGenInterface;
 
 import java.io.Serializable;
+import java.util.UUID;
 
 @SuppressWarnings("unused")
 abstract class DGen {
@@ -21,6 +22,8 @@ abstract class DGen {
         int innerId;
         @DDataProperty("hash")
         byte[] hash;
+        @DDataProperty("uuid")
+        UUID uuid;
     }
     @DGenInterface
     @DDataBean
