@@ -112,6 +112,10 @@ public class DDataView extends AbstractDataView {
                     ")";
             for (DSQL subSelect : getSubSelects()) {
                 subSelect.WHERE(in_condition);
+
+                String vc = versionConstraint(roots[0], 0);
+                if (vc.length() > 0) subSelect.WHERE(vc);
+
                 if (LOG.isDebugEnabled()) LOG.debug("Preparing: " + subSelect.toString());
                 List<Map<String, Object>> subResult = selectViewData(sqlSession, subSelect.toString());
                 if (LOG.isDebugEnabled()) LOG.debug("Total: " + subResult.size());
