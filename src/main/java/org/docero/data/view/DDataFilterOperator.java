@@ -10,7 +10,7 @@ public enum DDataFilterOperator {
     AVG(0, "AVG", false, true), SUM(0, "SUM", false, true),
     LIKE(1, "LIKE"), STARTS(1, "LIKE"),
     NOT_LIKE(1, "NOT LIKE", true, false), NOT_STARTS(1, "NOT LIKE", true, false), IN(1, "IN", false, false),
-    BETWEEN(2, "");
+    BETWEEN(2, ""), EXPRESSION(99,"");
 
     private final int operands;
     private final String sql;

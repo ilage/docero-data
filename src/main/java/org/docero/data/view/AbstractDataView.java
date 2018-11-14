@@ -432,14 +432,14 @@ abstract class AbstractDataView {
         addFilterSql(sql, rootFilter, rootClass, "", 0, joinedInRootQuery);
     }
 
-    private void addFilterSql(DSQL sql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex, HashSet<Integer> alreadyJoined) {
+    private void addFilterSql(DSQL parentSql, DDataFilter rootFilter, Class rootClass, String path, final int fromTableIndex, HashSet<Integer> alreadyJoined) {
         if (rootFilter == null) return;
 
         JoinedTable table = allJoins.get(path);
         if (table == null) {
             table = new JoinedTable(fromTableIndex, tablesCounter.incrementAndGet(), rootFilter.getAttribute());
             if (!alreadyJoined.contains(table.tableIndex)) {
-                sql.LEFT_OUTER_JOIN(table.joinSql);
+                parentSql.LEFT_OUTER_JOIN(table.joinSql);
                 alreadyJoined.add(table.tableIndex);
             }
             allJoins.put(path, table);
@@ -451,7 +451,9 @@ abstract class AbstractDataView {
                         .filter(f -> isApplicable(rootClass, f))
                         .collect(Collectors.toList());
 
+        DSQL applied = new DSQL();
         for (DDataFilter filter : appliedFilters) {
+            DSQL sql = new DSQL();
             if (!filter.getAttribute().isCollection()) {
                 if (filter.getOperator() != null && !filter.hasFilters()) {
                     String columnReference = "t" + table.tableIndex + ".\"" +
@@ -495,6 +497,9 @@ abstract class AbstractDataView {
                                     DDataTypes.maskedValue(columnType, filter.getValueTo().toString()) +
                                     ")";
                             break;
+                        case 99: //SQL EXPRESSION
+                            condition = ((String) filter.getValue()).replaceAll("\\?", columnReference);
+                            break;
                         default:
                             condition = null;
                     }
@@ -527,7 +532,10 @@ abstract class AbstractDataView {
                     addFilterSql(this, filter, innerClass, key, finalN, alreadyJoined);
                 }}.toString() + ")");
             }
+            applied.WHERE(sql);
         }
+        if (rootFilter.isOr()) parentSql.WHERE_WITH_OR(applied);
+        else parentSql.WHERE(applied);
     }
 
     private final static DateTimeFormatter sqlTimestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

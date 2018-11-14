@@ -85,6 +85,7 @@ public class DDataFilter {
     };
     private Boolean sortAscending;
     private String mapName;
+    private boolean or;
 
     /**
      * Find attribute for property name in given attribute
@@ -168,6 +169,29 @@ public class DDataFilter {
      */
     public DDataFilter(DDataAttribute column, DDataFilterOperator operator, Object value) throws DDataException {
         this(column, operator, value, null);
+    }
+
+    /**
+     * Create concrete filter (tree leaf) with sql-expression
+     *
+     * @param column     attribute to filter
+     * @param expression sql expression with ? for column referenced by attribute
+     * @throws DDataException if DDataAttribute is null or NONE_, or attribute reference mapped bean
+     */
+    public DDataFilter(DDataAttribute column, String expression) throws DDataException {
+        if (column == null || column.getPropertyName() == null)
+            throw new DDataException("can't create filter for NULL");
+
+        this.attribute = column;
+        if (attribute.isMappedBean()) {
+            throw new DDataException("can't create expression filter for mapped type");
+        } else {
+            filters = null;
+            this.externalData = false;
+            this.operator = DDataFilterOperator.EXPRESSION;
+            this.value = expression;
+            this.valueTo = null;
+        }
     }
 
     /**
@@ -292,19 +316,49 @@ public class DDataFilter {
                 Objects.equals(((DDataFilter) o).attribute, attribute);
     }
 
+    /**
+     * @return null for unsorted column, otherwise is ascending sorting
+     */
     public Boolean isSortAscending() {
         return sortAscending;
     }
 
+    /**
+     * Set sorting for column, null for unsorted,
+     * true/false for ascending/descending sorting
+     * @param sortAscending column sorting
+     */
     public void setSortAscending(Boolean sortAscending) {
         this.sortAscending = sortAscending;
     }
 
+    /**
+     * @return alias for property in properties path
+     */
     public String getMapName() {
         return mapName != null ? mapName : (attribute == null ? "" : attribute.getPropertyName());
     }
 
+    /**
+     * Set alias for property in properties path, default is property name
+     * @param mapName
+     */
     public void setMapName(String mapName) {
         this.mapName = mapName;
+    }
+
+    /**
+     * @return child filters included in sql with OR operator, default false
+     */
+    public boolean isOr() {
+        return or;
+    }
+
+    /**
+     * Set include child filters with OR operator, default false
+     * @param or use OR operator
+     */
+    public void setOr(boolean or) {
+        this.or = or;
     }
 }

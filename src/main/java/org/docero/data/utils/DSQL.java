@@ -190,7 +190,7 @@ public class DSQL {
     }
 
     /**
-     *  DData addon: add where part and all joins from parameter
+     *  DData addon: add where part concatenated by AND, and all joins from parameter
      */
     public DSQL WHERE(DSQL w) {
         if(w.sql.where.size()>0) {
@@ -201,6 +201,24 @@ public class DSQL {
             sql.leftOuterJoin.addAll(w.sql.leftOuterJoin);
             sql.rightOuterJoin.addAll(w.sql.rightOuterJoin);
             sql.sqlClause(new SafeAppendable(builder), "", w.sql.where, "(", ")", " AND ");
+            return WHERE("("+builder.toString()+")");
+        }
+        else
+            return this;
+    }
+
+    /**
+     *  DData addon: add where part concatenated by OR, and all joins from parameter
+     */
+    public DSQL WHERE_WITH_OR(DSQL w) {
+        if(w.sql.where.size()>0) {
+            StringBuilder builder = new StringBuilder();
+            sql.join.addAll(w.sql.join);
+            sql.innerJoin.addAll(w.sql.innerJoin);
+            sql.outerJoin.addAll(w.sql.outerJoin);
+            sql.leftOuterJoin.addAll(w.sql.leftOuterJoin);
+            sql.rightOuterJoin.addAll(w.sql.rightOuterJoin);
+            sql.sqlClause(new SafeAppendable(builder), "", w.sql.where, "(", ")", " OR ");
             return WHERE("("+builder.toString()+")");
         }
         else
