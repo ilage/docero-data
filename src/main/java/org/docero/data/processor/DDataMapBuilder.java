@@ -621,7 +621,7 @@ class DDataMapBuilder {
                     if (order != null)
                         addOrder(order, domElement);
                     else if (!fetchOptions.order.isEmpty()) ssql
-                            .append("\nORDER BY ")
+                            .append("\tORDER BY ")
                             .append(fetchOptions.order.keySet().stream()
                                     .map(o -> o.getColumnRef() + " " + fetchOptions.order.get(o))
                                     .collect(Collectors.joining(", ")));
@@ -638,6 +638,19 @@ class DDataMapBuilder {
                     ssql.append("\n) AS t0\n");
                     if (bean.versionalType != null) ssql.append("CROSS JOIN tt\n");
                     addJoins(mappedTables, ssql, versionParameter);
+
+                    domElement.appendChild(doc.createTextNode(ssql.toString()));
+                    ssql = new StringBuilder();
+
+                    if (order != null) {
+                        addOrder(order, domElement);
+                    } else if (!fetchOptions.order.isEmpty()) ssql
+                            .append("\tORDER BY ")
+                            .append(fetchOptions.order.keySet().stream()
+                                    .map(o -> "t0." + o.getColumnRef() + " " + fetchOptions.order.get(o))
+                                    .collect(Collectors.joining(", ")));
+                    ssql.append('\n');
+
                     domElement.appendChild(doc.createTextNode(ssql.toString()));
             }
         }
