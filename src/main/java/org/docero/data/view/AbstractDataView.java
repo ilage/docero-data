@@ -466,6 +466,7 @@ abstract class AbstractDataView {
                             break;
                         case 1:
                             String value;
+                            String columnExpression = columnReference;
                             if (filter.getOperator() == DDataFilterOperator.IN) {
                                 if (filter.getValue().getClass().isArray()) {
                                     value = "(" + Arrays.stream((Object[]) filter.getValue())
@@ -486,8 +487,21 @@ abstract class AbstractDataView {
                                     value = "%" + value + "%";
                                 else if (filter.getOperator() == DDataFilterOperator.STARTS) value = value + "%";
                                 else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS) value = value + "%";
+                                else if (filter.getOperator() == DDataFilterOperator.LIKE_IGNORE_CASE) {
+                                    columnExpression = "lower(" + columnReference + ")";
+                                    value = "%" + value.toLowerCase() + "%";
+                                } else if (filter.getOperator() == DDataFilterOperator.NOT_LIKE_IGNORE_CASE) {
+                                    columnExpression = "lower(" + columnReference + ")";
+                                    value = "%" + value.toLowerCase() + "%";
+                                } else if (filter.getOperator() == DDataFilterOperator.STARTS_IGNORE_CASE) {
+                                    columnExpression = "lower(" + columnReference + ")";
+                                    value = value.toLowerCase() + "%";
+                                } else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS_IGNORE_CASE) {
+                                    columnExpression = "lower(" + columnReference + ")";
+                                    value = value.toLowerCase() + "%";
+                                }
                             }
-                            condition = columnReference + filter.getOperator().toString() + " " +
+                            condition = columnExpression + filter.getOperator().toString() + " " +
                                     DDataTypes.maskedValue(columnType, value);
                             break;
                         case 2: //BETWEEN only

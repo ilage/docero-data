@@ -8,9 +8,9 @@ public enum DDataFilterOperator {
     IS_NULL(0, "IS NULL"), IS_NOT_NULL(0, "IS NOT NULL"),
     COUNT(0, "COUNT", false, true), MAX(0, "MAX", false, true), MIN(0, "MIN", false, true),
     AVG(0, "AVG", false, true), SUM(0, "SUM", false, true),
-    LIKE(1, "LIKE"), STARTS(1, "LIKE"),
-    NOT_LIKE(1, "NOT LIKE", true, false), NOT_STARTS(1, "NOT LIKE", true, false), IN(1, "IN", false, false),
-    BETWEEN(2, ""), EXPRESSION(99,"");
+    LIKE(1, "LIKE"), STARTS(1, "LIKE"), NOT_LIKE(1, "NOT LIKE", true, false), NOT_STARTS(1, "NOT LIKE", true, false),
+    LIKE_IGNORE_CASE(1, "LIKE"), STARTS_IGNORE_CASE(1, "LIKE"), NOT_LIKE_IGNORE_CASE(1, "NOT LIKE", true, false), NOT_STARTS_IGNORE_CASE(1, "NOT LIKE", true, false),
+    IN(1, "IN", false, false), BETWEEN(2, ""), EXPRESSION(99,"");
 
     private final int operands;
     private final String sql;
