@@ -320,7 +320,9 @@ class DataBeanPropertyBuilder {
                                 environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                                 environment.getTypeUtils().erasure(this.type)
                         ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection +
-                        ", null, null, null," + this.isId + ", null),");
+                        ", null, null, null," + this.isId + ", null," +
+                        (this.readerSql == null ? "null" : "\"" + this.readerSql + "\"") + "," +
+                        (this.writerSql == null ? "null" : "\"" + this.writerSql + "\"") + "),");
             else {
                 Mapping map = mappings.get(dataBean.interfaceType.toString() + "." + this.name);
                 String protoPkg = mte.getEnclosingElement().toString();
@@ -338,7 +340,9 @@ class DataBeanPropertyBuilder {
                                 .collect(Collectors.joining(",")) + "}") +
                         ", " +
                         (map == null || map.func == null ? "null" : "new String[]{" + map.func + "}") +
-                        ", false, " + mappedType + ".class),");
+                        ", false, " + mappedType + ".class," +
+                        (this.readerSql == null ? "null" : "\"" + this.readerSql + "\"") + "," +
+                        (this.writerSql == null ? "null" : "\"" + this.writerSql + "\"") + "),");
             }
         } else {
             cf.println("/** Value of column " + this.columnName + "*/");
@@ -357,7 +361,9 @@ class DataBeanPropertyBuilder {
                     (map == null ? "null" : "new String[]{" + map.stream()
                             .map(m -> "\"" + m.mappedProperty.columnName + "\"")
                             .collect(Collectors.joining(",")) + "}") +
-                    ", false, " + mappedType + ".class),");
+                    ", false, " + mappedType + ".class," +
+                    (this.readerSql == null ? "null" : "\"" + this.readerSql + "\"") + "," +
+                    (this.writerSql == null ? "null" : "\"" + this.writerSql + "\"") + "),");
         }
     }
 

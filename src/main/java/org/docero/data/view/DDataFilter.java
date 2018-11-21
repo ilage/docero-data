@@ -79,6 +79,16 @@ public class DDataFilter {
         }
 
         @Override
+        public String readExpression() {
+            return null;
+        }
+
+        @Override
+        public String writeExpression() {
+            return null;
+        }
+
+        @Override
         public Class<? extends Serializable> getBeanInterface() {
             return null;
         }

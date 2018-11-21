@@ -7,5 +7,7 @@ public interface DDataAttribute extends DDataBasicAttribute {
     String joinTable();
     String[] joinBy();
     String[] joinOn();
+    String readExpression();
+    String writeExpression();
     Class<? extends Serializable> getBeanInterface();
 }
