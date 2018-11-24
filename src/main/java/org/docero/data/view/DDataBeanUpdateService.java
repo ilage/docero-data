@@ -43,11 +43,13 @@ public abstract class DDataBeanUpdateService<T> {
         if (entity.parent != null)
             for (AbstractDataView.TableCell parentMapColumn : entity.parent.mappings.keySet()) {
                 AbstractDataView.TableCell beanMapColumn = entity.parent.mappings.get(parentMapColumn);
-                Object beanMapValue = getProperty(bean, beanMapColumn.attribute);
-                if (!DDataView.idIsNull(beanMapValue)) {
-                    row.setColumnValue(beanMapValue, entity.parent.isCollection() ? 0 : index,
-                            parentMapColumn.name, false);
-                    anyParentItemMayBeModified = true;
+                if (beanMapColumn.name.startsWith(entityPath)) {
+                    Object beanMapValue = getProperty(bean, beanMapColumn.attribute);
+                    if (!DDataView.idIsNull(beanMapValue)) {
+                        row.setColumnValue(beanMapValue, entity.parent.isCollection() ? 0 : index,
+                                parentMapColumn.name, false);
+                        anyParentItemMayBeModified = true;
+                    }
                 }
             }
         // write bean properties to view row if updates to database must be wrote by view
@@ -86,6 +88,8 @@ public abstract class DDataBeanUpdateService<T> {
     }*/
 
     private Object getProperty(T bean, DDataAttribute attribute) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException {
+        if (bean == null) return null;
+
         Class<?> beanImplementation = bean.getClass();
         String property = attribute.getPropertyName();
         String getterName = "get" + Character.toUpperCase(property.charAt(0)) + property.substring(1);

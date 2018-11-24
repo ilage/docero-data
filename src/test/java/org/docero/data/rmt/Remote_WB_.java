@@ -105,6 +105,9 @@ public enum Remote_WB_ implements org.docero.data.utils.DDataAttribute {
     }
 
     @Override
+    public boolean isNullable() {return true;}
+
+    @Override
     public Class<? extends java.io.Serializable> getBeanInterface() {
         return interfaceType;
     }

@@ -257,7 +257,8 @@ public class DDataView extends AbstractDataView {
                         if (beanService != null)
                             for (Integer updatedIndex : updatedEntities.get(entityPropertyPath))
                                 if (beanService.update(row, updatedIndex, entityPropertyPath)) {
-                                    String parentPath = entityPropertyPath.substring(0, entityPropertyPath.lastIndexOf('.'));
+                                    int lastDelim = entityPropertyPath.lastIndexOf('.');
+                                    String parentPath = lastDelim < 0 ? null : entityPropertyPath.substring(0, lastDelim);
                                     if (!updatedEntities.containsKey(parentPath))
                                         updatedParents.computeIfAbsent(parentPath, k -> new HashSet<>())
                                                 .add(getEntityForPath(parentPath).isCollection() ? 0 : updatedIndex);
@@ -422,7 +423,13 @@ public class DDataView extends AbstractDataView {
 
     @SuppressWarnings({"unchecked", "WeakerAccess"})
     public <T extends Serializable> DDataBeanUpdateService<T> getUpdateServiceFor(Class<T> beanInterface) {
-        return (DDataBeanUpdateService<T>) knownUpdaters.get(beanInterface);
+        DDataBeanUpdateService<T> updater = (DDataBeanUpdateService<T>) knownUpdaters.get(beanInterface);
+        if (updater == null)
+            updater = Arrays.stream(beanInterface.getInterfaces())
+                    .map(i -> knownUpdaters.get(i))
+                    .filter(Objects::nonNull).findFirst()
+                    .orElse(null);
+        return updater;
     }
 
     public <T extends Serializable> void addUpdateService(Class<T> i, DDataBeanUpdateService<T> service) {

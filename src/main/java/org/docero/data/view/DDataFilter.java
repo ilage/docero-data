@@ -6,10 +6,7 @@ import org.docero.data.utils.DDataException;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @SuppressWarnings({"unused", "WeakerAccess"})
@@ -61,6 +58,11 @@ public class DDataFilter {
         @Override
         public boolean isPrimaryKey() {
             return false;
+        }
+
+        @Override
+        public boolean isNullable() {
+            return true;
         }
 
         @Override
@@ -306,12 +308,13 @@ public class DDataFilter {
     }
 
     String getName() {
-        return attribute == null ? "" : attribute.getPropertyName();
+        return attribute.getPropertyName();
     }
 
     @Override
     public int hashCode() {
-        return attribute.hashCode();
+        return (attribute.getColumnName() == null ? 0 : attribute.getColumnName().hashCode())
+                ^ (attribute.joinTable() == null ? 0 : attribute.joinTable().hashCode());
     }
 
     /**
@@ -322,8 +325,7 @@ public class DDataFilter {
      */
     @Override
     public boolean equals(Object o) {
-        return o != null && o instanceof DDataFilter &&
-                Objects.equals(((DDataFilter) o).attribute, attribute);
+        return o != null && o instanceof DDataFilter && DDataAttribute.equals(((DDataFilter) o).attribute, attribute);
     }
 
     /**
@@ -336,6 +338,7 @@ public class DDataFilter {
     /**
      * Set sorting for column, null for unsorted,
      * true/false for ascending/descending sorting
+     *
      * @param sortAscending column sorting
      */
     public void setSortAscending(Boolean sortAscending) {
@@ -351,6 +354,7 @@ public class DDataFilter {
 
     /**
      * Set alias for property in properties path, default is property name
+     *
      * @param mapName
      */
     public void setMapName(String mapName) {
@@ -366,6 +370,7 @@ public class DDataFilter {
 
     /**
      * Set include child filters with OR operator, default false
+     *
      * @param or use OR operator
      */
     public void setOr(boolean or) {

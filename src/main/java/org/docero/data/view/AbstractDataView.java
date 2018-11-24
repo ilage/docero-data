@@ -94,8 +94,7 @@ abstract class AbstractDataView {
                 String nameInPath = column.getMapName();
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
 
-                TableEntity entity = new TableEntity(parent, cp, column);
-                parent.addEntity(entity);
+                TableEntity entity = new TableEntity(parent, cp, column.getAttribute());
                 String versionColumn = entity.versionFrom == null ? "" : entity.versionFrom.getColumnName();
 
                 if (!column.isExternalData())
@@ -147,6 +146,8 @@ abstract class AbstractDataView {
                     }
                     remoteBeans.computeIfAbsent(path, k -> new ArrayList<>()).add(rbr);
                 }
+                if (getEntityForPath(cp) == null)
+                    parent.addEntity(entity);
 
                 if (!column.isExternalData() && column.getFilters() != null)
                     fillViewEntities(column.getFilters(), cp, entity);
@@ -240,6 +241,8 @@ abstract class AbstractDataView {
                             if (!columnsInSelect.contains(idKey)) {
                                 columnsInSelect.add(idKey);
                                 String val = "t" + fromTableIndex + ".\"" + attr.getColumnName() + "\"";
+                                if (attr.readExpression() != null)
+                                    val = attr.readExpression().replace("?", val);
                                 sql.SELECT(val + " AS \"" + idKey + "\"");
                             }
                         }
@@ -317,6 +320,8 @@ abstract class AbstractDataView {
                 if (!columnsInSelect.contains(pathAttributeName)) {
                     columnsInSelect.add(pathAttributeName);
                     String val = "t" + fromTableIndex + ".\"" + attribute.getColumnName() + "\"";
+                    if (attribute.readExpression() != null)
+                        val = attribute.readExpression().replace("?", val);
                     sql.SELECT(val + " AS \"" + pathAttributeName + "\"");
                     if (column.isSortAscending() != null)
                         sql.ORDER_BY(val + (column.isSortAscending() ? " ASC" : " DESC"));
@@ -819,6 +824,17 @@ abstract class AbstractDataView {
             this.attribute = attribute;
             this.isVersion = isVersion;
         }
+
+        public int hashCode() {
+            return name == null ? 0 : name.hashCode();
+        }
+
+        public boolean equals(Object o) {
+            return o instanceof TableCell
+                    && Objects.equals(name, ((TableCell) o).name)
+                    && Objects.equals(column, ((TableCell) o).column)
+                    && Objects.equals(attribute, ((TableCell) o).attribute);
+        }
     }
 
     @SuppressWarnings("JavaReflectionMemberAccess")
@@ -851,10 +867,9 @@ abstract class AbstractDataView {
             }
         }
 
-        TableEntity(TableEntity parent, String name, DDataFilter column) {
+        TableEntity(TableEntity parent, String name, DDataAttribute mapByAttribute) {
             this.parent = parent;
             this.name = name;
-            DDataAttribute mapByAttribute = column.getAttribute();
             Class<? extends DDataAttribute> beanEnum = (Class<? extends DDataAttribute>) mapByAttribute.getJavaType();
             this.attributes = Arrays.stream(beanEnum.getEnumConstants()).collect(Collectors.toList());
             this.collection = mapByAttribute.isCollection();

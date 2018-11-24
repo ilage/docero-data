@@ -474,7 +474,7 @@ class DataBeanBuilder {
             for (DataBeanPropertyBuilder property : properties.values())
                 property.buildEnumElementWithBeans(cf, mappings, environment);
 
-            cf.println("NONE_(null,null,null,null,false,false,false,null,null,null,false,null,null,null);");
+            cf.println("NONE_(null,null,null,null,false,false,false,null,null,null,false,true,null,null,null);");
             cf.println("");
             cf.println("public final static String TABLE_NAME = " + (prototype ?
                     "null;" :
@@ -509,9 +509,10 @@ class DataBeanBuilder {
             cf.println("private final String[] joinBy;");
             cf.println("private final String[] joinOn;");
             cf.println("private final boolean isPrimaryKey;");
+            cf.println("private final boolean isNullable;");
             cf.println("private final String readExpression;");
             cf.println("private final String writeExpression;");
-            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, String joinTable, String[] joinBy, String[] joinOn, boolean isPrimaryKey, Class<? extends java.io.Serializable> interfaceType, String readExpression, String writeExpression) {");
+            cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, String joinTable, String[] joinBy, String[] joinOn, boolean isPrimaryKey, boolean isNullable, Class<? extends java.io.Serializable> interfaceType, String readExpression, String writeExpression) {");
             cf.println("this.columnName = columnName;");
             cf.println("this.propertyName = propertyName;");
             cf.println("this.javaType = javaType;");
@@ -523,6 +524,7 @@ class DataBeanBuilder {
             cf.println("this.joinBy = joinBy;");
             cf.println("this.joinOn = joinOn;");
             cf.println("this.isPrimaryKey = isPrimaryKey;");
+            cf.println("this.isNullable = isNullable;");
             cf.println("this.interfaceType = interfaceType;");
             cf.println("this.readExpression = readExpression;");
             cf.println("this.writeExpression = writeExpression;");
@@ -538,6 +540,7 @@ class DataBeanBuilder {
             cf.println("@Override public String[] joinBy() {return joinBy;}");
             cf.println("@Override public String[] joinOn() {return joinOn;}");
             cf.println("@Override public boolean isPrimaryKey() {return isPrimaryKey;}");
+            cf.println("@Override public boolean isNullable() {return isNullable;}");
             cf.println("@Override public String readExpression() {return readExpression;}");
             cf.println("@Override public String writeExpression() {return writeExpression;}");
             cf.println("@Override public Class<? extends java.io.Serializable> getBeanInterface() {return interfaceType;}");
@@ -698,7 +701,7 @@ class DataBeanBuilder {
                 for (DataBeanPropertyBuilder property : properties.values())
                     property.buildEnumElement(cf, beansByInterface, environment);
 
-                cf.println("NONE_(null,null,null,null,false,false,false,false);");
+                cf.println("NONE_(null,null,null,null,false,false,false,false,true);");
                 cf.println("public final static String TABLE_NAME = \"" + schema + "." + table + "\";");
                 cf.println("public final static Class<" + interfaceType + "> BEAN_INTERFACE = " + interfaceType + ".class;");
                 cf.println("private final String columnName;");
@@ -709,7 +712,8 @@ class DataBeanBuilder {
                 cf.println("private final boolean mapped;");
                 cf.println("private final boolean collection;");
                 cf.println("private final boolean isPrimaryKey;");
-                cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, boolean isPrimaryKey) {");
+                cf.println("private final boolean isNullable;");
+                cf.startBlock("private " + enumName + " (String columnName, String propertyName, Class javaType, String jdbcType, boolean dictionary, boolean mapped, boolean collection, boolean isPrimaryKey, boolean isNullable) {");
                 cf.println("this.columnName = columnName;");
                 cf.println("this.propertyName = propertyName;");
                 cf.println("this.javaType = javaType;");
@@ -718,6 +722,7 @@ class DataBeanBuilder {
                 cf.println("this.mapped = mapped;");
                 cf.println("this.collection = collection;");
                 cf.println("this.isPrimaryKey = isPrimaryKey;");
+                cf.println("this.isNullable = isNullable;");
                 cf.endBlock("}");
                 cf.println("@Override public String getColumnName() {return columnName;}");
                 cf.println("@Override public String getPropertyName() {return propertyName;}");
@@ -727,6 +732,7 @@ class DataBeanBuilder {
                 cf.println("@Override public boolean isMappedBean() {return mapped;}");
                 cf.println("@Override public boolean isCollection() {return collection;}");
                 cf.println("@Override public boolean isPrimaryKey() {return isPrimaryKey;}");
+                cf.println("@Override public boolean isNullable() {return isNullable;}");
                 cf.endBlock("}");
             }
         /*

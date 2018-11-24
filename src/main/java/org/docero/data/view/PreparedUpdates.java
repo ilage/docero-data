@@ -21,7 +21,9 @@ class PreparedUpdates {
     final String entityPropertyPath;
 
     private final DDataView dDataView;
-    /** ids without version */
+    /**
+     * ids without version
+     */
     private final List<DDataAttribute> ids = new ArrayList<>();
     private final List<AbstractDataView.TableCell> props = new ArrayList<>();
     private final AbstractDataView.TableEntity entity;
@@ -53,15 +55,15 @@ class PreparedUpdates {
 
         props.addAll(entity.cells.stream()
                 .filter(c -> c.column != null && !c.isVersion && !c.attribute.isPrimaryKey() &&
-                        mappings.stream().noneMatch(m -> m.to.attribute == c.attribute))
+                        mappings.stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, c.attribute)))
                 .collect(Collectors.toSet())
         );
 
         unModified = new ArrayList<>();
         for (DDataAttribute beanAtr : entity.attributes)
             if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
-                if (props.stream().noneMatch(c -> c.attribute == beanAtr) &&
-                        mappings.stream().noneMatch(m -> m.to.attribute == beanAtr))
+                if (props.stream().noneMatch(c -> DDataAttribute.equals(c.attribute, beanAtr)) &&
+                        mappings.stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, beanAtr)))
                     unModified.add(beanAtr);
             }
         if (props.isEmpty() || ids.isEmpty())
@@ -250,6 +252,9 @@ class PreparedUpdates {
     }
 
     private void fillStatement(PreparedStatement ps, int pIdx, DDataAttribute prop, Object v) throws SQLException {
+        if (!prop.isNullable() && v == null)
+            throw new SQLException("Column '" + prop.getColumnName() + "' don't allows NULL");
+
         if ("TIMESTAMP".equals(prop.getJdbcType())) {
             if (v == null)
                 ps.setNull(pIdx, Types.TIMESTAMP);

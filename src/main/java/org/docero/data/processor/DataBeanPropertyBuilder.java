@@ -286,7 +286,7 @@ class DataBeanPropertyBuilder {
                             environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                             environment.getTypeUtils().erasure(this.type)
                     ) + ".class,\"" + this.jdbcType + "\", false, false, " +
-                    this.isCollection + "," + this.isId + "),");
+                    this.isCollection + "," + this.isId + "," + this.nullable + "),");
 
             if (this.isVersionFrom)
                 cf.println("VERSION_(\"" +
@@ -296,7 +296,7 @@ class DataBeanPropertyBuilder {
                                 environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                                 environment.getTypeUtils().erasure(this.type)
                         ) + ".class,\"" + this.jdbcType + "\", false, false, " +
-                        this.isCollection + "," + this.isId + "),");
+                        this.isCollection + "," + this.isId + "," + this.nullable + "),");
         }
     }
 
@@ -320,7 +320,7 @@ class DataBeanPropertyBuilder {
                                 environment.getTypeUtils().boxedClass((PrimitiveType) this.type).asType() :
                                 environment.getTypeUtils().erasure(this.type)
                         ) + ".class,\"" + this.jdbcType + "\", false, false, " + this.isCollection +
-                        ", null, null, null," + this.isId + ", null," +
+                        ", null, null, null," + this.isId + "," + this.nullable + ", null," +
                         (this.readerSql == null ? "null" : "\"" + this.readerSql + "\"") + "," +
                         (this.writerSql == null ? "null" : "\"" + this.writerSql + "\"") + "),");
             else {
@@ -340,7 +340,7 @@ class DataBeanPropertyBuilder {
                                 .collect(Collectors.joining(",")) + "}") +
                         ", " +
                         (map == null || map.func == null ? "null" : "new String[]{" + map.func + "}") +
-                        ", false, " + mappedType + ".class," +
+                        ", false, " + this.nullable + "," + mappedType + ".class," +
                         (this.readerSql == null ? "null" : "\"" + this.readerSql + "\"") + "," +
                         (this.writerSql == null ? "null" : "\"" + this.writerSql + "\"") + "),");
             }
@@ -361,7 +361,7 @@ class DataBeanPropertyBuilder {
                     (map == null ? "null" : "new String[]{" + map.stream()
                             .map(m -> "\"" + m.mappedProperty.columnName + "\"")
                             .collect(Collectors.joining(",")) + "}") +
-                    ", false, " + mappedType + ".class," +
+                    ", false, " + this.nullable + "," + mappedType + ".class," +
                     (this.readerSql == null ? "null" : "\"" + this.readerSql + "\"") + "," +
                     (this.writerSql == null ? "null" : "\"" + this.writerSql + "\"") + "),");
         }
