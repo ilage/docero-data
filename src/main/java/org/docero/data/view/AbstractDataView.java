@@ -94,60 +94,62 @@ abstract class AbstractDataView {
                 String nameInPath = column.getMapName();
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
 
-                TableEntity entity = new TableEntity(parent, cp, column.getAttribute());
-                String versionColumn = entity.versionFrom == null ? "" : entity.versionFrom.getColumnName();
+                TableEntity entity = getEntityForPath(cp);
+                if (entity == null){
+                    entity = new TableEntity(parent, cp, column.getAttribute());
+                    parent.addEntity(entity);
 
-                if (!column.isExternalData())
-                    for (DDataAttribute entityAttr : entity.attributes) {
-                        int idx = indexOf(attribute.joinOn(), entityAttr.getColumnName());
-                        String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
-                        if (entityAttr.isPrimaryKey() || joinBy != null) {
-                            TableCell idCell = new TableCell(cp + "." + entityAttr.getPropertyName(), entityAttr,
-                                    versionColumn.equals(entityAttr.getColumnName()));
-                            entity.addCell(idCell);
+                    String versionColumn = entity.versionFrom == null ? "" : entity.versionFrom.getColumnName();
+                    if (!column.isExternalData())
+                        for (DDataAttribute entityAttr : entity.attributes) {
+                            int idx = indexOf(attribute.joinOn(), entityAttr.getColumnName());
+                            String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
+                            if (entityAttr.isPrimaryKey() || joinBy != null) {
+                                TableCell idCell = new TableCell(cp + "." + entityAttr.getPropertyName(), entityAttr,
+                                        versionColumn.equals(entityAttr.getColumnName()));
+                                entity.addCell(idCell);
+                                if (joinBy != null) {
+                                    TableCell parentMapCell = parent.cells.stream()
+                                            .filter(c -> joinBy.equals(c.attribute.getColumnName()))
+                                            .findAny().orElse(null);
+                                    if (parentMapCell == null) {
+                                        DDataAttribute parentMapAttr = parent.attributes.stream()
+                                                .filter(c -> joinBy.equals(c.getColumnName()))
+                                                .findAny().orElse(null);
+                                        assert parentMapAttr != null;
+                                        parent.addCell(parentMapCell = new TableCell(
+                                                (path == null ? "" : path + ".") + parentMapAttr.getPropertyName(),
+                                                parentMapAttr,
+                                                false
+                                        ));
+                                    }
+                                    parent.mappings.put(parentMapCell, idCell);
+                                }
+                            }
+                        }
+                    else {
+                        RemoteBeanRef rbr = new RemoteBeanRef(path, nameInPath, attribute.getBeanInterface(),
+                                attribute.joinOn() == null ? null : attribute.joinOn()[0]);
+                        for (DDataAttribute entityAttr : parent.attributes) {
+                            int idx = indexOf(attribute.joinBy(), entityAttr.getColumnName());
+                            String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
                             if (joinBy != null) {
                                 TableCell parentMapCell = parent.cells.stream()
                                         .filter(c -> joinBy.equals(c.attribute.getColumnName()))
-                                        .findAny().orElse(null);
-                                if (parentMapCell == null) {
-                                    DDataAttribute parentMapAttr = parent.attributes.stream()
-                                            .filter(c -> joinBy.equals(c.getColumnName()))
-                                            .findAny().orElse(null);
-                                    assert parentMapAttr != null;
-                                    parent.addCell(parentMapCell = new TableCell(
-                                            (path == null ? "" : path + ".") + parentMapAttr.getPropertyName(),
-                                            parentMapAttr,
-                                            false
-                                    ));
-                                }
-                                parent.mappings.put(parentMapCell, idCell);
+                                        .findAny().orElseGet(() -> {
+                                            TableCell pmc = new TableCell(
+                                                    (path == null ? "" : path + ".") + entityAttr.getPropertyName(),
+                                                    entityAttr,
+                                                    false);
+                                            parent.addCell(pmc);
+                                            return pmc;
+                                        });
+                                rbr.addParameter(parentMapCell.name);
                             }
                         }
+                        remoteBeans.computeIfAbsent(path, k -> new ArrayList<>()).add(rbr);
                     }
-                else {
-                    RemoteBeanRef rbr = new RemoteBeanRef(path, nameInPath, attribute.getBeanInterface(),
-                            attribute.joinOn() == null ? null : attribute.joinOn()[0]);
-                    for (DDataAttribute entityAttr : parent.attributes) {
-                        int idx = indexOf(attribute.joinBy(), entityAttr.getColumnName());
-                        String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
-                        if (joinBy != null) {
-                            TableCell parentMapCell = parent.cells.stream()
-                                    .filter(c -> joinBy.equals(c.attribute.getColumnName()))
-                                    .findAny().orElseGet(() -> {
-                                        TableCell pmc = new TableCell(
-                                                (path == null ? "" : path + ".") + entityAttr.getPropertyName(),
-                                                entityAttr,
-                                                false);
-                                        parent.addCell(pmc);
-                                        return pmc;
-                                    });
-                            rbr.addParameter(parentMapCell.name);
-                        }
-                    }
-                    remoteBeans.computeIfAbsent(path, k -> new ArrayList<>()).add(rbr);
                 }
-                if (getEntityForPath(cp) == null)
-                    parent.addEntity(entity);
 
                 if (!column.isExternalData() && column.getFilters() != null)
                     fillViewEntities(column.getFilters(), cp, entity);

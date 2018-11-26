@@ -252,20 +252,8 @@ public class DDataTest {
             add(new DDataFilter(ItemSample_WB_.ELEM_TYPE));
             add(new DDataFilter(ItemSample_WB_.SM_ID));
 
-            DDataFilter iCols = new DDataFilter(ItemSample_WB_.SAMPLE);
-            iCols.add(new DDataFilter(Sample_WB_.STR_PARAMETER));
-            iCols.add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
-                add(new DDataFilter(Inner_WB_.TEXT));
-                add(new DDataFilter(Inner_WB_.ID));
-                // checked if present add(new DDataFilter(Inner_WB_.SAMPLE_ID));
-                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 5555));
-            }});
-            iCols.add(new DDataFilter(Sample_WB_.INNER) {{
-                this.add(new DDataFilter(Inner_WB_.TEXT));
-            }});
-            add(iCols);
-
             add(new DDataFilter(ItemItemSample_WB_.SAMPLE) {{
+                setMapName("iisample");
                 add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
                     add(new DDataFilter(Sample_WB_.INNER) {{
                         this.add(new DDataFilter(Inner_WB_.TEXT));
@@ -273,24 +261,32 @@ public class DDataTest {
                 }});
             }});
 
-            iCols = new DDataFilter(ItemInner_WB_.INNER);
-            iCols.add(new DDataFilter(Inner_WB_.TEXT));
-            add(iCols);
-
-            add(new DDataFilter(ItemItemSample_WB_.SAMPLE) {{
-                add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
-                    add(new DDataFilter(Sample_WB_.STR_PARAMETER));
+            add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
+                add(new DDataFilter(Sample_WB_.STR_PARAMETER));
+            }});
+            add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
+                add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
+                    add(new DDataFilter(Inner_WB_.TEXT));
+                    add(new DDataFilter(Inner_WB_.ID));
+                    // checked if present add(new DDataFilter(Inner_WB_.SAMPLE_ID));
+                    add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 5555));
                 }});
+            }});
+            add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
+                add(new DDataFilter(Sample_WB_.HASH));
+            }});
+            add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
+                add(new DDataFilter(Sample_WB_.INNER) {{
+                    this.add(new DDataFilter(Inner_WB_.TEXT));
+                }});
+            }});
+
+            add(new DDataFilter(ItemInner_WB_.INNER) {{
+                add(new DDataFilter(Inner_WB_.TEXT));
             }});
         }});
         view.setFilter(new DDataFilter() {{
             add(new DDataFilter(ItemSample_WB_.ID, DDataFilterOperator.GREATE, 0));
-
-            add(new DDataFilter(ItemItemSample_WB_.SAMPLE) {{
-                add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
-                    add(new DDataFilter(Sample_WB_.ID, DDataFilterOperator.GREATE, 0));
-                }});
-            }});
 
             add(new DDataFilter(ItemInner_WB_.INNER) {{
                 add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
@@ -320,6 +316,13 @@ public class DDataTest {
                 return true;
             }
         });*/
+
+        row.setColumnValue("text value", 0,
+                ItemSample_WB_.SAMPLE, Sample_WB_.STR_PARAMETER);
+
+        byte[] testHash = new byte[]{0, 1, 0, 1};
+        row.setColumnValue(testHash, 0,
+                ItemSample_WB_.SAMPLE, Sample_WB_.HASH);
 
         row.setColumnValue("updated text value", 1,
                 ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.TEXT);
@@ -354,6 +357,8 @@ public class DDataTest {
         ItemSample sample_o = multiTypesRepository.get(sample_id);
         assertNotNull(sample_o);
         assertNotNull(sample_o.getSample());
+        assertEquals("text value", sample_o.getSample().getStrParameter());
+        assertArrayEquals(testHash, sample_o.getSample().getHash());
         assertNotNull(sample_o.getSample().getInner());
         assertEquals("update linked", sample_o.getSample().getInner().getText());
         assertNotNull(sample_o.getSample().getListParameter());
