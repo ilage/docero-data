@@ -4,6 +4,7 @@ import org.apache.ibatis.session.RowBounds;
 import org.docero.data.*;
 import org.docero.data.beans.*;
 import org.docero.data.beans.Sample;
+import org.docero.data.utils.RowCounter;
 
 import java.io.IOException;
 import java.util.HashSet;
@@ -66,6 +67,7 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
             @SampleRepository_Filter_(
                     Sample_.INNER_ID
             ) Integer inner, //inner_id is
+            RowCounter addCount, // for add  SELECT COUNT(*) method.
             DDataOrder<Sample_> sort,
             RowBounds bounds
     ) throws IOException, IllegalArgumentException;
@@ -75,7 +77,7 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
 
     @SuppressWarnings("unused")
     default List<Sample> listOrdered() throws IOException {
-        return list(null, null, null, null, null,
+        return list(null, null, null, null, null, new RowCounter(),
                 DDataOrder.asc(Sample_.STR_PARAMETER), null);
     }
 

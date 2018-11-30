@@ -379,6 +379,41 @@ class DDataMapBuilder {
                 if (fetchOptions.resultMap.length() == 0 && !method.returnSimpleType)
                     buildResultMap(mapperRoot, repository, methodName, fetchOptions, mappedTables, filters);
 
+                // TODO: build for COUNT(*)
+                if (method.hasAddCountMethodParam()) {
+                    org.w3c.dom.Element selectCount = (org.w3c.dom.Element)
+                            mapperRoot.appendChild(doc.createElement("select"));
+
+                    selectCount.setAttribute("resultType", "java.lang.Integer");
+                    selectCount.setAttribute("parameterType", "HashMap");
+                    selectCount.setAttribute("id", methodName + "_count");
+                    ///////////////////////////////////////////////////////////////////////////////
+                    if (bean.versionalType != null) {
+                        StringBuilder sql = new StringBuilder();
+                        bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny().ifPresent(p -> {
+                            String codedParameter = filters.stream()
+                                    .filter(f -> "VERSION_".equals(f.enumName))
+                                    .findAny().map(this::buildSqlParameter)
+                                    .orElse(buildSqlParameter(bean, p));
+
+                            sql.append("\nWITH tt AS (SELECT ");
+                            if (environment.getTypeUtils().directSupertypes(p.type).stream()
+                                    .anyMatch(c -> c.toString().equals(builder.temporalType.toString())) ||
+                                    environment.getTypeUtils().isSubtype(p.type, builder.oldDateType))
+                                sql.append("CAST(").append(codedParameter).append(" AS TIMESTAMP)");
+                            else
+                                sql.append(codedParameter);
+                            sql.append(" AS t)");
+                        });
+                        selectCount.appendChild(doc.createTextNode(sql.toString()));
+                    }
+                    //Запускаем чтобы сформировать все необходимое для count(*)
+
+                    buildSqlForCount(repository, method, bean, fetchOptions, mappedTables, selectCount, filters);
+                    // buildSql(repository, method, bean, fetchOptions, mappedTables, selectCount, filters, order, true);
+
+                }
+                /////////////////////////////////////////////////////////////////////////////////////////////////
                 org.w3c.dom.Element select = (org.w3c.dom.Element)
                         mapperRoot.appendChild(doc.createElement("select"));
                 select.setAttribute("id", methodName);
@@ -411,7 +446,9 @@ class DDataMapBuilder {
                     });
                     select.appendChild(doc.createTextNode(sql.toString()));
                 }
+                // Запустится ПОСЛЕ формирования COUNT(*) за один проход
                 buildSql(repository, method, bean, fetchOptions, mappedTables, select, filters, order);
+
                 break;
             case INSERT:
                 org.w3c.dom.Element insert = (org.w3c.dom.Element)
@@ -608,7 +645,7 @@ class DDataMapBuilder {
                     }
                     break;
                 default: //LIST
-                    sql.append("\nFROM (SELECT * FROM ").append(bean.getTableRef()).append(" AS t0\n");
+                    sql.append("\n FROM (SELECT * FROM ").append(bean.getTableRef()).append(" AS t0\n");
                     if (bean.versionalType != null) sql.append("CROSS JOIN tt\n");
 
                     domElement.appendChild(doc.createTextNode(sql.toString()));
@@ -636,6 +673,7 @@ class DDataMapBuilder {
                     }
 
                     ssql.append("\n) AS t0\n");
+
                     if (bean.versionalType != null) ssql.append("CROSS JOIN tt\n");
                     addJoins(mappedTables, ssql, versionParameter);
 
@@ -650,9 +688,129 @@ class DDataMapBuilder {
                                     .map(o -> "t0." + o.getColumnRef() + " " + fetchOptions.order.get(o))
                                     .collect(Collectors.joining(", ")));
                     ssql.append('\n');
-
                     domElement.appendChild(doc.createTextNode(ssql.toString()));
             }
+        }
+    }
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Используется для формирования метода list_N_count.
+     * Параметры для list_N_count копируются из сооотвествующего метода list_N.
+     * Данный метод запускется не всегда, а при условии, что надо формировать
+     * count(...) для соответствующего метода list(...), т.е. данный list(...) имеет параметр типа DDataAddCountType).
+     *
+     * @param repository
+     * @param method
+     * @param bean
+     * @param fetchOptions
+     * @param mappedTables
+     * @param domElement
+     * @param filters
+     */
+    private void buildSqlForCount(
+            DataRepositoryBuilder repository,
+            DDataMethodBuilder method,
+            DataBeanBuilder bean,
+            FetchOptions fetchOptions,
+            List<MappedTable> mappedTables,
+            org.w3c.dom.Element domElement,
+            List<FilterOption> filters
+
+
+    ) {
+        Document doc = domElement.getOwnerDocument();
+
+        StringBuilder sql = new StringBuilder();
+
+        if (fetchOptions.sqlSelect.length() > 0) {
+            sql.append("\n");
+            String sqlSelect = fetchOptions.sqlSelect;
+            for (DDataMethodBuilder.DDataMethodParameter parameter : method.parameters) {
+                TypeMirror pType = parameter.type.getKind().isPrimitive() ?
+                        environment.getTypeUtils().boxedClass((PrimitiveType) parameter.type).asType() :
+                        parameter.type;
+                sqlSelect = sqlSelect.replaceAll(":" + parameter.name,
+                        jdbcTypeParameterFor(parameter.name, pType));
+            }
+            sql.append(sqlSelect).append("\n");
+            domElement.appendChild(doc.createTextNode(sql.toString()));
+
+        } else {
+            sql.append("\n");
+            if (bean.versionalType != null) sql.append("  tt.t AS dDataBeanActualAt_,\n");
+
+            HashMap<String, DataBeanPropertyBuilder> allProperties = new HashMap<>();
+            allProperties.putAll(bean.properties);
+            if (repository.discriminator != null) {
+                for (DataRepositoryDiscriminator.Item item : repository.discriminator.beans) {
+                    DataBeanBuilder subBean = builder.beansByInterface.get(item.beanInterface);
+                    subBean.properties.forEach((name, builder) -> {
+                        if (!allProperties.containsKey(name))
+                            allProperties.put(name, builder);
+                    });
+                }
+            }
+            sql.append(allProperties.values().stream()
+                    .filter(DataBeanPropertyBuilder::notIgnored)
+                    .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                    .filter(this::notManagedBean)
+                    .filter(fetchOptions::filterIgnored)
+                    .map(p -> "  " + p.getColumnReader(0) + " AS " + p.getColumnRef())
+                    .collect(Collectors.joining(",\n")));
+            if (fetchOptions.fetchType != DDataFetchType.NO)
+                mappedTables.stream()
+                        .filter(MappedTable::notSingleSmallDictionaryValue)
+                        .filter(MappedTable::useInFieldsListOrFilters)
+                        .forEach(t -> addManagedBeanToFrom(sql, t, fetchOptions));
+
+            StringBuilder sql1 = new StringBuilder();
+            //sql.setLength(0);
+            sql1.append("\nSELECT COUNT(*) ");
+
+            sql1.append("\n FROM (SELECT * FROM ").append(bean.getTableRef()).append(" AS t0\n");
+            if (bean.versionalType != null) sql1.append("CROSS JOIN tt\n");
+
+            domElement.appendChild(doc.createTextNode(sql1.toString()));
+
+            StringBuilder psql = new StringBuilder();
+            FilterOption versionParameter = addFiltersToSql(domElement, psql, bean, method, mappedTables, filters, null, false);
+            domElement.appendChild(doc.createTextNode(psql.toString()));
+
+            StringBuilder ssql = new StringBuilder();
+
+            DDataMethodBuilder.DDataMethodParameter rbParam = method.parameters.stream()
+                    .filter(p -> environment.getTypeUtils().isSameType(builder.rowBoundsType, p.type))
+                    .findAny().orElse(null);//
+            if (rbParam != null) {
+                domElement.appendChild(doc.createTextNode(ssql.toString()));
+                ssql = new StringBuilder();
+                addRowBounds(rbParam, domElement);
+            }
+
+            ssql.append("\n) AS t0\n");
+            // for add SELECT COUNT (*) method
+
+
+            if (bean.versionalType != null) ssql.append("CROSS JOIN tt\n");
+            addJoins(mappedTables, ssql, versionParameter);
+
+            domElement.appendChild(doc.createTextNode(ssql.toString()));
+            ssql = new StringBuilder();
+
+                /*if (order != null) {
+                    addOrder(order, domElement);
+                } else if (!fetchOptions.order.isEmpty()) ssql
+                        .append("\tORDER BY ")
+                        .append(fetchOptions.order.keySet().stream()
+                                .map(o -> "t0." + o.getColumnRef() + " " + fetchOptions.order.get(o))
+                                .collect(Collectors.joining(", ")));*/
+            ssql.append('\n');
+            domElement.appendChild(doc.createTextNode(ssql.toString()));
+
+
         }
     }
 

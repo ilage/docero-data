@@ -4,10 +4,7 @@ import org.apache.ibatis.session.RowBounds;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.docero.data.*;
 import org.docero.data.beans.*;
-import org.docero.data.repositories.CompositeKeyRepository;
-import org.docero.data.repositories.MultiTypesRepository;
-import org.docero.data.repositories.SampleRepository;
-import org.docero.data.repositories.VersionalSampleRepository;
+import org.docero.data.repositories.*;
 import org.docero.data.rmt.Remote_WB_;
 import org.docero.data.utils.*;
 import org.docero.data.view.*;
@@ -599,9 +596,18 @@ public class DDataTest {
         assertEquals(1, lp.size());
 
         List<Sample> sl;
+        RowCounter addCount=new RowCounter();
         sl = iSampleRepository.list(null, null, null, null, null,
+                addCount,
                 DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID), new RowBounds(0, 10));
         assertEquals(2, sl.size());
+        assertEquals(2, addCount.getCount());
+        // for buunds== null
+        sl = iSampleRepository.list(null, null, null, null, null,
+                addCount,
+                DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID), null);
+        assertEquals(null, sl);
+        assertEquals(2, addCount.getCount());
 
         sl = iSampleRepository.list(null, null, null, null, 1002, new RowBounds(0, 10));
         assertEquals(0, sl.size());

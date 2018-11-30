@@ -268,8 +268,15 @@ class DataRepositoryBuilder {
                 cf.endBlock("}");
             }
 
-            for (DDataMethodBuilder method : methods) method.build(cf);
-
+            for (DDataMethodBuilder method : methods){
+                if(method.hasAddCountMethodParam()){
+                    // for add SELECT COUNT(*) method
+                   // method.buildCount(cf);
+                    method.buildListAndCount(cf);
+                } else {
+                    method.build(cf);
+                }
+            }
             cf.endBlock("}");
         }
     }
