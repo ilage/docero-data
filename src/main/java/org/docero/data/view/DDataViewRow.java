@@ -134,7 +134,9 @@ public class DDataViewRow {
         for (int offset = 0; offset < path.length; offset++) {
             boolean lastElement = (offset == path.length - 1);
             currPathLen = currPathLen + path[offset].length() + (lastElement ? 0 : 1);
-            DDataAttribute attribute = view.tableCells.get(path2Parameter).attribute;
+            AbstractDataView.TableCell cell = view.tableCells.get(path2Parameter);
+            if (cell == null) throw new RuntimeException("not found column by path '" + path2Parameter + "'");
+            DDataAttribute attribute = cell.attribute;
 
             Object o = innerMap.get(path[offset]);
 
@@ -163,6 +165,6 @@ public class DDataViewRow {
                 innerMap.put(path[offset], value);
         }
 
-        if(addViewUpdate) view.addUpdate(this, index, path2Parameter);
+        if (addViewUpdate) view.addUpdate(this, index, path2Parameter);
     }
 }

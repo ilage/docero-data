@@ -48,6 +48,8 @@ public abstract class DDataBeanUpdateService<T> {
                     if (!DDataView.idIsNull(beanMapValue)) {
                         row.setColumnValue(beanMapValue, entity.parent.isCollection() ? 0 : index,
                                 parentMapColumn.name, false);
+                        row.setColumnValue(beanMapValue, entity.parent.isCollection() ? 0 : index,
+                                beanMapColumn.name, false);
                         anyParentItemMayBeModified = true;
                     }
                 }
