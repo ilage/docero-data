@@ -335,7 +335,35 @@ class DDataBuilder {
                 cf.startBlock("public static final java.util.Map<Class<?>,com.fasterxml.jackson.databind.JsonDeserializer<?>> deserializers = " +
                         "new java.util.HashMap<Class<?>,com.fasterxml.jackson.databind.JsonDeserializer<?>>() {{");
 
+                HashMap<String, List<DataBeanBuilder>> discriminatedBeans = new HashMap<>();
                 for (String interfaceName : beansByInterface.keySet()) {
+                    DataBeanBuilder bean = beansByInterface.get(interfaceName);
+                    if (bean.abstractBean) {
+                        if (bean.discriminatorProperty != null)
+                            discriminatedBeans.computeIfAbsent(bean.getTableRef(), (k) -> new ArrayList<>()).add(bean);
+                    } else {
+                        if (bean.discriminatorProperty != null)
+                            discriminatedBeans.computeIfAbsent(bean.getTableRef(), (k) -> new ArrayList<>()).add(bean);
+
+                        cf.startBlock("this.put(" +
+                                interfaceName + ".class, new com.fasterxml.jackson.databind.JsonDeserializer<" +
+                                interfaceName + ">() {");
+                        cf.println("@Override");
+                        cf.startBlock("public " + interfaceName + " deserialize(com.fasterxml.jackson.core.JsonParser p, " +
+                                "com.fasterxml.jackson.databind.DeserializationContext ctxt) throws " +
+                                "java.io.IOException, com.fasterxml.jackson.core.JsonProcessingException {");
+                        cf.println("return ctxt.readValue(p, " +
+                                bean.getImplementationName() +
+                                ".class);");
+                        cf.endBlock("}");
+                        cf.endBlock("});");
+                    }
+                }
+                for (String table : discriminatedBeans.keySet()) {
+                    List<DataBeanBuilder> beans = discriminatedBeans.get(table);
+                    DataBeanBuilder prototype = beans.stream().filter(b -> b.abstractBean)
+                            .findAny().orElseThrow(() -> new IOException("can't find prototype for " + table));
+                    String interfaceName = prototype.interfaceType.toString();
                     cf.startBlock("this.put(" +
                             interfaceName + ".class, new com.fasterxml.jackson.databind.JsonDeserializer<" +
                             interfaceName + ">() {");
@@ -343,13 +371,26 @@ class DDataBuilder {
                     cf.startBlock("public " + interfaceName + " deserialize(com.fasterxml.jackson.core.JsonParser p, " +
                             "com.fasterxml.jackson.databind.DeserializationContext ctxt) throws " +
                             "java.io.IOException, com.fasterxml.jackson.core.JsonProcessingException {");
-                    cf.println("return ctxt.readValue(p, " +
-                            beansByInterface.get(interfaceName).getImplementationName() +
-                            ".class);");
+                    cf.println("com.fasterxml.jackson.databind.ObjectMapper mapper = (com.fasterxml.jackson.databind.ObjectMapper) p.getCodec();");
+                    cf.println("com.fasterxml.jackson.databind.node.ObjectNode root = mapper.readTree(p);");
+                    cf.println("if (root.isNull()) return null;");
+                    cf.startBlock("if (root.has(\"" + prototype.discriminatorProperty.name + "\")) {");
+                    {
+                        cf.println("String val = root.get(\"" + prototype.discriminatorProperty.name + "\").asText();");
+                        for (DataBeanBuilder bean : beans)
+                            if (!bean.abstractBean) {
+                                cf.println("if (val.equals(\"" + bean.discriminatorValue + "\")) " +
+                                        "return mapper.readValue(root.toString(), " +
+                                        bean.getImplementationName() +
+                                        ".class);");
+                            }
+                        cf.endBlock("}");
+                    }
+                    cf.println("throw new java.io.IOException(\"can't read object implements '" +
+                            interfaceName + "' incorrect value of '" + prototype.discriminatorProperty.name + "'\");");
                     cf.endBlock("}");
                     cf.endBlock("});");
                 }
-
                 cf.endBlock("}};");
             }
 
