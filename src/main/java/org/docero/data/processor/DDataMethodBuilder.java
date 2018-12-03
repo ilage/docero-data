@@ -290,7 +290,7 @@ class DDataMethodBuilder {
         if (parameters.size() > 0) {
             if (parameters.size() == 1 &&
                     (methodType == GET || methodType == DELETE) && methodIndex == 0
-            ) {
+                    ) {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
                 for (DataBeanPropertyBuilder property : bean.properties.values())
@@ -365,8 +365,16 @@ class DDataMethodBuilder {
                     else cf.println("clearVersion(" + d.bean.interfaceType + ".class);");
                 }
 
-        if (returnSomething && (methodType == INSERT || methodType == UPDATE))
-            cf.println("return " + beanParameterName + ";");
+        if (returnSomething && (methodType == INSERT || methodType == UPDATE)) {
+            cf.startBlock("return getSqlSession().selectOne(\"" + repositoryBuilder.mappingClassName +
+                    ".get\", new java.util.HashMap(){{");
+            for (DataBeanPropertyBuilder p : bean.properties.values())
+                if (p.isId)
+                    cf.println("put(\"" + p.name + "\", " + beanParameterName + ".get" +
+                            Character.toUpperCase(p.name.charAt(0)) +
+                            p.name.substring(1) + "());");
+            cf.endBlock("}});");
+        }
 
         cf.endBlock("}");
 
@@ -533,7 +541,7 @@ class DDataMethodBuilder {
                 if ((thisBean.dictionary == DictionaryType.SMALL &&
                         mapFromBean.dictionary == DictionaryType.SMALL && m.manyToOne
                 ) || (thisBean.dictionary != DictionaryType.SMALL && mapFromBean.isDictionary())
-                ) list.add(new MappedDictionary(mapFromBean, m, parameters, forImmutableOnly));
+                        ) list.add(new MappedDictionary(mapFromBean, m, parameters, forImmutableOnly));
         });
         return list;
     }
