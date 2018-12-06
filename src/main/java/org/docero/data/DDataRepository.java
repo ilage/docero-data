@@ -10,23 +10,23 @@ public interface DDataRepository<T extends Serializable, C extends Serializable>
     <A extends T> A create();
 
     /**
-     * Get database entry as bean by it primary key (mybatis bean is linked to database)
+     * Get database entry as bean by it primary key (mybatis bean linked to database)
      * @param id primary key object
      * @return bean constructed from database entry
      */
     <A extends T> A get(C id);
 
     /**
-     * Insert database entry from bean implementing repository interface, return
-     * bean constructed from database entry (mybatis bean is linked to database)
+     * Insert database entry from bean implements repository interface, return
+     * bean constructed from database entry (mybatis bean linked to database)
      * @param bean these values used for update
      * @return bean constructed from database entry
      */
     <A extends T> A  insert(T bean);
 
     /**
-     * Update database entry by bean implementing repository interface, return
-     * bean constructed from database entry (mybatis bean is linked to database)
+     * Update database entry by bean implements repository interface, return
+     * bean constructed from database entry (mybatis bean linked to database)
      * @param bean these values used for update
      * @return bean constructed from database entry
      */

@@ -366,7 +366,7 @@ class DDataMethodBuilder {
                 }
 
         if (returnSomething && (methodType == INSERT || methodType == UPDATE)) {
-            cf.startBlock("return getSqlSession().selectOne(\"" + repositoryBuilder.mappingClassName +
+            cf.startBlock("return ((getSqlSession() instanceof org.mybatis.spring.SqlSessionTemplate) && ((org.mybatis.spring.SqlSessionTemplate) getSqlSession()).getExecutorType() == org.apache.ibatis.session.ExecutorType.BATCH) ? bean : getSqlSession().selectOne(\"" + repositoryBuilder.mappingClassName +
                     ".get\", new java.util.HashMap(){{");
             for (DataBeanPropertyBuilder p : bean.properties.values())
                 if (p.isId)
