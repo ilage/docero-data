@@ -169,7 +169,7 @@ class DDataBuilder {
             cf.endBlock("}");
             cf.println("");
             cf.startBlock("protected <P extends java.io.Serializable> P remote(Class<P> type, java.lang.String func, java.io.Serializable... key) {");
-            cf.println("return DData.remote(type, func, key);");
+            cf.println("return key == null || key.length == 0 || (key.length == 1 && key[0] == null) ? null : DData.remote(type, func, key);");
             cf.endBlock("}");
 
             cf.println("");
