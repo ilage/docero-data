@@ -86,7 +86,7 @@ class DDataMethodBuilder {
     DDataMethodBuilder(
             DataRepositoryBuilder repositoryBuilder,
             DataBeanBuilder bean,
-            MType methodType
+            MType methodType, TypeElement keyElement
     ) {
         this.repositoryBuilder = repositoryBuilder;
         typeVariables = Collections.emptyList();
@@ -103,8 +103,7 @@ class DDataMethodBuilder {
                 if (repositoryBuilder.versionalType == null)
                     parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
                 else {
-                    parameters.add(new DDataMethodParameter("id",
-                            e.getTypeElement(bean.keyType).asType()));
+                    parameters.add(new DDataMethodParameter("id", keyElement.asType()));
                 }
                 break;
             case INSERT:
@@ -123,8 +122,7 @@ class DDataMethodBuilder {
                 if (repositoryBuilder.versionalType == null)
                     parameters.add(new DDataMethodParameter("id", repositoryBuilder.idClass));
                 else {
-                    parameters.add(new DDataMethodParameter("id",
-                            e.getTypeElement(bean.keyType).asType()));
+                    parameters.add(new DDataMethodParameter("id", keyElement.asType()));
                 }
                 break;
             default:
@@ -245,7 +243,7 @@ class DDataMethodBuilder {
                         cf.println("getSqlSession().insert(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                                 methodIndex == 0 ? "" : "_" + methodIndex) + "_" +
                                 item.beanInterfaceShort() + "\", " + beanParameterName + ");");
-                        if (returnSomething) cf.println("return " + beanParameterName + ";");
+                        if (returnSomething) buildReturnStatement(cf, bean, beanParameterName);
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().insert");
@@ -272,7 +270,7 @@ class DDataMethodBuilder {
                         cf.println("getSqlSession().update(\"" + repositoryBuilder.mappingClassName + "." + methodName + (
                                 methodIndex == 0 ? "" : "_" + methodIndex) + "_" +
                                 item.beanInterfaceShort() + "\", " + beanParameterName + ");");
-                        if (returnSomething) cf.println("return " + beanParameterName + ";");
+                        if (returnSomething) buildReturnStatement(cf, bean, beanParameterName);
                         cf.endBlock("}");
                     }
                 cf.print("getSqlSession().update");
@@ -365,16 +363,8 @@ class DDataMethodBuilder {
                     else cf.println("clearVersion(" + d.bean.interfaceType + ".class);");
                 }
 
-        if (returnSomething && (methodType == INSERT || methodType == UPDATE)) {
-            cf.startBlock("return ((getSqlSession() instanceof org.mybatis.spring.SqlSessionTemplate) && ((org.mybatis.spring.SqlSessionTemplate) getSqlSession()).getExecutorType() == org.apache.ibatis.session.ExecutorType.BATCH) ? bean : getSqlSession().selectOne(\"" + repositoryBuilder.mappingClassName +
-                    ".get\", new java.util.HashMap(){{");
-            for (DataBeanPropertyBuilder p : bean.properties.values())
-                if (p.isId)
-                    cf.println("put(\"" + p.name + "\", " + beanParameterName + ".get" +
-                            Character.toUpperCase(p.name.charAt(0)) +
-                            p.name.substring(1) + "());");
-            cf.endBlock("}});");
-        }
+        if (returnSomething && (methodType == INSERT || methodType == UPDATE))
+            buildReturnStatement(cf, bean, beanParameterName);
 
         cf.endBlock("}");
 
@@ -408,6 +398,18 @@ class DDataMethodBuilder {
         }
     }
 
+    private void buildReturnStatement(
+            JavaClassWriter cf, DataBeanBuilder bean, String beanParameterName
+    ) throws IOException {
+        cf.startBlock("return ((getSqlSession() instanceof org.mybatis.spring.SqlSessionTemplate) && ((org.mybatis.spring.SqlSessionTemplate) getSqlSession()).getExecutorType() == org.apache.ibatis.session.ExecutorType.BATCH) ? bean : getSqlSession().selectOne(\"" + repositoryBuilder.mappingClassName +
+                ".get\", new java.util.HashMap(){{");
+        for (DataBeanPropertyBuilder p : bean.properties.values())
+            if (p.isId)
+                cf.println("put(\"" + p.name + "\", " + beanParameterName + ".get" +
+                        Character.toUpperCase(p.name.charAt(0)) +
+                        p.name.substring(1) + "());");
+        cf.endBlock("}});");
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

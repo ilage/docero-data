@@ -1,5 +1,7 @@
 package org.docero.data.beans;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import org.docero.data.DDataBean;
 import org.docero.data.DDataProperty;
 import org.docero.data.DDataVersionalBean;
@@ -20,11 +22,13 @@ public interface BuildingHE extends DDataVersionalBean<LocalDateTime> {
     /*ObjectsClasses getClassType();
     void setClassType(ObjectsClasses classType);*/
 
+    @JsonManagedReference
     @DDataProperty("cadastralblock")
     String getCadastralblock();
 
     void setCadastralblock(String cadastralblock);
 
+    @JsonIgnore
     @DDataProperty("guid")
     String getGuid();
 

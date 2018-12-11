@@ -56,25 +56,30 @@ class DDataMapBuilder {
             String repositoryNamespace;
             FetchOptions defaultFetchOptions = new FetchOptions(1);
             DataBeanBuilder bean = builder.beansByInterface.get(repository.forInterfaceName());
+            TypeElement keyElement = builder.environment.getElementUtils().getTypeElement(bean.keyType);
+            if (keyElement == null) throw new RuntimeException("No element found for " + bean.keyType);
             if (repositoryElement == null) {
                 // методов с фильтрами нет, можно строить репозиторий, для мультиклассовых
                 repository.build(environment, builder.spring);
+
+                buildDDLasComment(bean, mapperRoot);
+
                 repositoryNamespace = repository.forInterfaceName();
                 createDefinedMethod(mapperRoot,
-                        new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.GET),
+                        new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.GET, keyElement),
                         defaultFetchOptions, repository);
                 createDefinedMethod(mapperRoot,
-                        new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.INSERT),
+                        new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.INSERT, keyElement),
                         defaultFetchOptions, repository);
                 createDefinedMethod(mapperRoot,
-                        new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.UPDATE),
+                        new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.UPDATE, keyElement),
                         defaultFetchOptions, repository);
                 createDefinedMethod(mapperRoot,
-                        new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.DELETE),
+                        new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.DELETE, keyElement),
                         defaultFetchOptions, repository);
                 if (bean.isDictionary())
                     createDefinedMethod(mapperRoot,
-                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.SELECT),
+                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.SELECT, keyElement),
                             defaultFetchOptions, repository);
             } else {
                 repositoryNamespace = repository.repositoryInterface.toString();
@@ -87,6 +92,8 @@ class DDataMapBuilder {
                 // методы с фильтрами обновлены, можно строить репозиторий, для мультиклассовых
                 repository.build(environment, builder.spring);
 
+                buildDDLasComment(bean, mapperRoot);
+
                 for (Element methodElement : repositoryElement.getEnclosedElements())
                     if (methodElement.getKind() == ElementKind.METHOD && !methodElement.getModifiers().contains(Modifier.STATIC) ?
                             !methodElement.getModifiers().contains(Modifier.DEFAULT) :
@@ -95,23 +102,23 @@ class DDataMapBuilder {
 
                 if (repository.defaultGetMethod == null)
                     createDefinedMethod(mapperRoot,
-                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.GET),
+                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.GET, keyElement),
                             defaultFetchOptions, repository);
                 if (!repository.hasInsert)
                     createDefinedMethod(mapperRoot,
-                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.INSERT),
+                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.INSERT, keyElement),
                             defaultFetchOptions, repository);
                 if (!repository.hasUpdate)
                     createDefinedMethod(mapperRoot,
-                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.UPDATE),
+                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.UPDATE, keyElement),
                             defaultFetchOptions, repository);
                 if (repository.defaultDeleteMethod == null)
                     createDefinedMethod(mapperRoot,
-                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.DELETE),
+                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.DELETE, keyElement),
                             defaultFetchOptions, repository);
                 if (bean.isDictionary() && repository.defaultListMethod == null)
                     createDefinedMethod(mapperRoot,
-                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.SELECT),
+                            new DDataMethodBuilder(repository, bean, DDataMethodBuilder.MType.SELECT, keyElement),
                             defaultFetchOptions, repository);
             }
             repository.lazyLoads.values().forEach(mapperRoot::appendChild);
@@ -503,6 +510,81 @@ class DDataMapBuilder {
                     .collect(Collectors.toList());
             mappedTables.addAll(beanTables);
         }
+    }
+
+    private void buildDDLasComment(
+            DataBeanBuilder bean,
+            org.w3c.dom.Element domElement
+    ) {
+        List<DataBeanPropertyBuilder> orderedIds = bean.properties.values().stream()
+                .filter(DataBeanPropertyBuilder::isId)
+                .sorted((p1, p2) -> {
+                    if (p1.type.getKind().isPrimitive())
+                        return p2.type.getKind().isPrimitive() ? p1.name.compareTo(p2.name) : -1;
+                    else {
+                        String t1 = p1.type.toString();
+                        String t2 = p2.type.toString();
+                        if (t1.startsWith("java.lang."))
+                            return t2.startsWith("java.lang.") ? p1.name.compareTo(p2.name) : -1;
+                        if (t1.startsWith("java.util."))
+                            return t2.startsWith("java.util.") ? p1.name.compareTo(p2.name) : -1;
+                        return p1.name.compareTo(p2.name);
+                    }
+                })
+                .collect(Collectors.toList());
+
+        Document doc = domElement.getOwnerDocument();
+        StringBuilder comment = new StringBuilder(" Example of DDL statement:\nCREATE TABLE ");
+        comment.append(bean.getTableRef()).append(" (\n");
+
+        comment.append(orderedIds.stream()
+                .map(p -> "\t" + p.getColumnRef() + " " + p.jdbcType + " NOT NULL,\n")
+                .collect(Collectors.joining()));
+
+        comment.append(bean.properties.values().stream()
+                .filter(DataBeanPropertyBuilder::notId)
+                .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                .filter(this::notManagedBean)
+                .map(p -> "\t" + p.getColumnRef() + " " + (
+                                "VARCHAR".equals(p.jdbcType) ?
+                                        (p.length != 0 ? "VARCHAR(" + p.length + ")" : "TEXT") :
+                                        p.jdbcType
+                        ) + (
+                                !p.nullable || p.type.getKind().isPrimitive() ? " NOT NULL" : ""
+                        ) + ",\n"
+                ).collect(Collectors.joining()));
+
+        comment.append("\tCONSTRAINT ").append(bean.name).append("_pkey PRIMARY KEY (");
+        comment.append(orderedIds.stream()
+                .map(DataBeanPropertyBuilder::getColumnRef)
+                .collect(Collectors.joining(",")));
+        comment.append(")\n");
+
+        comment.append(") TABLESPACE pg_default;\n");
+        comment.append("ALTER TABLE ").append(bean.getTableRef()).append(" OWNER to postgres;\n\n");
+
+        bean.properties.values().stream()
+                .filter(DataBeanPropertyBuilder::notCollectionOrMap)
+                .filter(this::isManagedBean)
+                .forEach(p -> {
+                    Mapping mapping = builder.mappings.get(bean.interfaceType + "." + p.name);
+                    if (mapping != null) comment.append("ALTER TABLE ")
+                            .append(bean.getTableRef())
+                            .append(" ADD CONSTRAINT ").append(bean.name)
+                            .append("_").append(p.columnName)
+                            .append("_fkey FOREIGN KEY (")
+                            .append(mapping.properties.stream()
+                                    .map(DataBeanPropertyBuilder::getColumnRef)
+                                    .collect(Collectors.joining(",")))
+                            .append(")\n\t  REFERENCES ").append(mapping.mappedProperties.get(0).dataBean.getTableRef())
+                            .append(" (")
+                            .append(mapping.mappedProperties.stream()
+                                    .map(DataBeanPropertyBuilder::getColumnRef)
+                                    .collect(Collectors.joining(","))
+                            ).append(");\n");
+                });
+
+        domElement.appendChild(doc.createComment(comment.toString()));
     }
 
     private void buildSql(
@@ -970,6 +1052,11 @@ class DDataMapBuilder {
     private boolean notManagedBean(DataBeanPropertyBuilder propertyBuilder) {
         //return !this.builder.beansByInterface.containsKey(propertyBuilder.type.toString());
         return this.builder.isSimpleMappedType(propertyBuilder.mappedType);
+    }
+
+    private boolean isManagedBean(DataBeanPropertyBuilder propertyBuilder) {
+        //return !this.builder.beansByInterface.containsKey(propertyBuilder.type.toString());
+        return !this.builder.isSimpleMappedType(propertyBuilder.mappedType);
     }
 
     private void buildSelect4DefaultGet(

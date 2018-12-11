@@ -82,7 +82,7 @@ class DataRepositoryBuilder {
                     .map(DataBeanBuilder::getImplementationName)
                     .toArray(String[]::new);
             TypeElement mte = rootBuilder.environment.getElementUtils().getTypeElement(forInterfaceName.toString());
-            if (bean == null && mte!=null && mte.getAnnotation(DDataPrototypeRealization.class) == null) {
+            if (bean == null && mte != null && mte.getAnnotation(DDataPrototypeRealization.class) == null) {
                 // if bean was not created by any extending beans (not single interface in declaration)
                 bean = DataBeanBuilder.buildEntity(
                         mte,
@@ -194,6 +194,7 @@ class DataRepositoryBuilder {
             cf.endBlock("*/");
 
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
+
             cf.startBlock("public final class " +
                     daoClassName.substring(simpNameDel + 1) +
                     " extends " + rootBuilder.basePackage + ".AbstractRepository<" + bean.interfaceType + "," + bean.inversionalKey + ">" +
@@ -214,6 +215,10 @@ class DataRepositoryBuilder {
                 cf.println("");
                 cf.startBlock("public org.docero.data.DictionaryType getDictionaryType() {");
                 cf.println("return org.docero.data.DictionaryType." + bean.dictionary + ";");
+                cf.endBlock("}");
+                cf.println("");
+                cf.startBlock("public Class<" + bean.interfaceType + "> getItemInterface() {");
+                cf.println("return " + bean.interfaceType + ".class;");
                 cf.endBlock("}");
                 cf.println("");
                 if (spring) cf.println("@org.springframework.cache.annotation.CachePut(cacheNames=\"" +
@@ -240,22 +245,28 @@ class DataRepositoryBuilder {
             }
 
             buildMethodCreate(cf);
+
+            TypeElement keyElement = rootBuilder.environment.getElementUtils().getTypeElement(bean.keyType);
+
             if (defaultGetMethod == null) {
-                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.GET).build(cf);
+                if (keyElement != null) new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.GET, keyElement).build(cf);
+                else cf.println("public " + bean.interfaceType + " get("+bean.keyType+" v) {}");
                 //buildMethodGet(cf);
             }
             if (!hasInsert) {
-                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.INSERT).build(cf);
+                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.INSERT, keyElement).build(cf);
                 //buildMethodInsert(cf, discriminator);
             }
             if (!hasUpdate) {
-                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.UPDATE).build(cf);
+                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.UPDATE, keyElement).build(cf);
                 //buildMethodUpdate(cf, discriminator);
             }
             if (defaultDeleteMethod == null) {
-                new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.DELETE).build(cf);
+                if (keyElement != null) new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.DELETE, keyElement).build(cf);
+                else cf.println("public void delete("+bean.keyType+" v) {}");
                 //buildMethodDelete(cf);
             }
+
             if (bean.dictionary != DictionaryType.NO && defaultListMethod == null) {
                 cf.println("");
                 cf.startBlock("public java.util.List<" + forInterfaceName + "> list() {");
@@ -268,16 +279,18 @@ class DataRepositoryBuilder {
                 cf.endBlock("}");
             }
 
-            for (DDataMethodBuilder method : methods){
-                if(method.hasAddCountMethodParam()){
+            for (DDataMethodBuilder method : methods) {
+                if (method.hasAddCountMethodParam()) {
                     // for add SELECT COUNT(*) method
-                   // method.buildCount(cf);
+                    // method.buildCount(cf);
                     method.buildListAndCount(cf);
                 } else {
                     method.build(cf);
                 }
             }
             cf.endBlock("}");
+        } catch (Exception e) {
+            throw new RuntimeException("Can't build repository for " + forInterfaceName.toString(), e);
         }
     }
 

@@ -17,7 +17,6 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 class DataBeanPropertyBuilder {
