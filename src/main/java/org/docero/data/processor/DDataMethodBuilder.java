@@ -401,7 +401,7 @@ class DDataMethodBuilder {
     private void buildReturnStatement(
             JavaClassWriter cf, DataBeanBuilder bean, String beanParameterName
     ) throws IOException {
-        cf.startBlock("return ((getSqlSession() instanceof org.mybatis.spring.SqlSessionTemplate) && ((org.mybatis.spring.SqlSessionTemplate) getSqlSession()).getExecutorType() == org.apache.ibatis.session.ExecutorType.BATCH) ? bean : getSqlSession().selectOne(\"" + repositoryBuilder.mappingClassName +
+        cf.startBlock("return org.docero.data.utils.DMLOperations.updateWithoutRead() || (((getSqlSession() instanceof org.mybatis.spring.SqlSessionTemplate) && ((org.mybatis.spring.SqlSessionTemplate) getSqlSession()).getExecutorType() == org.apache.ibatis.session.ExecutorType.BATCH)) ? bean : getSqlSession().selectOne(\"" + repositoryBuilder.mappingClassName +
                 ".get\", new java.util.HashMap(){{");
         for (DataBeanPropertyBuilder p : bean.properties.values())
             if (p.isId)

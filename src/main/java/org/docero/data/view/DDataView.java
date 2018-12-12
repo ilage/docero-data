@@ -240,7 +240,7 @@ public class DDataView extends AbstractDataView {
 
     public void flushUpdates(DDataExceptionHandler exceptionHandler) throws SQLException, DDataException {
         if (updates == null || updates.size() == 0) return;
-        final Date dateNow = TemporalDataOperations.Date.get();
+        final Date dateNow = DMLOperations.date();
 
         Connection connection = sqlSession.getConnection();
         Set<PreparedUpdates> prepared = new TreeSet<>(Comparator.comparingInt(k ->
