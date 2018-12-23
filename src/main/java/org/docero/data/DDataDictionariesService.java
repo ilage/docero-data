@@ -20,7 +20,7 @@ public class DDataDictionariesService {
     private final ConcurrentHashMap<Class, Integer> versions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Class, List> lists = new ConcurrentHashMap<>();
 
-    public DDataDictionariesService() {
+    DDataDictionariesService() {
     }
 
     /**
@@ -50,7 +50,7 @@ public class DDataDictionariesService {
      * @param type       - class of bean interface or implementation
      * @param repository - dictionary repository
      */
-    public <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRepository<T, C> repository) {
+    private <T extends Serializable, C extends Serializable> void register(Class<? extends T> type, DDataRepository<T, C> repository) {
         if (repository instanceof DDataDictionary)
             repositories.put(type, repository);
     }
@@ -63,7 +63,7 @@ public class DDataDictionariesService {
      * @return caching proxy for remote repository access
      */
     @SuppressWarnings("unchecked")
-    public <T extends Serializable, C extends Serializable, R extends DDataRemoteRepository<T, C>>
+    <T extends Serializable, C extends Serializable, R extends DDataRemoteRepository<T, C>>
     R register(Class<? extends T> type, R repository) {
         R proxy = (R) Proxy.newProxyInstance(
                 CachingRemoteRepository.class.getClassLoader(),
@@ -145,13 +145,13 @@ public class DDataDictionariesService {
      * Not a very important than someone read zero from version or not but in most cases
      * it will do elements loading faster.
      */
-    public <T extends Serializable> void updateVersion(Class<T> type) {
+    <T extends Serializable> void updateVersion(Class<T> type) {
         Object d = repositories.get(type);
         if (d instanceof DDataDictionary && ((DDataDictionary) d).version_() != 0)
             ((DDataDictionary) d).version_((int) System.currentTimeMillis());
     }
 
-    public <T extends Serializable> void clearVersion(Class<T> type) {
+    <T extends Serializable> void clearVersion(Class<T> type) {
         Object d = repositories.get(type);
         if (d instanceof DDataDictionary)
             ((DDataDictionary) d).version_(0);
@@ -193,5 +193,11 @@ public class DDataDictionariesService {
             }
         }
         return Collections.emptyList();
+    }
+
+    @SafeVarargs
+    public final <T extends Serializable, C extends Serializable>
+    void registerAsDictionary(DDataRepository<T, C> beanRepository, Class<? extends T>... types) {
+        for (Class<? extends T> type : types) this.register(type, beanRepository);
     }
 }

@@ -13,11 +13,8 @@ import java.util.List;
 public class DDataViewBuilder extends SqlSessionDaoSupport {
     private DDataDictionariesService dictionariesService;
 
-    public DDataViewBuilder(SqlSessionFactory sqlSessionFactory) {
+    public DDataViewBuilder(SqlSessionFactory sqlSessionFactory, DDataDictionariesService dictionariesService) {
         super.setSqlSessionFactory(sqlSessionFactory);
-    }
-
-    public void dictionariesService(DDataDictionariesService dictionariesService) {
         this.dictionariesService = dictionariesService;
     }
 

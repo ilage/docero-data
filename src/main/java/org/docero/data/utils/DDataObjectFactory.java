@@ -1,12 +1,17 @@
 package org.docero.data.utils;
 
 import org.apache.ibatis.reflection.factory.ObjectFactory;
+import org.docero.data.DData;
 
 import java.io.Serializable;
 import java.util.*;
 
-public abstract class DDataAbstractObjectFactory implements ObjectFactory, Serializable {
-    public abstract <T> Class<? extends T> getImplementation(Class<T> type);
+public class DDataObjectFactory implements ObjectFactory, Serializable {
+    @SuppressWarnings("unchecked")
+    public <T> Class<? extends T> getImplementation(Class<T> type) {
+        Class<? extends T> i = (Class<? extends T>) DData.getImplementations().get(type);
+        return DData.getImplementations().containsKey(type) ? i : type;
+    }
 
     @SuppressWarnings("unchecked")
     @Override

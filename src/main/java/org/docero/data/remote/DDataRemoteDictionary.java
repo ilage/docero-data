@@ -1,14 +1,11 @@
 package org.docero.data.remote;
 
 import org.docero.data.DictionaryType;
+import org.docero.data.utils.DDataCachedLists;
 
 import javax.xml.bind.annotation.XmlTransient;
-import java.util.List;
 
 @XmlTransient
-public interface DDataRemoteDictionary<T, C>
-        extends DDataRemoteRepository<T, C> {
+public interface DDataRemoteDictionary<T, C> extends DDataRemoteRepository<T, C>, DDataCachedLists<T> {
     DictionaryType getDictionaryType();
-    Integer version_();
-    List<T> list();
 }

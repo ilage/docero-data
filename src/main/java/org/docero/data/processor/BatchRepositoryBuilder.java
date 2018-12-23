@@ -27,22 +27,6 @@ class BatchRepositoryBuilder {
             )) methods.add(new MethodBehindFacade((ExecutableElement) element));
     }
 
-    void createSpringBean(JavaClassWriter cf) throws IOException {
-        String daoInterfaceName = repositoryInterface.toString();
-        int offset = daoInterfaceName.lastIndexOf('.') + 1;
-        String methodName = Character.toLowerCase(daoInterfaceName.charAt(offset)) +
-                daoInterfaceName.substring(offset + 1);
-        cf.println("@org.springframework.context.annotation.Bean");
-        cf.startBlock("public " + daoInterfaceName + " " + methodName + "(");
-        cf.println("org.apache.ibatis.session.SqlSessionFactory sqlSessionFactory");
-        cf.endBlock(")");
-        cf.startBlock("{");
-        cf.startBlock("return new " + implClassName + "(");
-        cf.println("sqlSessionFactory");
-        cf.endBlock(");");
-        cf.endBlock("}");
-    }
-
     private class BeanData {
         final DataBeanBuilder bean;
         final DataRepositoryBuilder repository;
@@ -90,22 +74,20 @@ class BatchRepositoryBuilder {
                             d.bean.keyType + "> " + d.repository.repositoryVariableName + ";");
                 }
                 cf.println("");
-                cf.startBlock("public " + implClassName.substring(simpNameDel + 1) + "(");
-                cf.println("SqlSessionFactory sqlSessionFactory");
-                cf.endBlock(")");
-                cf.startBlock("{");
-                cf.println("this.setSqlSessionFactory(sqlSessionFactory);");
+                cf.startBlock("public " + implClassName.substring(simpNameDel + 1) + "() {");
+                //cf.println("this.setSqlSessionFactory(sqlSessionFactory);");
                 for (BeanData d : supported.values()) {
                     cf.println("this." + d.repository.repositoryVariableName + " = new " + d.repository.daoClassName + "();");
-                    cf.println("((org.mybatis.spring.support.SqlSessionDaoSupport)" + d.repository.repositoryVariableName +
-                            ").setSqlSessionTemplate((SqlSessionTemplate)this.getSqlSession());");
-
                 }
                 cf.endBlock("}");
 
                 cf.println("");
                 cf.startBlock("@Override public void setSqlSessionFactory(SqlSessionFactory sqlSessionFactory) {");
                 cf.println("super.setSqlSessionTemplate(new SqlSessionTemplate(sqlSessionFactory, ExecutorType.BATCH));");
+                for (BeanData d : supported.values()) {
+                    cf.println("((org.mybatis.spring.support.SqlSessionDaoSupport)" + d.repository.repositoryVariableName +
+                            ").setSqlSessionTemplate((SqlSessionTemplate)this.getSqlSession());");
+                }
                 cf.endBlock("}");
                 cf.println("");
                 cf.startBlock("@Override public void setSqlSessionTemplate(SqlSessionTemplate sqlSessionTemplate) {");

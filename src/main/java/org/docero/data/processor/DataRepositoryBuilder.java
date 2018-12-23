@@ -195,13 +195,16 @@ class DataRepositoryBuilder {
 
             DataBeanBuilder bean = rootBuilder.beansByInterface.get(forInterfaceName.toString());
 
+            rootBuilder.checkAbstractRepositoryForPackage(beanPkg);
             cf.startBlock("public final class " +
                     daoClassName.substring(simpNameDel + 1) +
-                    " extends " + rootBuilder.basePackage + ".AbstractRepository<" + bean.interfaceType + "," + bean.inversionalKey + ">" +
+                    " extends " + beanPkg + ".AbstractRepository<" +
+                    bean.interfaceType + "," + bean.inversionalKey + ">" +
                     " implements " + repositoryInterface + (bean.isDictionary() ?
-                    ", org.docero.data.utils.DDataDictionary<" +
-                            bean.interfaceType + "," + bean.inversionalKey + ">" :
-                    "") + " {"
+                            ", org.docero.data.utils.DDataDictionary<" +
+                                    bean.interfaceType + "," + bean.inversionalKey + ">" :
+                            ""
+                    ) + " {"
             );
 
             if (!spring) {
@@ -249,8 +252,9 @@ class DataRepositoryBuilder {
             TypeElement keyElement = rootBuilder.environment.getElementUtils().getTypeElement(bean.keyType);
 
             if (defaultGetMethod == null) {
-                if (keyElement != null) new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.GET, keyElement).build(cf);
-                else cf.println("public " + bean.interfaceType + " get("+bean.keyType+" v) {}");
+                if (keyElement != null)
+                    new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.GET, keyElement).build(cf);
+                else cf.println("public " + bean.interfaceType + " get(" + bean.keyType + " v) {}");
                 //buildMethodGet(cf);
             }
             if (!hasInsert) {
@@ -262,8 +266,9 @@ class DataRepositoryBuilder {
                 //buildMethodUpdate(cf, discriminator);
             }
             if (defaultDeleteMethod == null) {
-                if (keyElement != null) new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.DELETE, keyElement).build(cf);
-                else cf.println("public void delete("+bean.keyType+" v) {}");
+                if (keyElement != null)
+                    new DDataMethodBuilder(this, bean, DDataMethodBuilder.MType.DELETE, keyElement).build(cf);
+                else cf.println("public void delete(" + bean.keyType + " v) {}");
                 //buildMethodDelete(cf);
             }
 
