@@ -3,11 +3,9 @@ package org.docero.data;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.docero.data.remote.DDataRemoteRepository;
-import org.docero.data.utils.DDataException;
 import org.docero.data.utils.DDataModule;
 import org.docero.data.utils.DDataObjectFactory;
 import org.docero.data.view.DDataViewBuilder;
-import org.mybatis.spring.support.SqlSessionDaoSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +13,6 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -25,6 +22,7 @@ public class DData {
     private static final DDataDictionariesService dictionariesService = new DDataDictionariesService();
 
     private final SqlSessionFactory sessionFactory;
+    private final Map<Class<?>, Object> buildedRepositories = new ConcurrentHashMap<>();
 
     public DData(SqlSessionFactory sessionFactory) {
         this.sessionFactory = sessionFactory;
@@ -35,22 +33,49 @@ public class DData {
         return new DDataViewBuilder(sessionFactory, dictionariesService);
     }
 
+
     @SuppressWarnings({"unchecked", "SuspiciousMethodCalls"})
-    public <T extends Serializable, C extends Serializable> DDataRepository<T, C> getBeanRepository(Class<T> beanClass) {
+    public <T extends Serializable, C extends Serializable> DDataRepository<T, C>
+    getBeanRepository(Class<T> beanClass) {
+        Object r = buildedRepositories.get(beanClass);
+        if (r != null) return (DDataRepository<T, C>) r;
+
         DDataModule module = modules.values().stream()
                 .filter(m -> m.getImplementations().containsKey(beanClass))
                 .findAny().orElse(null);
-        if (module == null) return null;
-        return (DDataRepository<T, C>) module.getBeanRepository(beanClass, sessionFactory);
+        if (module == null)
+            throw new RuntimeException("unknown d.data repository for " + beanClass.getName());
+
+        buildedRepositories.put(beanClass, r = checkSingletonRepository(
+                    module.getBeanRepository(beanClass, sessionFactory)));
+        return (DDataRepository<T, C>) r;
     }
 
-    public <R> R getRepository(Class<R> clazz) throws DDataException {
-        R r;
+    @SuppressWarnings("unchecked")
+    public <R> R getRepository(Class<R> clazz) {
+        R r = (R) buildedRepositories.get(clazz);
+        if (r != null) return r;
+
         for (DDataModule module : modules.values()) {
             r = module.getRepositoryByInterface(clazz, sessionFactory);
-            if (r != null) return r;
+            if (r != null) {
+                buildedRepositories.put(clazz, r = checkSingletonRepository(r));
+                return r;
+            }
         }
-        throw new DDataException("unknown repository " + clazz.getName());
+        throw new RuntimeException("unknown d.data repository " + clazz.getName());
+    }
+
+    @SuppressWarnings("unchecked")
+    private synchronized <T> T checkSingletonRepository(T repository) {
+        if (repository == null) return null;
+
+        T exists = (T) buildedRepositories.get(repository.getClass());
+        if (exists == null) {
+            buildedRepositories.put(repository.getClass(), repository);
+            return repository;
+        }
+        return exists;
     }
 
     /*
