@@ -95,7 +95,7 @@ abstract class AbstractDataView {
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
 
                 TableEntity entity = getEntityForPath(cp);
-                if (entity == null){
+                if (entity == null) {
                     entity = new TableEntity(parent, cp, column.getAttribute());
                     parent.addEntity(entity);
 
@@ -476,15 +476,17 @@ abstract class AbstractDataView {
                             String columnExpression = columnReference;
                             if (filter.getOperator() == DDataFilterOperator.IN) {
                                 if (filter.getValue().getClass().isArray()) {
-                                    value = "(" + Arrays.stream((Object[]) filter.getValue())
-                                            .map(Object::toString)
-                                            .map(v -> DDataTypes.maskedValue(columnType, v))
-                                            .collect(Collectors.joining(",")) + ")";
+                                    value = ((Object[]) filter.getValue()).length == 0 ? null :
+                                            "(" + Arrays.stream((Object[]) filter.getValue())
+                                                    .map(Object::toString)
+                                                    .map(v -> DDataTypes.maskedValue(columnType, v))
+                                                    .collect(Collectors.joining(",")) + ")";
                                 } else if (filter.getValue() instanceof Collection) {
-                                    value = "(" + ((Collection<Object>) filter.getValue()).stream()
-                                            .map(Object::toString)
-                                            .map(v -> DDataTypes.maskedValue(columnType, v))
-                                            .collect(Collectors.joining(",")) + ")";
+                                    value = ((Collection<Object>) filter.getValue()).isEmpty() ? null :
+                                            "(" + ((Collection<Object>) filter.getValue()).stream()
+                                                    .map(Object::toString)
+                                                    .map(v -> DDataTypes.maskedValue(columnType, v))
+                                                    .collect(Collectors.joining(",")) + ")";
                                 } else
                                     value = "(" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + ")";
                             } else {
@@ -508,7 +510,7 @@ abstract class AbstractDataView {
                                     value = value.toLowerCase() + "%";
                                 }
                             }
-                            condition = columnExpression + filter.getOperator().toString() + " " +
+                            condition = value == null ? "FALSE" : columnExpression + filter.getOperator().toString() + " " +
                                     DDataTypes.maskedValue(columnType, value);
                             break;
                         case 2: //BETWEEN only

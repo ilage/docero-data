@@ -117,6 +117,7 @@ public class DDataTest {
                     "  date_from TIMESTAMP NOT NULL,\n" +
                     "  date_to TIMESTAMP,\n" +
                     "  s VARCHAR(125),\n" +
+                    "  s2 NUMERIC,\n" +
                     "  \"inner\" INT,\n" +
                     "  CONSTRAINT \"sample_h1\" PRIMARY KEY (id,date_from)\n" +
                     ");\n" +
@@ -384,10 +385,14 @@ public class DDataTest {
 
         DDataView view = viewBuilder.build(HistSample_WB_.class, new ArrayList<DDataFilter>() {{
             add(new DDataFilter(HistSample_WB_.VALUE));
+            add(new DDataFilter(HistSample_WB_.NUMERIC));
             add(new DDataFilter(HistSample_WB_.INNER) {{
                 setMapName("inner007");
                 add(new DDataFilter(HistInner_WB_.TEXT) {{
                     setMapName("txt");
+                }});
+                add(new DDataFilter(HistInner_WB_.VERSION_FROM) {{
+                    setMapName("version");
                 }});
             }});
         }});
@@ -399,23 +404,35 @@ public class DDataTest {
         DDataViewRow row = vr.getRow(0);
         Integer t_sample_id = (Integer) row.getColumnValue(0, HistSample_WB_.ID);
 
+        LocalDateTime time = LocalDateTime.now();
         row.setColumnValue("update sample", 0, HistSample_WB_.VALUE);
+        row.setColumnValue(101, 0, HistSample_WB_.NUMERIC);
         row.setColumnValue("update inner", 0, "inner007.txt");
+        row.setColumnValue(time, 0, "inner007.version");
 
         view.flushUpdates(t -> {
             t.printStackTrace();
             throw new RuntimeException("Too many errors", t);
         });
 
+        assertEquals("update sample", row.getColumnValue(0, HistSample_WB_.VALUE));
+        assertEquals(101, row.getColumnValue(0, HistSample_WB_.NUMERIC));
+        assertEquals("update inner", row.getColumnValue(0, "inner007.txt"));
+        assertEquals(time, row.getColumnValue(0, "inner007.version")); // this value being ignored in update
+
         HistSample bean = iVSample.get(t_sample_id);
         assertNotNull(bean);
         assertNotNull(bean.getInner());
+        assertEquals("update sample", bean.getValue());
+        assertEquals(Integer.valueOf(101), bean.getNumeric());
         assertEquals("update inner", bean.getInner().getText());
+        assertNotEquals(time, bean.getInner().getDateFrom()); // update version was ignored
 
         bean = iVSample.get(t_sample_id, beforeUpdate);
         assertNotNull(bean);
         assertNotNull(bean.getInner());
         assertNotEquals("update inner", bean.getInner().getText());
+        assertNotEquals(time, bean.getInner().getDateFrom()); // update version was ignored
     }
 
 
@@ -596,7 +613,7 @@ public class DDataTest {
         assertEquals(1, lp.size());
 
         List<Sample> sl;
-        RowCounter addCount=new RowCounter();
+        RowCounter addCount = new RowCounter();
         sl = iSampleRepository.list(null, null, null, null, null,
                 addCount,
                 DDataOrder.asc(Sample_.ID).addDesc(Sample_.INNER_ID), new RowBounds(0, 10));

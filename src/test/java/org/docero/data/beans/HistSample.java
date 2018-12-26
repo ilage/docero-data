@@ -28,6 +28,11 @@ public interface HistSample extends DDataVersionalBean<LocalDateTime> {
 
     void setValue(String val);
 
+    @DDataProperty("s2")
+    Integer getNumeric();
+
+    void setNumeric(Integer v);
+
     @DDataProperty(value = "inner")
     int getInnerId();
 
