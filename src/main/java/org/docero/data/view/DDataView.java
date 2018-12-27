@@ -68,12 +68,22 @@ public class DDataView extends AbstractDataView {
     }
 
     public long count() throws DDataException {
+        long result = 0;
         DSQL sql = buildFrom();
         sql.SELECT("COUNT(*)");
         buildFilters(sql);
 
-        return sqlSession.selectOne("org.docero.data.selectCount",
-                Collections.singletonMap("sqlStatement", sql.toString()));
+        try (PreparedStatement pst = prepareStatement(sqlSession, sql.toString())) {
+            try (ResultSet rs = pst.executeQuery()) {
+                if(rs.next()) result = rs.getLong(1);
+            }
+        } catch (SQLException e) {
+            LOG.error("exception in DDataView", e);
+            throw new DDataException("JDBC: " + e.getMessage());
+        }
+        return result;
+        /*return sqlSession.selectOne("org.docero.data.selectCount",
+                Collections.singletonMap("sqlStatement", sql.toString()));*/
     }
 
     public String firstLevelSelect(int offset, int limit) throws DDataException {
@@ -169,10 +179,17 @@ public class DDataView extends AbstractDataView {
         buildFilters(sql);
         sql.GROUP_BY(keySql);
         agSql.FROM("(" + sql.toString() + ") AS t");
-        Map<Object, Object> result = sqlSession.selectMap(
+
+        /*Map<Object, Object> result = sqlSession.selectMap(
                 "org.docero.data.selectView",
                 Collections.singletonMap("sqlStatement", agSql.toString()), "dDataBeanKey_");
-        Map<Object, Object> row = (Map<Object, Object>) result.get("group");
+        Map<Object, Object> row = (Map<Object, Object>) result.get("group");*/
+        if (LOG.isDebugEnabled()) LOG.debug("Preparing: " + agSql.toString());
+        List<Map<String, Object>> result = selectViewData(sqlSession, agSql.toString());
+        if (LOG.isDebugEnabled()) LOG.debug("Total: " + result.size());
+        if (result.isEmpty()) return new int[0];
+
+        Map<String, Object> row = result.get(0);
         if (row == null) return new int[0];
         int[] ret = new int[row.size() - 1];
         for (int i = 0; i < columns.length; i++) {

@@ -654,11 +654,15 @@ abstract class AbstractDataView {
         m.put(p[i], v);
     }
 
+    PreparedStatement prepareStatement(SqlSession sqlSession, String sql) throws SQLException {
+        return sqlSession.getConnection().prepareStatement(sql);
+    }
+
 
     List<Map<String, Object>> selectViewData(SqlSession sqlSession, String limitedSql) throws DDataException {
         List<Map<String, Object>> results = new ArrayList<>();
         try {
-            try (PreparedStatement pst = sqlSession.getConnection().prepareStatement(limitedSql)) {
+            try (PreparedStatement pst = prepareStatement(sqlSession, limitedSql)) {
                 //TODO build view from really prepared statement, what can be cached by RDBMS
                 try (ResultSet rs = pst.executeQuery()) {
                     ResultSetMetaData meta = rs.getMetaData();
@@ -698,8 +702,8 @@ abstract class AbstractDataView {
                 }
             }
         } catch (SQLException e) {
-            LOG.error("DDataView: " + limitedSql);
-            LOG.error("DDataView: ", e);
+            LOG.error("exception in DDataView: " + limitedSql);
+            LOG.error("exception in DDataView: ", e);
             throw new DDataException("JDBC: " + e.getMessage());
         }
         return results;
