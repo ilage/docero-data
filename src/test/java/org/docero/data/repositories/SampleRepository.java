@@ -17,12 +17,6 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
     @SampleRepository_DDataFetch_(DDataFetchType.LAZY)
     Sample get(@SampleRepository_Filter_(Sample_.ID) Integer id);
 
-    @SampleRepository_DDataFetch_(value = DDataFetchType.COLLECTIONS_ARE_NO,
-            select = "select * from ddata.sample_proc(:page)",
-            resultMap = "org.docero.data.example.MyMapping.sampleProc"
-    )
-    List<Sample> sampleProc(int page) throws IOException;
-
     @SampleRepository_DDataFetch_(value = DDataFetchType.COLLECTIONS_ARE_LAZY, eagerTrunkLevel = 1)
         //tested: , ignore = {ISample_.INNER})
     List<Sample> list(
@@ -71,9 +65,6 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
             DDataOrder<Sample_> sort,
             RowBounds bounds
     ) throws IOException, IllegalArgumentException;
-
-    @SampleRepository_DDataFetch_(select = "SELECT COUNT(*) FROM \"ddata\".\"sample\"")
-    long count();
 
     @SuppressWarnings("unused")
     default List<Sample> listOrdered() throws IOException {

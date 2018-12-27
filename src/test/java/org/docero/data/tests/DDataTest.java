@@ -665,14 +665,6 @@ public class DDataTest {
         iSampleRepository.delete(sample.getId());
         assertNull(iSampleRepository.get(sample.getId()));
 
-        List<Sample> list = iSampleRepository.sampleProc(0);
-        assertNotNull(list);
-        assertEquals(2, list.size());
-        assertNull(list.get(0).getListParameter());
-        assertNotNull(iSampleRepository.get(list.get(0).getId()).getListParameter());
-
-        assertEquals(2, iSampleRepository.count());
-
         assertEquals(1, iSampleRepository.listForInners(new HashSet<Integer>() {{
             this.add(1001);
             this.add(1002);

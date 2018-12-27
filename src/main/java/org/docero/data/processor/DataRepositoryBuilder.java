@@ -367,19 +367,6 @@ class DataRepositoryBuilder {
             cf.println("DDataFetchType value() default DDataFetchType.COLLECTIONS_ARE_LAZY;");
 
             cf.startBlock("/**");
-            cf.println("SQL query, can contains method parameter names (like <i>:parameterName</i>)");
-            cf.println("<p>Can call stored procedure that returns table of DDataRepository data beans, or specified resultMap</p>");
-            cf.println("@return SQL query");
-            cf.endBlock("*/");
-            cf.println("String select() default \"\";");
-
-            cf.startBlock("/**");
-            cf.println("Used with 'select' parameter");
-            cf.println("@return Custom resultMap name used for mapping results");
-            cf.endBlock("*/");
-            cf.println("String resultMap() default \"\";");
-
-            cf.startBlock("/**");
             cf.println("Fields what being not loaded (inserted and updated) at all, nor EAGER, nor LAZY");
             cf.println("@return ignored fields");
             cf.endBlock("*/");
