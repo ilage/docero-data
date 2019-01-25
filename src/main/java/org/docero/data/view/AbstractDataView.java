@@ -474,7 +474,7 @@ abstract class AbstractDataView {
                         case 1:
                             String value;
                             String columnExpression = columnReference;
-                            if (filter.getOperator() == DDataFilterOperator.IN) {
+                            if (filter.getOperator() == DDataFilterOperator.IN || filter.getOperator() == DDataFilterOperator.NOT_IN) {
                                 if (filter.getValue().getClass().isArray()) {
                                     value = ((Object[]) filter.getValue()).length == 0 ? null :
                                             "(" + Arrays.stream((Object[]) filter.getValue())

@@ -945,10 +945,8 @@ class DDataMapBuilder {
                     .forEach(t -> addManagedBeanToFrom(sql, t, fetchOptions));
 
         StringBuilder sql1 = new StringBuilder();
-        //sql.setLength(0);
         sql1.append("\nSELECT COUNT(*) ");
-
-        sql1.append("\n FROM (SELECT * FROM ").append(bean.getTableRef()).append(" AS t0\n");
+        sql1.append("\n FROM ").append(bean.getTableRef()).append(" AS t0\n");
         if (bean.versionalType != null) sql1.append("CROSS JOIN tt\n");
 
         domElement.appendChild(doc.createTextNode(sql1.toString()));
@@ -973,7 +971,7 @@ class DDataMapBuilder {
 
 
         if (bean.versionalType != null) ssql.append("CROSS JOIN tt\n");
-        addJoins(mappedTables, ssql, versionParameter);
+        addJoins(mappedTables.stream().filter(MappedTable::useInFilters).collect(Collectors.toList()), ssql, versionParameter);
 
         domElement.appendChild(doc.createTextNode(ssql.toString()));
         ssql = new StringBuilder();
@@ -1502,7 +1500,7 @@ class DDataMapBuilder {
     }
 
     private String buildSqlParameter(DDataMapBuilder.FilterOption option) {
-        return option.property==null ? "UNKNOWN_" : option.property.getColumnWriter(jdbcTypeParameterFor(option.parameter, option.property.type));
+        return option.property == null ? "UNKNOWN_" : option.property.getColumnWriter(jdbcTypeParameterFor(option.parameter, option.property.type));
     }
 
     private String jdbcTypeParameterFor(String parameter, TypeMirror type) {
@@ -2099,6 +2097,10 @@ class DDataMapBuilder {
 
         boolean useInFieldsList() {
             return useInFieldsList;
+        }
+
+        boolean useInFilters() {
+            return useInFilters;
         }
 
         boolean useInFieldsListOrFilters() {
