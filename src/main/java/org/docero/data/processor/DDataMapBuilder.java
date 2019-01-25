@@ -966,10 +966,6 @@ class DDataMapBuilder {
             addRowBounds(rbParam, domElement);
         }
 
-        ssql.append("\n) AS t0\n");
-        // for add SELECT COUNT (*) method
-
-
         if (bean.versionalType != null) ssql.append("CROSS JOIN tt\n");
         addJoins(mappedTables.stream().filter(MappedTable::useInFilters).collect(Collectors.toList()), ssql, versionParameter);
 
