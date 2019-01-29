@@ -201,17 +201,17 @@ abstract class AbstractDataView {
     }
 
     void addColumnToViewSql(
-            DSQL sql, DDataFilter column
+            DSQL sql, DDataFilter column, boolean aggregation
     ) {
         addColumnToViewSql(sql, null,
                 column, "", "", 0,
-                joinedInRootQuery, columnsInRoot);
+                joinedInRootQuery, columnsInRoot, aggregation);
     }
 
     private void addColumnToViewSql(
             DSQL sql, DDataAttribute parentAttribute,
             DDataFilter column, String path, String uniqPath, int fromTableIndex,
-            final HashSet<Integer> alreadyJoined, final HashSet<String> columnsInSelect
+            final HashSet<Integer> alreadyJoined, final HashSet<String> columnsInSelect, boolean aggregation
     ) {
         List<DDataAttribute> classAttrubutes = parentAttribute == null ?
                 rootEntity.attributes :
@@ -242,10 +242,12 @@ abstract class AbstractDataView {
                             String idKey = path + attr.getPropertyName();
                             if (!columnsInSelect.contains(idKey)) {
                                 columnsInSelect.add(idKey);
-                                String val = "t" + fromTableIndex + ".\"" + attr.getColumnName() + "\"";
-                                if (attr.readExpression() != null)
-                                    val = attr.readExpression().replace("?", val);
-                                sql.SELECT(val + " AS \"" + idKey + "\"");
+                                if (!aggregation) {
+                                    String val = "t" + fromTableIndex + ".\"" + attr.getColumnName() + "\"";
+                                    if (attr.readExpression() != null)
+                                        val = attr.readExpression().replace("?", val);
+                                    sql.SELECT(val + " AS \"" + idKey + "\"");
+                                }
                             }
                         }
                     }
@@ -268,7 +270,7 @@ abstract class AbstractDataView {
                     for (DDataFilter col : column.getFilters()) {
                         addColumnToViewSql(sql, attribute,
                                 col, pathAttributeKey, uniqKey,
-                                table.tableIndex, alreadyJoined, columnsInSelect);
+                                table.tableIndex, alreadyJoined, columnsInSelect, aggregation);
 
                         if (col.getAttribute().isMappedBean() && !col.isExternalData()) {
                             // add non id mapping columns used by col.attribute.joinMapping.keySet
@@ -289,7 +291,7 @@ abstract class AbstractDataView {
                                         addColumnToViewSql(sql, attribute,
                                                 new DDataFilter(idAttribute),
                                                 pathAttributeKey, uniqKey, table.tableIndex,
-                                                alreadyJoined, columnsInSelect);
+                                                alreadyJoined, columnsInSelect, aggregation);
                                         columnsInSelect.add(idKey);
                                     } catch (DDataException ignore) {
                                     }
@@ -319,7 +321,7 @@ abstract class AbstractDataView {
                 addFilterSql(sql, column, column.getAttribute().getClass(),
                         uniqPath, fromTableIndex, alreadyJoined);
             } else {
-                if (!columnsInSelect.contains(pathAttributeName)) {
+                if (!columnsInSelect.contains(pathAttributeName) && !aggregation) {
                     columnsInSelect.add(pathAttributeName);
                     String val = "t" + fromTableIndex + ".\"" + attribute.getColumnName() + "\"";
                     if (attribute.readExpression() != null)
@@ -357,7 +359,7 @@ abstract class AbstractDataView {
                 if (jt != null) addJoinForSubSelects(sql, jt, joinedInSubQuery);
 
                 addColumnToViewSql(sql, column.byAttribute, col, column.path, column.uniqPath, column.table.tableIndex,
-                        joinedInSubQuery, columnsInSubQuery);
+                        joinedInSubQuery, columnsInSubQuery, false);
             }
             //add ids if not present in columnsInSubQuery (setSortAscending(true))
             for (Field a : column.clazz.getDeclaredFields())
@@ -371,7 +373,7 @@ abstract class AbstractDataView {
                                 addColumnToViewSql(sql, column.byAttribute, new DDataFilter(idAttribute) {{
                                             this.setSortAscending(true);
                                         }}, column.path, column.uniqPath, column.table.tableIndex,
-                                        joinedInSubQuery, columnsInSubQuery);
+                                        joinedInSubQuery, columnsInSubQuery, false);
                                 columnsInSubQuery.add(idKey);
                             } catch (DDataException ignore) {
                             }
@@ -387,7 +389,7 @@ abstract class AbstractDataView {
                             addColumnToViewSql(sql, column.byAttribute,
                                     new DDataFilter(mapAttr),
                                     column.path, column.uniqPath, column.table.tableIndex,
-                                    joinedInSubQuery, columnsInSubQuery);
+                                    joinedInSubQuery, columnsInSubQuery, false);
                             columnsInSubQuery.add(mapKey);
                         } catch (DDataException ignore) {
                         }
@@ -490,7 +492,11 @@ abstract class AbstractDataView {
                                 } else
                                     value = "(" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + ")";
                             } else {
-                                value = filter.getValue().toString();
+                                if (filter.getValue().getClass().isArray() || filter.getValue() instanceof Collection)
+                                    value = "0";
+                                else
+                                    value = filter.getValue().toString();
+
                                 if (filter.getOperator() == DDataFilterOperator.LIKE) value = "%" + value + "%";
                                 else if (filter.getOperator() == DDataFilterOperator.NOT_LIKE)
                                     value = "%" + value + "%";
@@ -631,7 +637,7 @@ abstract class AbstractDataView {
                         addColumnToViewSql(sql, null, new DDataFilter(idAttribute) {{
                                     this.setSortAscending(true);
                                 }}, "", "", 0,
-                                joinedInRootQuery, columnsInRoot);
+                                joinedInRootQuery, columnsInRoot, false);
                         columnsInRoot.add(idKey);
                     } catch (DDataException ignore) {
                     }
@@ -942,7 +948,7 @@ abstract class AbstractDataView {
                         addColumnToViewSql(sql, attribute,
                                 new DDataFilter(mapAttr),
                                 pathAttributeKey, uniqKey, table.tableIndex,
-                                alreadyJoined, columnsInSelect);
+                                alreadyJoined, columnsInSelect, false);
                         columnsInSelect.add(mapKey);
                     } catch (DDataException ignore) {
                     }

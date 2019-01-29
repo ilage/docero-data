@@ -75,7 +75,7 @@ public class DDataView extends AbstractDataView {
 
         try (PreparedStatement pst = prepareStatement(sqlSession, sql.toString())) {
             try (ResultSet rs = pst.executeQuery()) {
-                if(rs.next()) result = rs.getLong(1);
+                if (rs.next()) result = rs.getLong(1);
             }
         } catch (SQLException e) {
             LOG.error("exception in DDataView", e);
@@ -97,7 +97,7 @@ public class DDataView extends AbstractDataView {
         for (DDataFilter column : columns)
             for (Class root : roots)
                 if (super.isApplicable(root, column)) {
-                    super.addColumnToViewSql(sql, column);
+                    super.addColumnToViewSql(sql, column, false);
                     break;
                 }
         super.addRootIdsToViewSql(sql);
@@ -161,6 +161,14 @@ public class DDataView extends AbstractDataView {
         }
     }
 
+    /**
+     * Создаёт агрегирующую таблицу по заданным в представлении колонкам, с использованием
+     * переданной функции агрегирующей функции
+     *
+     * @param operator агрегирующая функция
+     * @return массив значений агрегатов
+     * @throws DDataException
+     */
     @SuppressWarnings("unchecked")
     public int[] aggregateInt(DDataFilterOperator operator) throws DDataException {
         DSQL agSql = new DSQL();
@@ -171,8 +179,13 @@ public class DDataView extends AbstractDataView {
         for (DDataFilter column : columns)
             for (Class root : roots)
                 if (super.isApplicable(root, column)) {
-                    super.addColumnToViewSql(sql, column);
-                    String pathName = column.getName();
+                    super.addColumnToViewSql(sql, column, true);
+                    StringBuilder pathName = new StringBuilder(column.getName());
+                    DDataFilter parent = column;
+                    while (!parent.getFilters().isEmpty()) {
+                        parent = parent.getFilters().get(0);
+                        pathName.append(".").append(parent.getName());
+                    }
                     agSql.SELECT(operator + "(t.\"" + pathName + "\") AS \"" + pathName + "\"");
                     break;
                 }
@@ -180,17 +193,13 @@ public class DDataView extends AbstractDataView {
         sql.GROUP_BY(keySql);
         agSql.FROM("(" + sql.toString() + ") AS t");
 
-        /*Map<Object, Object> result = sqlSession.selectMap(
-                "org.docero.data.selectView",
-                Collections.singletonMap("sqlStatement", agSql.toString()), "dDataBeanKey_");
-        Map<Object, Object> row = (Map<Object, Object>) result.get("group");*/
         if (LOG.isDebugEnabled()) LOG.debug("Preparing: " + agSql.toString());
         List<Map<String, Object>> result = selectViewData(sqlSession, agSql.toString());
         if (LOG.isDebugEnabled()) LOG.debug("Total: " + result.size());
-        if (result.isEmpty()) return new int[0];
+        if (result.isEmpty()) return new int[]{0};
 
         Map<String, Object> row = result.get(0);
-        if (row == null) return new int[0];
+        if (row == null) return new int[]{0};
         int[] ret = new int[row.size() - 1];
         for (int i = 0; i < columns.length; i++) {
             Object ro = row.get(columns[i].getName());
