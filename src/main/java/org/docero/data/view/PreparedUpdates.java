@@ -47,16 +47,24 @@ class PreparedUpdates {
         mappings = new ArrayList<>();
         entity.mappings.entrySet().stream()
                 .filter(m -> !m.getKey().attribute.isPrimaryKey() && !m.getKey().isVersion)
+                .flatMap(m -> m.getValue().values().stream()
+                        .flatMap(v -> Collections.singletonMap(m.getKey(), v).entrySet().stream())
+                )
+                .filter(m -> dDataView.tableCells.values().contains(m.getValue()))
                 .forEach(m -> mappings.add(new PreparedMap(m.getKey(), m.getValue(), false)));
         if (entity.parent != null)
             entity.parent.mappings.entrySet().stream()
-                    .filter(m -> entity.cells.contains(m.getValue()) && !m.getValue().attribute.isPrimaryKey() && !m.getValue().isVersion)
-                    .forEach(m -> mappings.add(new PreparedMap(m.getValue(), m.getKey(), entity.isCollection())));
+                    .filter(m -> m.getValue().get(entity) != null &&
+                            !m.getValue().get(entity).attribute.isPrimaryKey() && !m.getValue().get(entity).isVersion)
+                    .filter(m -> dDataView.tableCells.values().contains(m.getKey()))
+                    .forEach(m -> mappings.add(
+                            new PreparedMap(m.getValue().get(entity), m.getKey(), entity.isCollection())
+                    ));
 
         props.addAll(entity.cells.stream()
-                .filter(c -> c.column != null && !c.isVersion && !c.attribute.isPrimaryKey() &&
-                        mappings.stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, c.attribute)))
-                .collect(Collectors.toSet())
+                .filter(c -> c.column != null && !c.isVersion && !c.attribute.isPrimaryKey()
+                        && mappings.stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, c.attribute))
+                ).collect(Collectors.toSet())
         );
 
         unModified = new ArrayList<>();
@@ -445,7 +453,7 @@ class PreparedUpdates {
     }
 
     /**
-     * Fill mapping values between parent and child beans.
+     * Fill mapping non-null values between parent and child beans.
      *
      * @param row                - data row
      * @param entity             - entity (parent entity)
@@ -453,43 +461,40 @@ class PreparedUpdates {
      * @param entityPropertyPath - path to attribute (child entity)
      */
     void fillMappings(DDataViewRow row, AbstractDataView.TableEntity entity, Integer updatedIndex, String entityPropertyPath) {
-        for (Map.Entry<AbstractDataView.TableCell, AbstractDataView.TableCell> m : entity.mappings.entrySet()) {
+        for (Map.Entry<AbstractDataView.TableCell, Map<AbstractDataView.TableEntity, AbstractDataView.TableCell>> m :
+                entity.mappings.entrySet()) {
             DDataAttribute beanMapAttribute = m.getKey().attribute;
-            DDataAttribute childMapAttribute = m.getValue().attribute;
-            int lii = entityPropertyPath.lastIndexOf('.');
-            String parentPropertyPrefix = lii < 0 ? "" :
-                    entityPropertyPath.substring(0, lii + 1);
-            int parentIndex = entity.isCollection() ? 0 : updatedIndex;
-            if (!beanMapAttribute.isPrimaryKey()) {
-                row.setColumnValue(
-                        row.getColumnValue(updatedIndex, entityPropertyPath + "." +
-                                childMapAttribute.getPropertyName()),
-                        parentIndex, parentPropertyPrefix +
-                                beanMapAttribute.getPropertyName(),
-                        false);
-                if (LOG.isDebugEnabled())
-                    LOG.debug("fill parent property '" + parentPropertyPrefix + beanMapAttribute.getPropertyName() +
-                            "' from child entity property '" + entityPropertyPath + "." + childMapAttribute.getPropertyName() +
-                            "' with value: " + row.getColumnValue(updatedIndex, entityPropertyPath + "." +
-                            childMapAttribute.getPropertyName()));
-            } else if (!childMapAttribute.isPrimaryKey()) {
-                row.setColumnValue(
-                        row.getColumnValue(parentIndex, parentPropertyPrefix +
-                                beanMapAttribute.getPropertyName()),
-                        updatedIndex, entityPropertyPath + "." +
-                                childMapAttribute.getPropertyName(),
-                        false);
-                if (LOG.isDebugEnabled())
-                    LOG.debug("fill child entity property '" + entityPropertyPath + "." + childMapAttribute.getPropertyName() +
-                            "' from parent property '" + parentPropertyPrefix + beanMapAttribute.getPropertyName() +
-                            "' with value: " + row.getColumnValue(parentIndex, parentPropertyPrefix +
-                            beanMapAttribute.getPropertyName()));
-            } else if (LOG.isDebugEnabled())
-                LOG.debug("both properties are primaryKeys '" + m.getKey() + "' (" +
-                        parentPropertyPrefix + beanMapAttribute.getPropertyName() +
-                        ") -> '" + m.getValue() + "' (" +
-                        entityPropertyPath + "." + childMapAttribute.getPropertyName() +
-                        ")");
+            for (AbstractDataView.TableCell childMapCell : m.getValue().values()) {
+                DDataAttribute childMapAttribute = childMapCell.attribute;
+                int lii = entityPropertyPath.lastIndexOf('.');
+                String parentMappedProperty = (lii < 0 ? "" : entityPropertyPath.substring(0, lii + 1))
+                        + beanMapAttribute.getPropertyName();
+                String entityMappedProperty = entityPropertyPath + "." + childMapAttribute.getPropertyName();
+                int parentIndex = entity.isCollection() ? updatedIndex : 0;
+                try {
+                    if (!beanMapAttribute.isPrimaryKey()) {
+                        Object v = row.getColumnValue(updatedIndex, entityMappedProperty);
+                        if (v != null) row.setColumnValue(v, parentIndex, parentMappedProperty, false);
+                        if (LOG.isDebugEnabled())
+                            LOG.debug("fill parent property '" + parentMappedProperty +
+                                    "' from child entity property '" + entityMappedProperty +
+                                    "' with value: " + row.getColumnValue(updatedIndex, entityMappedProperty));
+                    } else if (!childMapAttribute.isPrimaryKey()) {
+                        Object v = row.getColumnValue(parentIndex, parentMappedProperty);
+                        if (v != null) row.setColumnValue(v,
+                                updatedIndex, entityMappedProperty,
+                                false);
+                        if (LOG.isDebugEnabled())
+                            LOG.debug("fill child entity property '" + entityMappedProperty +
+                                    "' from parent property '" + parentMappedProperty +
+                                    "' with value: " + row.getColumnValue(parentIndex, parentMappedProperty));
+                    } else if (LOG.isDebugEnabled())
+                        LOG.debug("both properties are primaryKeys '" + m.getKey() + "' (" +
+                                parentMappedProperty + ") -> '" + m.getValue() + "' (" + entityMappedProperty + ")");
+                } catch (RuntimeException ignore) {
+                    LOG.debug("may be correct: not available " + entityMappedProperty);
+                }
+            }
         }
     }
 

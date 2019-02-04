@@ -123,7 +123,9 @@ abstract class AbstractDataView {
                                                 false
                                         ));
                                     }
-                                    parent.mappings.put(parentMapCell, idCell);
+                                    parent.mappings.computeIfAbsent(parentMapCell,
+                                            (t) -> new HashMap<>())
+                                            .put(entity,idCell);
                                 }
                             }
                         }
@@ -858,7 +860,7 @@ abstract class AbstractDataView {
         final Class<? extends Serializable> beanInterface;
         final List<TableCell> cells = new ArrayList<>();
         final List<TableEntity> entities = new ArrayList<>();
-        final Map<TableCell, TableCell> mappings = new HashMap<>();
+        final Map<TableCell, Map<TableEntity, TableCell>> mappings = new HashMap<>();
         final boolean collection;
 
         final String table;

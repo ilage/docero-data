@@ -19,11 +19,14 @@ public abstract class DDataBeanUpdateService<T> {
         updateBeanByRow(row, entity, bean, index, entityPath);
 
         // update properties used for mapping from parent entity if exists
-        for (AbstractDataView.TableCell parentMapColumn : entity.mappings.keySet()) {
-            AbstractDataView.TableCell beanMapColumn = entity.mappings.get(parentMapColumn);
-            Object parentMapValue = row.getColumnValue(entity.isCollection() ? 0 : index, parentMapColumn.name);
-            setProperty(bean, beanMapColumn.attribute, parentMapValue);
-        }
+        if (entity.parent != null)
+            for (AbstractDataView.TableCell parentMapColumn : entity.parent.mappings.keySet()) {
+                AbstractDataView.TableCell beanMapColumn = entity.parent.mappings.get(parentMapColumn).get(entity);
+                if (beanMapColumn != null) {
+                    Object parentMapValue = row.getColumnValue(entity.isCollection() ? index : 0, parentMapColumn.name);
+                    setProperty(bean, beanMapColumn.attribute, parentMapValue);
+                }
+            }
         // call update services for children
         boolean anyChildUpdated = false;
         for (DDataAttribute attribute : entity.attributes)
@@ -42,13 +45,13 @@ public abstract class DDataBeanUpdateService<T> {
         boolean anyParentItemMayBeModified = false;
         if (entity.parent != null)
             for (AbstractDataView.TableCell parentMapColumn : entity.parent.mappings.keySet()) {
-                AbstractDataView.TableCell beanMapColumn = entity.parent.mappings.get(parentMapColumn);
-                if (beanMapColumn.name.startsWith(entityPath)) {
+                AbstractDataView.TableCell beanMapColumn = entity.parent.mappings.get(parentMapColumn).get(entity);
+                if (beanMapColumn != null) {
                     Object beanMapValue = getProperty(bean, beanMapColumn.attribute);
                     if (!DDataView.idIsNull(beanMapValue)) {
-                        row.setColumnValue(beanMapValue, entity.parent.isCollection() ? 0 : index,
+                        row.setColumnValue(beanMapValue, entity.parent.isCollection() ? index : 0,
                                 parentMapColumn.name, false);
-                        row.setColumnValue(beanMapValue, entity.parent.isCollection() ? 0 : index,
+                        row.setColumnValue(beanMapValue, entity.parent.isCollection() ? index : 0,
                                 beanMapColumn.name, false);
                         anyParentItemMayBeModified = true;
                     }

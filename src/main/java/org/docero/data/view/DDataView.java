@@ -287,7 +287,7 @@ public class DDataView extends AbstractDataView {
                                     String parentPath = lastDelim < 0 ? null : entityPropertyPath.substring(0, lastDelim);
                                     if (!updatedEntities.containsKey(parentPath))
                                         updatedParents.computeIfAbsent(parentPath, k -> new HashSet<>())
-                                                .add(getEntityForPath(parentPath).isCollection() ? 0 : updatedIndex);
+                                                .add(getEntityForPath(parentPath).isCollection() ? updatedIndex : 0);
                                 }
                     }
                     // if children updates/inserts modify parent mapping attributes, add parent to updates
@@ -331,7 +331,7 @@ public class DDataView extends AbstractDataView {
                                     pk.fillInsert(row, updatedIndex, dateNow);
                                     parentMustBeUpdated = entity.parent != null && entity.parent.mappings.entrySet()
                                             .stream().anyMatch(c -> !c.getKey().attribute.isPrimaryKey() &&
-                                                    c.getValue().name.startsWith(entityPropertyPath + "."));
+                                                    c.getValue().get(entity) != null);
                                 } else
                                     pk.fillUpdate(row, updatedIndex, dateNow);
 
@@ -340,7 +340,7 @@ public class DDataView extends AbstractDataView {
                                     String parentPath = lii < 0 ? null : entityPropertyPath.substring(0, lii);
                                     if (!updatedEntities.containsKey(parentPath))
                                         updatedParents.computeIfAbsent(parentPath, k -> new HashSet<>())
-                                                .add(getEntityForPath(parentPath).isCollection() ? 0 : updatedIndex);
+                                                .add(getEntityForPath(parentPath).isCollection() ? updatedIndex : 0);
                                 }
                             }
                         }
@@ -376,6 +376,18 @@ public class DDataView extends AbstractDataView {
         );
     }
 
+    /**
+     * Получает значение id-поля либо в соответсвии с аннотацией GeneratedValue, либо по связям из родительской сущности.
+     * @param connection            соединение с БД (для автогенерации)
+     * @param row                   строка таблицы для заполнения значения
+     * @param beanInterface         интерфейс сущности (для получения аннотации)
+     * @param entityPropertyPath    путь до сущности (в имени столбца таблицы)
+     * @param index                 индекс значения столбца (для связей один ко многим)
+     * @param cell                  описание колонки таблицы
+     * @param dateNow               текущая дата проведения изменений (для заполнения поля версии)
+     * @throws NoSuchMethodException
+     * @throws SQLException
+     */
     private void fillIdAttibute(
             Connection connection, DDataViewRow row, Class<? extends Serializable> beanInterface,
             String entityPropertyPath, Integer index, TableCell cell, Date dateNow
@@ -395,22 +407,28 @@ public class DDataView extends AbstractDataView {
         }
         if (gen == null) {
             AbstractDataView.TableEntity entity = getEntityForPath(entityPropertyPath);
-            entity.mappings.entrySet().stream()
-                    .filter(m -> m.getValue().name.equals(idPropertyPath))
-                    .findAny().ifPresent(m ->
-                    row.setColumnValue(
-                            row.getColumnValue(entity.isCollection() ? 0 : index, m.getKey().name),
-                            index, idPropertyPath));
-            if (Temporal.class.isAssignableFrom(cell.attribute.getJavaType()))
+            if (cell.attribute.equals(entity.versionFrom) && (
+                    Temporal.class.isAssignableFrom(cell.attribute.getJavaType()) ||
+                            Date.class.isAssignableFrom(cell.attribute.getJavaType())))
                 row.setColumnValue(dateNow, index, idPropertyPath, false);
-            else if (Date.class.isAssignableFrom(cell.attribute.getJavaType()))
-                row.setColumnValue(dateNow, index, idPropertyPath, false);
+            else if (entity.parent != null) {
+                Map.Entry<TableCell, TableCell> mapEntry = entity.parent.mappings.entrySet().stream()
+                        .filter(m -> m.getValue().get(entity) != null)
+                        .flatMap(m -> Collections.singletonMap(m.getKey(), m.getValue().get(entity)).entrySet().stream())
+                        .filter(v -> v.getValue().name.equals(idPropertyPath))
+                        .findAny().orElse(null);
+                if (mapEntry != null) {
+                    Object idVal = row.getColumnValue(entity.parent.isCollection() ? index : 0, mapEntry.getKey().name);
+                    if (!idIsNull(idVal)) row.setColumnValue(idVal, index, idPropertyPath);
+                }
+            }
         } else {
             Object idValue = null;
+            String genValue = gen.value().length() == 0 ? gen.generator() : gen.value();
             switch (gen.strategy()) {
                 case SEQUENCE:
                     try (PreparedStatement st = connection.prepareStatement("SELECT nextval(?);")) {
-                        st.setString(1, gen.value());
+                        st.setString(1, genValue);
                         try (ResultSet rs = st.executeQuery()) {
                             if (rs.next()) idValue = idFromResult(rs, cell.attribute);
                         }
@@ -418,7 +436,7 @@ public class DDataView extends AbstractDataView {
                     break;
                 case SELECT:
                     try (Statement st = connection.createStatement()) {
-                        try (ResultSet rs = st.executeQuery(gen.value())) {
+                        try (ResultSet rs = st.executeQuery(genValue)) {
                             if (rs.next()) idValue = idFromResult(rs, cell.attribute);
                         }
                     }
@@ -427,6 +445,9 @@ public class DDataView extends AbstractDataView {
             if (idValue != null)
                 row.setColumnValue(idValue, index, idPropertyPath, false);
         }
+
+        if (idIsNull(row.getColumnValue(index, idPropertyPath)))
+            throw new RuntimeException("can't set property " + idPropertyPath);
     }
 
     private Object idFromResult(ResultSet rs, DDataAttribute idAttribute) throws SQLException {
