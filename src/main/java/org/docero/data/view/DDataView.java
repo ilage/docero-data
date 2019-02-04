@@ -338,9 +338,12 @@ public class DDataView extends AbstractDataView {
                                 if (parentMustBeUpdated) {
                                     int lii = entityPropertyPath.lastIndexOf('.');
                                     String parentPath = lii < 0 ? null : entityPropertyPath.substring(0, lii);
+                                    TableEntity parentEntity = getEntityForPath(parentPath);
                                     if (!updatedEntities.containsKey(parentPath))
                                         updatedParents.computeIfAbsent(parentPath, k -> new HashSet<>())
-                                                .add(getEntityForPath(parentPath).isCollection() ? updatedIndex : 0);
+                                                .add(parentEntity.isCollection() ? updatedIndex : 0);
+                                    else if (parentEntity.isCollection())
+                                        updatedEntities.get(parentPath).add(updatedIndex);
                                 }
                             }
                         }
@@ -378,13 +381,14 @@ public class DDataView extends AbstractDataView {
 
     /**
      * Получает значение id-поля либо в соответсвии с аннотацией GeneratedValue, либо по связям из родительской сущности.
-     * @param connection            соединение с БД (для автогенерации)
-     * @param row                   строка таблицы для заполнения значения
-     * @param beanInterface         интерфейс сущности (для получения аннотации)
-     * @param entityPropertyPath    путь до сущности (в имени столбца таблицы)
-     * @param index                 индекс значения столбца (для связей один ко многим)
-     * @param cell                  описание колонки таблицы
-     * @param dateNow               текущая дата проведения изменений (для заполнения поля версии)
+     *
+     * @param connection         соединение с БД (для автогенерации)
+     * @param row                строка таблицы для заполнения значения
+     * @param beanInterface      интерфейс сущности (для получения аннотации)
+     * @param entityPropertyPath путь до сущности (в имени столбца таблицы)
+     * @param index              индекс значения столбца (для связей один ко многим)
+     * @param cell               описание колонки таблицы
+     * @param dateNow            текущая дата проведения изменений (для заполнения поля версии)
      * @throws NoSuchMethodException
      * @throws SQLException
      */

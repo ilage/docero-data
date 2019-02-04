@@ -274,9 +274,9 @@ public class DDataTest {
                         this.add(new DDataFilter(SmallDict_WB_.NAME));
                     }});
 
-                    /*this.add(new DDataFilter(Inner_WB_.SAMPLE) {{
+                    this.add(new DDataFilter(Inner_WB_.SAMPLE) {{
                         this.add(new DDataFilter(Sample_WB_.HASH));
-                    }});*/
+                    }});
                 }});
             }});
             add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
@@ -351,6 +351,9 @@ public class DDataTest {
         row.setColumnValue("insert linked", 2,
                 ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.V1, SmallDict_WB_.NAME);
 
+        row.setColumnValue("double insert linked", 3,
+                ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.V1, SmallDict_WB_.NAME);
+
         view.flushUpdates(t -> {
             t.printStackTrace();
             throw new RuntimeException("Too many errors", t);
@@ -385,7 +388,7 @@ public class DDataTest {
         int[] maxCount = view.aggregateInt(DDataFilterOperator.MAX);
         assertNotNull(maxCount);
         assertEquals(1, maxCount.length);
-        assertEquals(3, maxCount[0]);
+        assertEquals(4, maxCount[0]);
     }
 
     @Test

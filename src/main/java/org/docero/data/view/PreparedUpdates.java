@@ -29,7 +29,7 @@ class PreparedUpdates {
     private final AbstractDataView.TableEntity entity;
 
     private final Connection connection;
-    private final List<PreparedMap> mappings;
+    private final Map<String, PreparedMap> mappings;
     private final List<DDataAttribute> unModified;
     private PreparedStatement ps = null;
     private PreparedStatement pi = null;
@@ -44,26 +44,27 @@ class PreparedUpdates {
                 .filter(c -> !c.isVersion && c.attribute.isPrimaryKey())
                 .map(c -> c.attribute).collect(Collectors.toSet())
         );
-        mappings = new ArrayList<>();
+        mappings = new HashMap<>();
         entity.mappings.entrySet().stream()
                 .filter(m -> !m.getKey().attribute.isPrimaryKey() && !m.getKey().isVersion)
                 .flatMap(m -> m.getValue().values().stream()
                         .flatMap(v -> Collections.singletonMap(m.getKey(), v).entrySet().stream())
                 )
                 .filter(m -> dDataView.tableCells.values().contains(m.getValue()))
-                .forEach(m -> mappings.add(new PreparedMap(m.getKey(), m.getValue(), false)));
+                .forEach(m -> mappings.put(m.getKey().name, new PreparedMap(m.getKey(), m.getValue(), false)));
         if (entity.parent != null)
             entity.parent.mappings.entrySet().stream()
                     .filter(m -> m.getValue().get(entity) != null &&
                             !m.getValue().get(entity).attribute.isPrimaryKey() && !m.getValue().get(entity).isVersion)
                     .filter(m -> dDataView.tableCells.values().contains(m.getKey()))
-                    .forEach(m -> mappings.add(
-                            new PreparedMap(m.getValue().get(entity), m.getKey(), entity.isCollection())
-                    ));
+                    .forEach(m -> {
+                        AbstractDataView.TableCell cell = m.getValue().get(entity);
+                        mappings.put(cell.name, new PreparedMap(cell, m.getKey(), entity.isCollection()));
+                    });
 
         props.addAll(entity.cells.stream()
                 .filter(c -> c.column != null && !c.isVersion && !c.attribute.isPrimaryKey()
-                        && mappings.stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, c.attribute))
+                        && mappings.values().stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, c.attribute))
                 ).collect(Collectors.toSet())
         );
 
@@ -71,7 +72,7 @@ class PreparedUpdates {
         for (DDataAttribute beanAtr : entity.attributes)
             if (!beanAtr.isPrimaryKey() && !beanAtr.isMappedBean() && beanAtr.getColumnName() != null) {
                 if (props.stream().noneMatch(c -> DDataAttribute.equals(c.attribute, beanAtr)) &&
-                        mappings.stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, beanAtr)))
+                        mappings.values().stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, beanAtr)))
                     unModified.add(beanAtr);
             }
         if (props.isEmpty() || ids.isEmpty())
@@ -98,7 +99,7 @@ class PreparedUpdates {
             for (AbstractDataView.TableCell prop : props)
                 fillStatement(ps, pIdx++, prop.attribute,
                         row.getColumnValue(updatedIndex, prop.name));
-            for (PreparedMap m : mappings) {
+            for (PreparedMap m : mappings.values()) {
                 fillStatement(ps, pIdx++, m.to.attribute,
                         row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.from.name));
             }
@@ -131,7 +132,7 @@ class PreparedUpdates {
                                         .map(val -> val == null ? "NULL" : val.toString())
                                         .collect(Collectors.joining(",")) +
                                 (mappings.isEmpty() ? "" : "," +
-                                        mappings.stream()
+                                        mappings.values().stream()
                                                 .map(m -> row.getColumnValue(
                                                         m.fromCollection ? 0 : updatedIndex, m.from.name))
                                                 .map(val -> val == null ? "NULL" : val.toString())
@@ -153,7 +154,7 @@ class PreparedUpdates {
             for (AbstractDataView.TableCell prop : props)
                 fillStatement(ps, pIdx++, prop.attribute,
                         row.getColumnValue(updatedIndex, prop.name));
-            for (PreparedMap m : mappings) {
+            for (PreparedMap m : mappings.values()) {
                 fillStatement(ps, pIdx++, m.to.attribute,
                         row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.from.name));
             }
@@ -168,7 +169,7 @@ class PreparedUpdates {
                                 .map(val -> val == null ? "NULL" : val.toString())
                                 .collect(Collectors.joining(",")) +
                         (mappings.isEmpty() ? "" : "," +
-                                mappings.stream()
+                                mappings.values().stream()
                                         .map(m -> row.getColumnValue(
                                                 m.fromCollection ? 0 : updatedIndex, m.from.name))
                                         .map(val -> val == null ? "NULL" : val.toString())
@@ -217,7 +218,7 @@ class PreparedUpdates {
                             .map(s -> "\"" + s + "\"")
                             .collect(Collectors.joining(",")) +
                     (mappings.isEmpty() ? "" : "," +
-                            mappings.stream()
+                            mappings.values().stream()
                                     .map(m -> m.to.attribute.getColumnName())
                                     .map(s -> "\"" + s + "\"")
                                     .collect(Collectors.joining(","))) +
@@ -245,7 +246,7 @@ class PreparedUpdates {
                     " SET " + props.stream()
                     .map(p -> "\"" + p.attribute.getColumnName() + "\"=?")
                     .collect(Collectors.joining(",")) +
-                    (mappings.isEmpty() ? "" : "," + mappings.stream()
+                    (mappings.isEmpty() ? "" : "," + mappings.values().stream()
                             .map(m -> "\"" + m.to.attribute.getColumnName() + "\"=?")
                             .collect(Collectors.joining(","))) +
                     " WHERE " + ids.stream().map(p -> "\"" + p.getColumnName() + "\"=?")
@@ -375,7 +376,7 @@ class PreparedUpdates {
         for (AbstractDataView.TableCell prop : props)
             fillStatement(pi, pIdx++, prop.attribute,
                     row.getColumnValue(updatedIndex, prop.name));
-        for (PreparedMap m : mappings) {
+        for (PreparedMap m : mappings.values()) {
             fillStatement(pi, pIdx++, m.to.attribute,
                     row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.from.name));
         }
@@ -394,7 +395,7 @@ class PreparedUpdates {
                             .map(val -> val == null ? "NULL" : val.toString())
                             .collect(Collectors.joining(",")) +
                     (mappings.isEmpty() ? "" : "," +
-                            mappings.stream()
+                            mappings.values().stream()
                                     .map(m -> row.getColumnValue(
                                             m.fromCollection ? 0 : updatedIndex, m.from.name))
                                     .map(val -> val == null ? "NULL" : val.toString())
@@ -417,7 +418,7 @@ class PreparedUpdates {
                         .map(s -> "\"" + s + "\"")
                         .collect(Collectors.joining(",")) +
                 (mappings.isEmpty() ? "" : "," +
-                        mappings.stream()
+                        mappings.values().stream()
                                 .map(m -> m.to.attribute.getColumnName())
                                 .map(s -> "\"" + s + "\"")
                                 .collect(Collectors.joining(","))
