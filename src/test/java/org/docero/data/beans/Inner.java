@@ -27,4 +27,12 @@ public interface Inner extends Serializable {
     @DDataProperty("text")
     String getText();
     void setText(String text);
+
+    @DDataProperty("d1")
+    int getD1();
+    void setD1(int v);
+
+    @Inner_Map_(value = Inner_.D1, v1 = SmallDict_.ID)
+    SmallDict getV1();
+    void setV1(SmallDict v);
 }

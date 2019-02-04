@@ -8,7 +8,7 @@
     </appender>
 
     <logger name="org.docero.data" level="DEBUG"/>
-    <logger name="org.docero.data.view" level="DEBUG"/>
+    <logger name="org.docero.data.view" level="TRACE"/>
     <logger name="org.docero.data.remote" level="TRACE"/>
     <logger name="org.mybatis" level="INFO"/>
     <logger name="org.springframework.web.socket.sockjs.SockJsTransportFailureException" level="OFF"/>

@@ -85,6 +85,7 @@ public class DDataTest {
                     "  id INT NOT NULL,\n" +
                     "  text VARCHAR(125),\n" +
                     "  sample_id INT,\n" +
+                    "  d1 INT,\n" +
                     "  CONSTRAINT \"inner_pkey\" PRIMARY KEY (id)\n" +
                     ");" +
                     "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (1,'s1',1001,2);\n" +
@@ -268,6 +269,14 @@ public class DDataTest {
                     add(new DDataFilter(Inner_WB_.ID));
                     // checked if present add(new DDataFilter(Inner_WB_.SAMPLE_ID));
                     add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 5555));
+
+                    this.add(new DDataFilter(Inner_WB_.V1) {{
+                        this.add(new DDataFilter(SmallDict_WB_.NAME));
+                    }});
+
+                    /*this.add(new DDataFilter(Inner_WB_.SAMPLE) {{
+                        this.add(new DDataFilter(Sample_WB_.HASH));
+                    }});*/
                 }});
             }});
             add(new DDataFilter(ItemSample_WB_.SAMPLE) {{
@@ -338,6 +347,9 @@ public class DDataTest {
 
         Integer inner_id = (Integer) row.getColumnValue(1,
                 ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.ID);
+
+        row.setColumnValue("insert linked", 2,
+                ItemSample_WB_.SAMPLE, Sample_WB_.LIST_PARAMETER, Inner_WB_.V1, SmallDict_WB_.NAME);
 
         view.flushUpdates(t -> {
             t.printStackTrace();

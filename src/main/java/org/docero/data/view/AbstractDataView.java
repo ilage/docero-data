@@ -123,9 +123,9 @@ abstract class AbstractDataView {
                                                 false
                                         ));
                                     }
-                                    parent.mappings.computeIfAbsent(parentMapCell,
-                                            (t) -> new HashMap<>())
-                                            .put(entity,idCell);
+                                    Map<TableEntity, TableCell> pm = parent.mappings.computeIfAbsent(parentMapCell,
+                                            (t) -> new HashMap<>());
+                                    pm.put(entity,idCell);
                                 }
                             }
                         }
