@@ -103,7 +103,7 @@ class DataBeanPropertyBuilder {
             this.generatedBefore = true;
         }
         this.ignored = ddProperty != null && ddProperty.Transient();
-        nullable = ddProperty == null || ddProperty.nullable();
+        nullable = (ddProperty == null || ddProperty.nullable()) && !type.getKind().isPrimitive();
         isVersionFrom = ddProperty != null && ddProperty.versionFrom();
         isVersionTo = ddProperty != null && ddProperty.versionTo();
         length = ddProperty == null ? 0 : ddProperty.length();

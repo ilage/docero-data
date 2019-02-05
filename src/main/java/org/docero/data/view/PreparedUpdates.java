@@ -5,6 +5,7 @@ import org.docero.data.utils.DDataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.sql.*;
@@ -15,7 +16,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @SuppressWarnings({"SqlDialectInspection", "SqlNoDataSourceInspection"})
-class PreparedUpdates {
+class PreparedUpdates implements Closeable {
     private final static Logger LOG = LoggerFactory.getLogger(PreparedUpdates.class);
 
     final String entityPropertyPath;
@@ -31,9 +32,7 @@ class PreparedUpdates {
     private final Connection connection;
     private final Map<String, PreparedMap> mappings;
     private final List<DDataAttribute> unModified;
-    private PreparedStatement ps = null;
-    private PreparedStatement pi = null;
-    private boolean batchOperation = false;
+    private final List<PreparedStatement> psl = new ArrayList<>();
 
     PreparedUpdates(DDataView dDataView, String entityPropertyPath, Connection connection) throws DDataException, SQLException {
         this.entityPropertyPath = entityPropertyPath;
@@ -80,8 +79,7 @@ class PreparedUpdates {
     }
 
     void fillUpdate(DDataViewRow row, Integer updatedIndex, java.util.Date dateNow) throws SQLException {
-        if (ps == null) prepareUpdate();
-
+        PreparedStatement ps = prepareUpdate();
         if (entity.versionFrom != null) { //versional bean
             int pIdx = 1;
             if (entity.versionTo != null) {
@@ -148,7 +146,6 @@ class PreparedUpdates {
                                         expandPath(entityPropertyPath, entity.versionFrom.getPropertyName()))
                 );
             }
-            ps.executeUpdate();
         } else {
             int pIdx = 1;
             for (AbstractDataView.TableCell prop : props)
@@ -181,14 +178,15 @@ class PreparedUpdates {
                                 .collect(Collectors.joining(","))
                 );
             }
-            ps.addBatch();
         }
+        psl.add(ps);
     }
 
     /**
      * Prepare statement
      */
-    private void prepareUpdate() throws SQLException {
+    private PreparedStatement prepareUpdate() throws SQLException {
+        PreparedStatement ps;
         if (entity.versionFrom != null) {
             String valuesExceptModified = unModified.stream()
                     .filter(c -> entity.versionTo == null || !entity.versionTo.getColumnName().equals(c.getColumnName()))
@@ -240,7 +238,6 @@ class PreparedUpdates {
                     .collect(Collectors.joining(" AND ")) +
                     " AND \"" + entity.versionFrom.getColumnName() + "\"=?";
             ps = connection.prepareStatement(sql);
-            batchOperation = false;
         } else {
             String sql = "UPDATE " + entity.table +
                     " SET " + props.stream()
@@ -252,8 +249,8 @@ class PreparedUpdates {
                     " WHERE " + ids.stream().map(p -> "\"" + p.getColumnName() + "\"=?")
                     .collect(Collectors.joining(" AND "));
             ps = connection.prepareStatement(sql);
-            batchOperation = true;
         }
+        return ps;
     }
 
     private String expandPath(String path, String propertyName) {
@@ -370,7 +367,7 @@ class PreparedUpdates {
     }
 
     void fillInsert(DDataViewRow row, Integer updatedIndex, java.util.Date dateNow) throws SQLException {
-        if (pi == null) prepareInsert();
+        PreparedStatement pi = prepareInsert();
 
         int pIdx = 1;
         for (AbstractDataView.TableCell prop : props)
@@ -408,10 +405,10 @@ class PreparedUpdates {
                     (entity.versionFrom == null ? "" : ",NOW(?)")
             );
         }
-        pi.executeUpdate();
+        psl.add(pi);
     }
 
-    private void prepareInsert() throws SQLException {
+    private PreparedStatement prepareInsert() throws SQLException {
         String sql = "INSERT INTO " + entity.table + " (" +
                 props.stream()
                         .map(p -> p.attribute.getColumnName())
@@ -429,7 +426,7 @@ class PreparedUpdates {
                 (entity.versionFrom == null ? "" : ",\"" + entity.versionFrom.getColumnName() + "\"") +
                 ") VALUES (" + parameters(props.size() + mappings.size() +
                 ids.size() + (entity.versionFrom == null ? 0 : 1)) + ")";
-        pi = connection.prepareStatement(sql);
+        return connection.prepareStatement(sql);
     }
 
     private String parameters(int n) {
@@ -439,18 +436,16 @@ class PreparedUpdates {
     }
 
     void execute() throws SQLException {
-        if (batchOperation && ps != null) ps.execute();
+        for (PreparedStatement ps : psl) ps.execute();
     }
 
-    void close() {
-        if (ps != null) try {
-            ps.close();
-        } catch (Exception ignore) {
-        }
-        if (pi != null) try {
-            pi.close();
-        } catch (Exception ignore) {
-        }
+    public void close() {
+        if (!psl.isEmpty())
+            for (PreparedStatement ps : psl)
+                try {
+                    ps.close();
+                } catch (Exception ignore) {
+                }
     }
 
     /**
