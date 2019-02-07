@@ -130,19 +130,24 @@ public class DDataViewRow {
 
         Map<Object, Object> innerMap = map;
         String[] path = path2Parameter.split("\\.");
-        int currPathLen = 0;
+        AbstractDataView.TableCell cell = view.tableCells.get(path2Parameter);
+        if (cell == null) throw new RuntimeException("not found column by path '" + path2Parameter + "'");
+
+        String lastElementPath = null;
         for (int offset = 0; offset < path.length; offset++) {
             boolean lastElement = (offset == path.length - 1);
-            currPathLen = currPathLen + path[offset].length() + (lastElement ? 0 : 1);
-            AbstractDataView.TableCell cell = view.tableCells.get(path2Parameter);
-            if (cell == null) throw new RuntimeException("not found column by path '" + path2Parameter + "'");
-            DDataAttribute attribute = cell.attribute;
+            lastElementPath = (lastElementPath == null ? "" : lastElementPath + ".") + path[offset];
+            AbstractDataView.TableEntity e = view.getEntityForPath(lastElementPath);
 
             Object o = innerMap.get(path[offset]);
-
             if (o == null) {
-                if (lastElement) innerMap.put(path[offset], value);
-                else if (attribute != null && attribute.isCollection()) {
+                if (lastElement) innerMap.put(path[offset], e != null && e.isCollection() ?
+                        new ArrayList<Object>() {{
+                            for (int i = 0; i < index; i++) this.add(null);
+                            this.add(value);
+                        }} :
+                        value);
+                else if (e != null && e.isCollection()) {
                     HashMap<Object, Object> innerInList = new HashMap<>();
                     innerMap.put(path[offset], new ArrayList<Object>() {{
                         for (int i = 0; i < index; i++) this.add(null);
@@ -150,8 +155,9 @@ public class DDataViewRow {
                     }});
                     innerMap = innerInList;
                 } else innerMap.put(path[offset], innerMap = new HashMap<>());
-            } else if (o instanceof Map) innerMap = (Map<Object, Object>) o;
-            else if (o instanceof List) {
+            } else if (o instanceof Map) {
+                innerMap = (Map<Object, Object>) o;
+            } else if (o instanceof List) {
                 if (((List) o).size() > index) {
                     Object lv = ((List) o).get(index);
                     if (lv instanceof Map) innerMap = (Map<Object, Object>) lv;

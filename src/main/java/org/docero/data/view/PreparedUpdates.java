@@ -19,26 +19,22 @@ import java.util.stream.Collectors;
 class PreparedUpdates implements Closeable {
     private final static Logger LOG = LoggerFactory.getLogger(PreparedUpdates.class);
 
-    final String entityPropertyPath;
+    final AbstractDataView.TableEntity entity;
 
-    private final DDataView dDataView;
     /**
      * ids without version
      */
     private final List<DDataAttribute> ids = new ArrayList<>();
     private final List<AbstractDataView.TableCell> props = new ArrayList<>();
-    private final AbstractDataView.TableEntity entity;
 
     private final Connection connection;
     private final Map<String, PreparedMap> mappings;
     private final List<DDataAttribute> unModified;
     private final List<PreparedStatement> psl = new ArrayList<>();
 
-    PreparedUpdates(DDataView dDataView, String entityPropertyPath, Connection connection) throws DDataException, SQLException {
-        this.entityPropertyPath = entityPropertyPath;
-        this.dDataView = dDataView;
+    PreparedUpdates(DDataView dDataView, AbstractDataView.TableEntity entity, Connection connection) throws DDataException, SQLException {
         this.connection = connection;
-        this.entity = dDataView.getEntityForPath(entityPropertyPath);
+        this.entity = entity;
         ids.addAll(entity.cells.stream()
                 .filter(c -> !c.isVersion && c.attribute.isPrimaryKey())
                 .map(c -> c.attribute).collect(Collectors.toSet())
@@ -60,10 +56,10 @@ class PreparedUpdates implements Closeable {
                         AbstractDataView.TableCell cell = m.getValue().get(entity);
                         mappings.put(cell.name, new PreparedMap(cell, m.getKey(), entity.isCollection()));
                     });
-
         props.addAll(entity.cells.stream()
                 .filter(c -> c.column != null && !c.isVersion && !c.attribute.isPrimaryKey()
                         && mappings.values().stream().noneMatch(m -> DDataAttribute.equals(m.to.attribute, c.attribute))
+                        && entity.fixedColumns.stream().noneMatch(fc -> DDataAttribute.equals(fc.getAttribute(), c.attribute))
                 ).collect(Collectors.toSet())
         );
 
@@ -88,10 +84,10 @@ class PreparedUpdates implements Closeable {
                 for (DDataAttribute id : ids)
                     fillStatement(ps, pIdx++, id,
                             row.getColumnValue(updatedIndex,
-                                    expandPath(entityPropertyPath, id.getPropertyName())));
+                                    propertyPath(id.getPropertyName())));
                 fillStatement(ps, pIdx++, entity.versionFrom,
                         row.getColumnValue(updatedIndex,
-                                expandPath(entityPropertyPath, entity.versionFrom.getPropertyName())));
+                                propertyPath(entity.versionFrom.getPropertyName())));
             }
             //INSERT INTO some (<columns>) SELECT <columns without updated>, ?..., version
             for (AbstractDataView.TableCell prop : props)
@@ -106,10 +102,10 @@ class PreparedUpdates implements Closeable {
             for (DDataAttribute id : ids)
                 fillStatement(ps, pIdx++, id,
                         row.getColumnValue(updatedIndex,
-                                expandPath(entityPropertyPath, id.getPropertyName())));
-            fillStatement(ps, pIdx++, entity.versionFrom,
+                                propertyPath(id.getPropertyName())));
+            fillStatement(ps, pIdx, entity.versionFrom,
                     row.getColumnValue(updatedIndex,
-                            expandPath(entityPropertyPath, entity.versionFrom.getPropertyName())));
+                            propertyPath(entity.versionFrom.getPropertyName())));
 
             if (LOG.isTraceEnabled()) {
                 LOG.trace(ps.toString());
@@ -117,11 +113,11 @@ class PreparedUpdates implements Closeable {
                                 "NOW(?)," +
                                         ids.stream().map(id ->
                                                 row.getColumnValue(updatedIndex,
-                                                        expandPath(entityPropertyPath, id.getPropertyName()))
+                                                        propertyPath(id.getPropertyName()))
                                                         .toString()
                                         ).collect(Collectors.joining(",")) + "," +
                                         row.getColumnValue(updatedIndex,
-                                                expandPath(entityPropertyPath, entity.versionFrom.getPropertyName())) +
+                                                propertyPath(entity.versionFrom.getPropertyName())) +
                                         ","
                         ) :
                                 "") +
@@ -139,11 +135,11 @@ class PreparedUpdates implements Closeable {
                                 ",NOW(?)," +
                                 ids.stream().map(id ->
                                         row.getColumnValue(updatedIndex,
-                                                expandPath(entityPropertyPath, id.getPropertyName())))
+                                                propertyPath(id.getPropertyName())))
                                         .map(val -> val == null ? "NULL" : val.toString())
                                         .collect(Collectors.joining(",")) + "," +
                                 row.getColumnValue(updatedIndex,
-                                        expandPath(entityPropertyPath, entity.versionFrom.getPropertyName()))
+                                        propertyPath(entity.versionFrom.getPropertyName()))
                 );
             }
         } else {
@@ -158,7 +154,7 @@ class PreparedUpdates implements Closeable {
             for (DDataAttribute id : ids)
                 fillStatement(ps, pIdx++, id,
                         row.getColumnValue(updatedIndex,
-                                expandPath(entityPropertyPath, id.getPropertyName())));
+                                propertyPath(id.getPropertyName())));
             if (LOG.isTraceEnabled()) {
                 LOG.trace(ps.toString());
                 LOG.trace("Parameters: " +
@@ -173,7 +169,7 @@ class PreparedUpdates implements Closeable {
                                         .collect(Collectors.joining(","))
                         ) + "," +
                         ids.stream().map(id ->
-                                row.getColumnValue(updatedIndex, expandPath(entityPropertyPath, id.getPropertyName())))
+                                row.getColumnValue(updatedIndex, propertyPath(id.getPropertyName())))
                                 .map(val -> val == null ? "NULL" : val.toString())
                                 .collect(Collectors.joining(","))
                 );
@@ -253,8 +249,10 @@ class PreparedUpdates implements Closeable {
         return ps;
     }
 
-    private String expandPath(String path, String propertyName) {
-        return path == null || path.length() == 0 ? propertyName : path + "." + propertyName;
+    private String propertyPath(String propertyName) {
+        return entity.name == null || entity.name.length() == 0 ?
+                propertyName :
+                entity.name + "." + propertyName;
     }
 
     private void fillStatement(PreparedStatement ps, int pIdx, DDataAttribute prop, Object v) throws SQLException {
@@ -377,13 +375,16 @@ class PreparedUpdates implements Closeable {
             fillStatement(pi, pIdx++, m.to.attribute,
                     row.getColumnValue(m.fromCollection ? 0 : updatedIndex, m.from.name));
         }
+        for (DDataFilter fixedColumn : entity.fixedColumns) {
+            fillStatement(pi, pIdx++, fixedColumn.getAttribute(), fixedColumn.getValue());
+        }
 
         for (DDataAttribute id : ids)
             fillStatement(pi, pIdx++, id,
                     row.getColumnValue(updatedIndex,
-                            expandPath(entityPropertyPath, id.getPropertyName())));
+                            propertyPath(id.getPropertyName())));
         if (entity.versionFrom != null)
-            fillStatement(pi, pIdx++, entity.versionFrom, dateNow);
+            fillStatement(pi, pIdx, entity.versionFrom, dateNow);
 
         if (LOG.isTraceEnabled()) {
             LOG.trace(pi.toString());
@@ -397,9 +398,15 @@ class PreparedUpdates implements Closeable {
                                             m.fromCollection ? 0 : updatedIndex, m.from.name))
                                     .map(val -> val == null ? "NULL" : val.toString())
                                     .collect(Collectors.joining(","))
+                    ) +
+                    (entity.fixedColumns.isEmpty() ? "" : "," +
+                            entity.fixedColumns.stream()
+                                    .map(DDataFilter::getValue)
+                                    .map(val -> val == null ? "NULL" : val.toString())
+                                    .collect(Collectors.joining(","))
                     ) + "," +
                     ids.stream().map(id ->
-                            row.getColumnValue(updatedIndex, expandPath(entityPropertyPath, id.getPropertyName())))
+                            row.getColumnValue(updatedIndex, propertyPath(id.getPropertyName())))
                             .map(val -> val == null ? "NULL" : val.toString())
                             .collect(Collectors.joining(",")) +
                     (entity.versionFrom == null ? "" : ",NOW(?)")
@@ -419,12 +426,18 @@ class PreparedUpdates implements Closeable {
                                 .map(m -> m.to.attribute.getColumnName())
                                 .map(s -> "\"" + s + "\"")
                                 .collect(Collectors.joining(","))
+                ) +
+                (entity.fixedColumns.isEmpty() ? "" : "," +
+                        entity.fixedColumns.stream()
+                                .map(m -> m.getAttribute().getColumnName())
+                                .map(s -> "\"" + s + "\"")
+                                .collect(Collectors.joining(","))
                 ) + "," +
                 ids.stream().map(DDataAttribute::getColumnName)
                         .map(s -> "\"" + s + "\"")
                         .collect(Collectors.joining(",")) +
                 (entity.versionFrom == null ? "" : ",\"" + entity.versionFrom.getColumnName() + "\"") +
-                ") VALUES (" + parameters(props.size() + mappings.size() +
+                ") VALUES (" + parameters(props.size() + mappings.size() + entity.fixedColumns.size() +
                 ids.size() + (entity.versionFrom == null ? 0 : 1)) + ")";
         return connection.prepareStatement(sql);
     }
@@ -451,21 +464,19 @@ class PreparedUpdates implements Closeable {
     /**
      * Fill mapping non-null values between parent and child beans.
      *
-     * @param row                - data row
-     * @param entity             - entity (parent entity)
-     * @param updatedIndex       - index of array value (parent entity)
-     * @param entityPropertyPath - path to attribute (child entity)
+     * @param row          - data row
+     * @param updatedIndex - index of array value (parent entity)
      */
-    void fillMappings(DDataViewRow row, AbstractDataView.TableEntity entity, Integer updatedIndex, String entityPropertyPath) {
+    void fillMappings(DDataViewRow row, Integer updatedIndex) {
         for (Map.Entry<AbstractDataView.TableCell, Map<AbstractDataView.TableEntity, AbstractDataView.TableCell>> m :
                 entity.mappings.entrySet()) {
             DDataAttribute beanMapAttribute = m.getKey().attribute;
             for (AbstractDataView.TableCell childMapCell : m.getValue().values()) {
                 DDataAttribute childMapAttribute = childMapCell.attribute;
-                int lii = entityPropertyPath.lastIndexOf('.');
-                String parentMappedProperty = (lii < 0 ? "" : entityPropertyPath.substring(0, lii + 1))
+                int lii = entity.name.lastIndexOf('.');
+                String parentMappedProperty = (lii < 0 ? "" : entity.name.substring(0, lii + 1))
                         + beanMapAttribute.getPropertyName();
-                String entityMappedProperty = entityPropertyPath + "." + childMapAttribute.getPropertyName();
+                String entityMappedProperty = entity.name + "." + childMapAttribute.getPropertyName();
                 int parentIndex = entity.isCollection() ? updatedIndex : 0;
                 try {
                     if (!beanMapAttribute.isPrimaryKey()) {

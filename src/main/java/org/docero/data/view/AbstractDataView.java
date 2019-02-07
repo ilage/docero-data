@@ -96,7 +96,7 @@ abstract class AbstractDataView {
 
                 TableEntity entity = getEntityForPath(cp);
                 if (entity == null) {
-                    entity = new TableEntity(parent, cp, column.getAttribute());
+                    entity = new TableEntity(parent, cp, column);
                     parent.addEntity(entity);
 
                     String versionColumn = entity.versionFrom == null ? "" : entity.versionFrom.getColumnName();
@@ -125,7 +125,7 @@ abstract class AbstractDataView {
                                     }
                                     Map<TableEntity, TableCell> pm = parent.mappings.computeIfAbsent(parentMapCell,
                                             (t) -> new HashMap<>());
-                                    pm.put(entity,idCell);
+                                    pm.put(entity, idCell);
                                 }
                             }
                         }
@@ -867,6 +867,7 @@ abstract class AbstractDataView {
         final DDataAttribute versionFrom;
         final DDataAttribute versionTo;
         final List<DDataAttribute> attributes;
+        final List<DDataFilter> fixedColumns = new ArrayList<>();
 
         TableEntity(Class<? extends DDataAttribute> root) {
             this.parent = null;
@@ -883,7 +884,8 @@ abstract class AbstractDataView {
             }
         }
 
-        TableEntity(TableEntity parent, String name, DDataAttribute mapByAttribute) {
+        TableEntity(TableEntity parent, String name, DDataFilter filter) {
+            DDataAttribute mapByAttribute = filter.getAttribute();
             this.parent = parent;
             this.name = name;
             Class<? extends DDataAttribute> beanEnum = (Class<? extends DDataAttribute>) mapByAttribute.getJavaType();
@@ -894,6 +896,9 @@ abstract class AbstractDataView {
                 table = (String) beanEnum.getField("TABLE_NAME").get(null);
                 versionFrom = (DDataAttribute) beanEnum.getField("VERSION_FROM").get(null);
                 versionTo = (DDataAttribute) beanEnum.getField("VERSION_TO").get(null);
+                if (filter.getFilters() != null) filter.getFilters().stream()
+                        .filter(f -> f.getOperator() == DDataFilterOperator.EQUALS)
+                        .forEach(fixedColumns::add);
             } catch (IllegalAccessException | NoSuchFieldException e) {
                 throw new RuntimeException("select view not from *_WB_ enum: " + beanEnum.getCanonicalName());
             }
