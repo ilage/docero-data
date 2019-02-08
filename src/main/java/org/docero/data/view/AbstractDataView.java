@@ -499,27 +499,31 @@ abstract class AbstractDataView {
                                 else
                                     value = filter.getValue().toString();
 
-                                if (filter.getOperator() == DDataFilterOperator.LIKE) value = "%" + value + "%";
+                                if (filter.getOperator() == DDataFilterOperator.LIKE)
+                                    value = DDataTypes.maskedValue(columnType, "%" + value + "%");
                                 else if (filter.getOperator() == DDataFilterOperator.NOT_LIKE)
-                                    value = "%" + value + "%";
-                                else if (filter.getOperator() == DDataFilterOperator.STARTS) value = value + "%";
-                                else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS) value = value + "%";
+                                    value = DDataTypes.maskedValue(columnType, "%" + value + "%");
+                                else if (filter.getOperator() == DDataFilterOperator.STARTS)
+                                    value = DDataTypes.maskedValue(columnType, value + "%");
+                                else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS)
+                                    value = DDataTypes.maskedValue(columnType, value + "%");
                                 else if (filter.getOperator() == DDataFilterOperator.LIKE_IGNORE_CASE) {
                                     columnExpression = "lower(" + columnReference + ")";
-                                    value = "%" + value.toLowerCase() + "%";
+                                    value = DDataTypes.maskedValue(columnType, "%" + value.toLowerCase() + "%");
                                 } else if (filter.getOperator() == DDataFilterOperator.NOT_LIKE_IGNORE_CASE) {
                                     columnExpression = "lower(" + columnReference + ")";
-                                    value = "%" + value.toLowerCase() + "%";
+                                    value = DDataTypes.maskedValue(columnType, "%" + value.toLowerCase() + "%");
                                 } else if (filter.getOperator() == DDataFilterOperator.STARTS_IGNORE_CASE) {
                                     columnExpression = "lower(" + columnReference + ")";
-                                    value = value.toLowerCase() + "%";
+                                    value = DDataTypes.maskedValue(columnType, value.toLowerCase() + "%");
                                 } else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS_IGNORE_CASE) {
                                     columnExpression = "lower(" + columnReference + ")";
-                                    value = value.toLowerCase() + "%";
-                                }
+                                    value = DDataTypes.maskedValue(columnType, value.toLowerCase() + "%");
+                                } else
+                                    value = DDataTypes.maskedValue(columnType, value);
                             }
-                            condition = value == null ? "FALSE" : columnExpression + filter.getOperator().toString() + " " +
-                                    DDataTypes.maskedValue(columnType, value);
+                            condition = value == null ? "FALSE" :
+                                    columnExpression + filter.getOperator().toString() + " " + value;
                             break;
                         case 2: //BETWEEN only
                             condition = "(" + columnReference + "> " +
