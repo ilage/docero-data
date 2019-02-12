@@ -108,13 +108,13 @@ class DataBeanPropertyBuilder {
         isVersionTo = ddProperty != null && ddProperty.versionTo();
         length = ddProperty == null ? 0 : ddProperty.length();
         if (ddProperty != null && ddProperty.value().length() > 0) {
-            columnName = ddProperty.value();
+            columnName = ignored ? null : ddProperty.value();
             readerSql = ddProperty.reader().length() == 0 ? null : ddProperty.reader();
             writerSql = ddProperty.writer().length() == 0 ? null : ddProperty.writer();
             isId = ddProperty.id();
             isDiscriminator = ddProperty.discriminator();
         } else {
-            columnName = bean.prototype ? null : DataBeanBuilder.propertyName2sqlName(name);
+            columnName = ignored || bean.prototype ? null : DataBeanBuilder.propertyName2sqlName(name);
             isId = isPrototypeId || (ddProperty != null && ddProperty.id());
             isDiscriminator = ddProperty != null && ddProperty.discriminator();
             readerSql = null;

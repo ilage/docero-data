@@ -269,11 +269,11 @@ public class DDataView extends AbstractDataView {
         final Date dateNow = DMLOperations.date();
 
         Connection connection = sqlSession.getConnection();
-        Set<PreparedUpdates> prepared = new TreeSet<>((e1, e2) -> e1.entity.parent == e2.entity ? -1 : (e2.entity.parent == e1.entity ? 1 : (
-                Integer.compare(
-                        e1.entity.name == null ? 0 : e1.entity.name.split("\\.").length,
-                        e2.entity.name == null ? 0 : e2.entity.name.split("\\.").length
-                ))));
+        Set<PreparedUpdates> prepared = new TreeSet<>((e1, e2) ->
+                e1.entity.parent == e2.entity ? -1 : (e2.entity.parent == e1.entity ? 1 : (
+                        e1.entity.name == null ? 1 : (
+                                e2.entity.name == null ? -1 : e2.entity.name.compareTo(e1.entity.name)
+                        ))));
         try {
             // at first, process rows data by known bean update services (DDataBeanUpdateService)
             // they must do real updates in database and may replace ids of managed bean
@@ -310,10 +310,10 @@ public class DDataView extends AbstractDataView {
                         DDataBeanUpdateService beanService = getUpdateServiceFor(entity.name);
                         if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
                             PreparedUpdates pk = prepared.stream()
-                                    .filter(k -> Objects.equals(entity.name, k.entity.name))
+                                    .filter(k -> Objects.equals(entityPropertyPath, k.entityPropertyPath))
                                     .findAny().orElse(null);
                             if (pk == null)
-                                prepared.add(pk = new PreparedUpdates(this, entity, connection));
+                                prepared.add(pk = new PreparedUpdates(this, entity, entityPropertyPath, connection));
 
                             for (Integer updatedIndex : updatedEntities.get(entity.name)) {
                                 String firstIdProp = pk.getFirstIdColumnName();
