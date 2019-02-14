@@ -957,15 +957,6 @@ class DDataMapBuilder {
 
         StringBuilder ssql = new StringBuilder();
 
-        DDataMethodBuilder.DDataMethodParameter rbParam = method.parameters.stream()
-                .filter(p -> environment.getTypeUtils().isSameType(builder.rowBoundsType, p.type))
-                .findAny().orElse(null);//
-        if (rbParam != null) {
-            domElement.appendChild(doc.createTextNode(ssql.toString()));
-            ssql = new StringBuilder();
-            addRowBounds(rbParam, domElement);
-        }
-
         if (bean.versionalType != null) ssql.append("CROSS JOIN tt\n");
         addJoins(mappedTables.stream().filter(MappedTable::useInFilters).collect(Collectors.toList()), ssql, versionParameter);
 

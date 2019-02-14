@@ -708,6 +708,20 @@ public class DDataTest {
         assertEquals(1, s.getId());
     }
 
+    @Test
+    @Transactional
+    public void rowCounterTest() throws SQLException, IOException {
+        setUp();
+        RowCounter counter = new RowCounter();
+
+        List<Sample> sl = iSampleRepository.list(null, null, null, null, null, counter, null, new RowBounds(0, 1));
+        assertEquals(counter.getCount(), sl.size() + 1);
+
+        counter = new RowCounter();
+        sl = iSampleRepository.list(null, null, null, null, null, counter, null, new RowBounds(1, 1));
+        assertEquals(counter.getCount(), sl.size() + 1);
+    }
+
     //@Ignore
     @Test
     @Transactional
