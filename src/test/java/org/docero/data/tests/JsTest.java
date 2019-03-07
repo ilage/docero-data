@@ -12,6 +12,12 @@ import static org.junit.Assert.assertNull;
 
 public class JsTest {
     @Test
+    public void dummiesTests() {
+        assertEquals("a_b_c%d_e", "a'b\"c%d_e".replaceAll("[';\"]","_"));
+        assertEquals("ab\"c%d_e", "a'b\"c%d_e".replaceAll("[']",""));
+    }
+
+    @Test
     public void test() throws java.io.IOException {
         com.fasterxml.jackson.databind.ObjectMapper jsonMapper = new com.fasterxml.jackson.databind.ObjectMapper();
         SimpleModule module = new SimpleModule();

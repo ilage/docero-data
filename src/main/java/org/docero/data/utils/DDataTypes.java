@@ -14,10 +14,15 @@ public class DDataTypes {
     }};
 
     public static String maskedValue(String jdbcType, String value) {
-        if (unmaskedTypes.contains(jdbcType)) return value;
-        if ("DATE".equals(jdbcType)) return "CAST('" + value + "' AS DATE)";
-        if ("TIME".equals(jdbcType)) return "CAST('" + value + "' AS TIME)";
-        if ("TIMESTAMP".equals(jdbcType)) return "CAST('" + value + "' AS TIMESTAMP)";
-        return "'" + value + "'";
+        if (value == null) return "NULL";
+        if (unmaskedTypes.contains(jdbcType)) {
+            if (value.length() > 127)
+                throw new IllegalArgumentException("Invalid value for type " + jdbcType + ":" + value);
+            return value.replaceAll("[';\"]", "");
+        }
+        if ("DATE".equals(jdbcType)) return "CAST('" + value.replaceAll("[']", "") + "' AS DATE)";
+        if ("TIME".equals(jdbcType)) return "CAST('" + value.replaceAll("[']", "") + "' AS TIME)";
+        if ("TIMESTAMP".equals(jdbcType)) return "CAST('" + value.replaceAll("[']", "") + "' AS TIMESTAMP)";
+        return "'" + value.replaceAll("[']", "_") + "'";
     }
 }
