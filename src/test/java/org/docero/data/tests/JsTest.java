@@ -13,8 +13,10 @@ import static org.junit.Assert.assertNull;
 public class JsTest {
     @Test
     public void dummiesTests() {
-        assertEquals("abc%d_e", "a'b\"c%d_e".replaceAll("[';\"]",""));
-        assertEquals("a''b\"c%''''''d_e", "a'b\"c%'''d_e".replaceAll("[']","''"));
+        assertEquals("abc%d_e", "a'b\"c%d_\\e".replaceAll("[';\"\\\\]",""));
+        assertEquals("a''b\"c%''\\\\\\\\''''d_\\\\e",
+                "a'b\"c%'\\\\''d_\\e".replaceAll("[']","''")
+                        .replaceAll("[\\\\]","\\\\\\\\"));
     }
 
     @Test

@@ -18,9 +18,11 @@ public class DDataTypes {
         if (unmaskedTypes.contains(jdbcType)) {
             if (value.length() > 127)
                 throw new IllegalArgumentException("Invalid value for type " + jdbcType + ":" + value);
-            return value.replaceAll("[';\"]", "");
+            return value.replaceAll("[';\"\\\\]", "");
         }
-        String stringValue = value.replaceAll("[']", "''");
+        String stringValue = value
+                .replaceAll("[']", "''")
+                .replaceAll("[\\\\]", "\\\\\\\\");
         if ("DATE".equals(jdbcType)) return "CAST('" + stringValue + "' AS DATE)";
         if ("TIME".equals(jdbcType)) return "CAST('" + stringValue + "' AS TIME)";
         if ("TIMESTAMP".equals(jdbcType)) return "CAST('" + stringValue + "' AS TIMESTAMP)";
