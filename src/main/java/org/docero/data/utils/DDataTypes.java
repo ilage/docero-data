@@ -20,9 +20,10 @@ public class DDataTypes {
                 throw new IllegalArgumentException("Invalid value for type " + jdbcType + ":" + value);
             return value.replaceAll("[';\"]", "");
         }
-        if ("DATE".equals(jdbcType)) return "CAST('" + value.replaceAll("[']", "") + "' AS DATE)";
-        if ("TIME".equals(jdbcType)) return "CAST('" + value.replaceAll("[']", "") + "' AS TIME)";
-        if ("TIMESTAMP".equals(jdbcType)) return "CAST('" + value.replaceAll("[']", "") + "' AS TIMESTAMP)";
-        return "'" + value.replaceAll("[']", "_") + "'";
+        String stringValue = value.replaceAll("[']", "''");
+        if ("DATE".equals(jdbcType)) return "CAST('" + stringValue + "' AS DATE)";
+        if ("TIME".equals(jdbcType)) return "CAST('" + stringValue + "' AS TIME)";
+        if ("TIMESTAMP".equals(jdbcType)) return "CAST('" + stringValue + "' AS TIMESTAMP)";
+        return "'" + stringValue + "'";
     }
 }
