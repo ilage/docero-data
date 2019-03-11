@@ -91,9 +91,9 @@ public class DDataTest {
                     "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (1,'s1',1001,2);\n" +
                     "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (2,'s2',1003,1);\n" +
                     "\n" +
-                    "DROP FUNCTION ddata.sample_proc(integer);\n" +
+                    "DROP FUNCTION ddata.sample_proc(INTEGER);\n" +
                     "\n" +
-                    "CREATE OR REPLACE FUNCTION ddata.sample_proc(rid integer)\n" +
+                    "CREATE OR REPLACE FUNCTION ddata.sample_proc(rid INTEGER)\n" +
                     "  RETURNS TABLE (i INT, id INT, s VARCHAR, t2_text VARCHAR, t2_id INT, t2_sample_id INT) AS\n" +
                     "$BODY$\n" +
                     "SELECT\n" +
@@ -106,7 +106,7 @@ public class DDataTest {
                     "FROM \"ddata\".\"sample\" AS t0\n" +
                     "LEFT JOIN \"ddata\".\"inner\" AS t2 ON (t0.\"i\" = t2.\"id\")\n" +
                     "$BODY$\n" +
-                    "  LANGUAGE sql;\n" +
+                    "  LANGUAGE SQL;\n" +
                     "\n" +
                     "INSERT INTO ddata.\"inner\" (id, text, sample_id) VALUES (1001,'i1',1);\n" +
                     "INSERT INTO ddata.\"inner\" (id, text, sample_id) VALUES (1002,'i2',1);\n" +
@@ -158,7 +158,7 @@ public class DDataTest {
                     "  name VARCHAR,\n" +
                     "  CONSTRAINT smdict_pk PRIMARY KEY (id)\n" +
                     ");" +
-                    "INSERT INTO ddata.\"smdict\" (id,parent_id,name) VALUES (1,null,'КС знач 1');" +
+                    "INSERT INTO ddata.\"smdict\" (id,parent_id,name) VALUES (1,NULL,'КС знач 1');" +
                     "INSERT INTO ddata.\"smdict\" (id,parent_id,name) VALUES (2,1,'КС знач 2');" +
                     "" +
                     "DROP TABLE IF EXISTS ddata.\"lgdict\";" +
@@ -720,6 +720,22 @@ public class DDataTest {
         counter = new RowCounter();
         sl = iSampleRepository.list(null, null, null, null, null, counter, null, new RowBounds(1, 1));
         assertEquals(counter.getCount(), sl.size() + 1);
+    }
+
+    @Test
+    @Transactional
+    // sql-operator SIMILAR TO
+    public void similarToTest() throws SQLException, IOException {
+        setUp();
+        /*List<String> values = new ArrayList<String>(){{
+            this.add("%1");
+            this.add("%2");
+        }};*/
+        List<String> val = Arrays.asList("%5';", "%2");
+        List<Sample> st = iSampleRepository.listSimilarTo(val);
+        assertNotNull(st);
+        assertEquals(1, st.size());
+        // assertEquals(2,st.size());
     }
 
     //@Ignore

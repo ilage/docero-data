@@ -1273,6 +1273,17 @@ class DDataMapBuilder {
                         e_in.setAttribute("separator", ",");
                         e_in.appendChild(doc.createTextNode(jdbcTypeParameterFor("item", itemType)));
                         break;
+
+                    case SIMILAR_TO:
+                        itemType = environment.getTypeUtils()
+                                .erasure(((DeclaredType) filter.variableType).getTypeArguments().get(0));
+                        e = doc.createElement("if");
+                        e.setAttribute("test", filter.parameter + " != null");
+                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                filter.property.getColumnRef() + " SIMILAR TO (#{" + filter.parameter +
+                                ",javaType=java.lang.String,jdbcType=VARCHAR})\n"));
+                        break;
+
                     case ILIKE_HAS:
                         isCaseIndependentLike = true;
                     case LIKE_HAS:

@@ -19,6 +19,8 @@ public enum DDataFilterOption {
     NOT_IS_NULL,
     /** value is in array parameter */
     IN,
+    /** value is in array parameter('%' and '_'  used ) */
+    SIMILAR_TO,
     /** value contains passed string */
     LIKE,
     /** value contains any word in passed string */

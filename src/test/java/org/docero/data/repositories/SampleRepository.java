@@ -7,9 +7,7 @@ import org.docero.data.beans.Sample;
 import org.docero.data.utils.RowCounter;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @DDataRep("samples")
 public interface SampleRepository extends DDataRepository<Sample, Integer> {
@@ -92,6 +90,13 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
             @SampleRepository_Filter_(
                     listParameter = Inner_.ID
             ) Integer listId
+    );
+    @SampleRepository_DDataFetch_(value = DDataFetchType.COLLECTIONS_ARE_LAZY, eagerTrunkLevel = 1)
+    List<Sample> listSimilarTo(
+            @SampleRepository_Filter_(
+                    value = Sample_.STR_PARAMETER,
+                    option = DDataFilterOption.SIMILAR_TO
+            ) Collection<String> values
     );
 
     List<Sample> listByUUid(@SampleRepository_Filter_(

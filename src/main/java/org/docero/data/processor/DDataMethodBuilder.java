@@ -137,6 +137,48 @@ class DDataMethodBuilder {
         updateId = null;
     }
 
+    private boolean buildParametersMap(
+            JavaClassWriter cf, ArrayList<DDataMethodParameter> parameters
+    ) throws IOException {
+        boolean hasVersionFilter = false;
+        for (DDataMethodParameter parameter : parameters) {
+            DDataMapBuilder.FilterOption filter = filters.stream()
+                    .filter(f -> f.parameter != null && f.parameter.equals(parameter.name))
+                    .findAny().orElse(null);
+            String parameterFunc = parameter.name;
+            if (filter != null) {
+                if ("VERSION_".equals(filter.enumName)) hasVersionFilter = true;
+
+                switch (filter.option) {
+                    case LIKE:
+                    case ILIKE:
+                        parameterFunc = "org.docero.data.utils.DDataLike.in(" + parameter.name + ")";
+                        break;
+                    case LIKE_HAS:
+                    case ILIKE_HAS:
+                    case LIKE_HAS_ALL:
+                    case ILIKE_HAS_ALL:
+                        parameterFunc = "org.docero.data.utils.DDataLike.has(" + parameter.name + ")";
+                        break;
+                    case LIKE_ENDS:
+                    case ILIKE_ENDS:
+                        parameterFunc = "org.docero.data.utils.DDataLike.ends(" + parameter.name + ")";
+                        break;
+                    case LIKE_STARTS:
+                    case ILIKE_STARTS:
+                        parameterFunc = "org.docero.data.utils.DDataLike.starts(" + parameter.name + ")";
+                        break;
+                    case SIMILAR_TO:
+                        parameterFunc = "org.docero.data.utils.DDataLike.similar(" + parameter.name + ")";
+                        break;
+                }
+            }
+            cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
+        }
+        return hasVersionFilter;
+    }
+
+
     void build(JavaClassWriter cf) throws IOException {
         String throwsPart = throwTypes.size() > 0 ?
                 "throws " + throwTypes.stream().map(TypeMirror::toString).collect(Collectors.joining(", ")) :
@@ -307,38 +349,7 @@ class DDataMethodBuilder {
             } else {
                 cf.startBlock(", ");
                 cf.startBlock("new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
-                boolean hasVersionFilter = false;
-                for (DDataMethodParameter parameter : parameters) {
-                    DDataMapBuilder.FilterOption filter = filters.stream()
-                            .filter(f -> f.parameter != null && f.parameter.equals(parameter.name))
-                            .findAny().orElse(null);
-                    String parameterFunc = parameter.name;
-                    if (filter != null) {
-                        if ("VERSION_".equals(filter.enumName)) hasVersionFilter = true;
-
-                        switch (filter.option) {
-                            case LIKE:
-                            case ILIKE:
-                                parameterFunc = "org.docero.data.utils.DDataLike.in(" + parameter.name + ")";
-                                break;
-                            case LIKE_HAS:
-                            case ILIKE_HAS:
-                            case LIKE_HAS_ALL:
-                            case ILIKE_HAS_ALL:
-                                parameterFunc = "org.docero.data.utils.DDataLike.has(" + parameter.name + ")";
-                                break;
-                            case LIKE_ENDS:
-                            case ILIKE_ENDS:
-                                parameterFunc = "org.docero.data.utils.DDataLike.ends(" + parameter.name + ")";
-                                break;
-                            case LIKE_STARTS:
-                            case ILIKE_STARTS:
-                                parameterFunc = "org.docero.data.utils.DDataLike.starts(" + parameter.name + ")";
-                                break;
-                        }
-                    }
-                    cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
-                }
+                boolean hasVersionFilter = buildParametersMap(cf, parameters);
 
                 if (repositoryBuilder.versionalType != null && !hasVersionFilter && methodType == SELECT) {
                     Optional<DataBeanPropertyBuilder> versionProp = bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny();
@@ -475,38 +486,7 @@ class DDataMethodBuilder {
 
         if (parameters.size() > 0) {
             cf.startBlock("java.util.HashMap<String, Object> parameters=new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
-            boolean hasVersionFilter = false;
-            for (DDataMethodParameter parameter : parameters) {
-                DDataMapBuilder.FilterOption filter = filters.stream()
-                        .filter(f -> f.parameter != null && f.parameter.equals(parameter.name))
-                        .findAny().orElse(null);
-                String parameterFunc = parameter.name;
-                if (filter != null) {
-                    if ("VERSION_".equals(filter.enumName)) hasVersionFilter = true;
-
-                    switch (filter.option) {
-                        case LIKE:
-                        case ILIKE:
-                            parameterFunc = "org.docero.data.utils.DDataLike.in(" + parameter.name + ")";
-                            break;
-                        case LIKE_HAS:
-                        case ILIKE_HAS:
-                        case LIKE_HAS_ALL:
-                        case ILIKE_HAS_ALL:
-                            parameterFunc = "org.docero.data.utils.DDataLike.has(" + parameter.name + ")";
-                            break;
-                        case LIKE_ENDS:
-                        case ILIKE_ENDS:
-                            parameterFunc = "org.docero.data.utils.DDataLike.ends(" + parameter.name + ")";
-                            break;
-                        case LIKE_STARTS:
-                        case ILIKE_STARTS:
-                            parameterFunc = "org.docero.data.utils.DDataLike.starts(" + parameter.name + ")";
-                            break;
-                    }
-                }
-                cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
-            }
+            boolean hasVersionFilter = buildParametersMap(cf, parameters);
             if (repositoryBuilder.versionalType != null && !hasVersionFilter && methodType == SELECT) {
                 Optional<DataBeanPropertyBuilder> versionProp = bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny();
                 cf.println("this.put(\"" + versionProp.get().name + "\", " +
