@@ -2,10 +2,7 @@ package org.docero.data.view;
 
 import org.apache.ibatis.session.SqlSession;
 import org.docero.data.DDataDictionariesService;
-import org.docero.data.utils.DDataAttribute;
-import org.docero.data.utils.DDataException;
-import org.docero.data.utils.DDataTypes;
-import org.docero.data.utils.DSQL;
+import org.docero.data.utils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -470,73 +467,51 @@ abstract class AbstractDataView {
                     String columnReference = "t" + table.tableIndex + ".\"" +
                             filter.getAttribute().getColumnName() + "\" ";
                     String columnType = filter.getAttribute().getJdbcType();
-                    String condition;
+                    String condition = null;
                     switch (filter.getOperator().getOperands()) {
                         case 0:
                             condition = columnReference + filter.getOperator().toString();
                             break;
                         case 1:
-                            String value;
-                            String columnExpression = columnReference;
-                            if (filter.getOperator() == DDataFilterOperator.IN || filter.getOperator() == DDataFilterOperator.NOT_IN) {
-                                if (filter.getValue().getClass().isArray()) {
-                                    value = ((Object[]) filter.getValue()).length == 0 ? null :
-                                            "(" + Arrays.stream((Object[]) filter.getValue())
-                                                    .map(Object::toString)
-                                                    .map(v -> DDataTypes.maskedValue(columnType, v))
-                                                    .collect(Collectors.joining(",")) + ")";
-                                } else if (filter.getValue() instanceof Collection) {
-                                    value = ((Collection<Object>) filter.getValue()).isEmpty() ? null :
-                                            "(" + ((Collection<Object>) filter.getValue()).stream()
-                                                    .map(Object::toString)
-                                                    .map(v -> DDataTypes.maskedValue(columnType, v))
-                                                    .collect(Collectors.joining(",")) + ")";
-                                } else
-                                    value = "(" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + ")";
-                            } else if (filter.getOperator() == DDataFilterOperator.SIMILAR_TO || filter.getOperator() == DDataFilterOperator.NOT_SIMILAR_TO) {
-                                if (filter.getValue().getClass().isArray()) {
-                                    value = DDataTypes.maskedValue(columnType, ((Object[]) filter.getValue()).length == 0 ? null :
-                                            "(" + Arrays.stream((Object[]) filter.getValue())
-                                                    .map(Object::toString)
-                                                    .collect(Collectors.joining("|")) + ")");
-                                } else if (filter.getValue() instanceof Collection) {
-                                    value = DDataTypes.maskedValue(columnType, ((Collection<Object>) filter.getValue()).isEmpty() ? null :
-                                            "(" + ((Collection<Object>) filter.getValue()).stream()
-                                                    .map(Object::toString)
-                                                    .collect(Collectors.joining("|")) + ")");
-                                } else
-                                    value = "(" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + ")";
-                            } else {
-                                if (filter.getValue().getClass().isArray() || filter.getValue() instanceof Collection)
-                                    value = "0";
-                                else
-                                    value = filter.getValue().toString();
-
-                                if (filter.getOperator() == DDataFilterOperator.LIKE)
-                                    value = DDataTypes.maskedValue(columnType, "%" + value + "%");
-                                else if (filter.getOperator() == DDataFilterOperator.NOT_LIKE)
-                                    value = DDataTypes.maskedValue(columnType, "%" + value + "%");
-                                else if (filter.getOperator() == DDataFilterOperator.STARTS)
-                                    value = DDataTypes.maskedValue(columnType, value + "%");
-                                else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS)
-                                    value = DDataTypes.maskedValue(columnType, value + "%");
-                                else if (filter.getOperator() == DDataFilterOperator.LIKE_IGNORE_CASE) {
-                                    columnExpression = "lower(" + columnReference + ")";
-                                    value = DDataTypes.maskedValue(columnType, "%" + value.toLowerCase() + "%");
-                                } else if (filter.getOperator() == DDataFilterOperator.NOT_LIKE_IGNORE_CASE) {
-                                    columnExpression = "lower(" + columnReference + ")";
-                                    value = DDataTypes.maskedValue(columnType, "%" + value.toLowerCase() + "%");
-                                } else if (filter.getOperator() == DDataFilterOperator.STARTS_IGNORE_CASE) {
-                                    columnExpression = "lower(" + columnReference + ")";
-                                    value = DDataTypes.maskedValue(columnType, value.toLowerCase() + "%");
-                                } else if (filter.getOperator() == DDataFilterOperator.NOT_STARTS_IGNORE_CASE) {
-                                    columnExpression = "lower(" + columnReference + ")";
-                                    value = DDataTypes.maskedValue(columnType, value.toLowerCase() + "%");
-                                } else
-                                    value = DDataTypes.maskedValue(columnType, value);
+                            String value = filter.getValue().toString();
+                            switch (filter.getOperator()) {
+                                case IN:
+                                case NOT_IN:
+                                    if (filter.getValue().getClass().isArray()) {
+                                        condition = columnReference + filter.getOperator().toString() + " " +
+                                                (((Object[]) filter.getValue()).length == 0 ? null :
+                                                        "(" + Arrays.stream((Object[]) filter.getValue())
+                                                                .map(Object::toString)
+                                                                .map(v -> DDataTypes.maskedValue(columnType, v))
+                                                                .collect(Collectors.joining(",")) + ")");
+                                    } else if (filter.getValue() instanceof Collection) {
+                                        condition = columnReference + filter.getOperator().toString() + " " +
+                                                (((Collection<Object>) filter.getValue()).isEmpty() ? null :
+                                                        "(" + ((Collection<Object>) filter.getValue()).stream()
+                                                                .map(Object::toString)
+                                                                .map(v -> DDataTypes.maskedValue(columnType, v))
+                                                                .collect(Collectors.joining(",")) + ")");
+                                    } else
+                                        condition = columnReference + filter.getOperator().toString() + " " +
+                                                ("(" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + ")");
+                                    break;
+                                case LIKE:
+                                case NOT_LIKE:
+                                case STARTS:
+                                case NOT_STARTS:
+                                case LIKE_IGNORE_CASE:
+                                case NOT_LIKE_IGNORE_CASE:
+                                case STARTS_IGNORE_CASE:
+                                case NOT_STARTS_IGNORE_CASE:
+                                    condition = makeStringSearchCondition(
+                                            filter.getOperator(),
+                                            columnReference,
+                                            filter.getValue());
+                                    break;
+                                default:
+                                    condition = columnReference + filter.getOperator().toString() + " " +
+                                            DDataTypes.maskedValue(columnType, value);
                             }
-                            condition = value == null ? "FALSE" :
-                                    columnExpression + filter.getOperator().toString() + " " + value;
                             break;
                         case 2: //BETWEEN only
                             condition = "(" + columnReference + "> " +
@@ -798,6 +773,53 @@ abstract class AbstractDataView {
         if (ctype.isAssignableFrom(Double.class)) return rs.getDouble(i);
 
         return rs.getObject(i);
+    }
+
+    private String makeStringSearchCondition(DDataFilterOperator op, String columnReference, Object value) {
+        if (value == null) return "FALSE";
+        String columnExpression = columnReference;
+
+        String maskedVal = null;
+        boolean isNot = false;
+        boolean isIterableValue = value instanceof Iterable;
+        switch (op) {
+            case NOT_LIKE:
+                isNot = true;
+            case LIKE:
+                maskedVal = isIterableValue ?
+                        DDataLike.in((Iterable<String>) value) :
+                        DDataLike.in(value.toString());
+                break;
+            case NOT_STARTS:
+                isNot = true;
+            case STARTS:
+                maskedVal = isIterableValue ?
+                        DDataLike.starts((Iterable<String>) value) :
+                        DDataLike.starts(value.toString());
+                break;
+            case NOT_LIKE_IGNORE_CASE:
+                isNot = true;
+            case LIKE_IGNORE_CASE:
+                columnExpression = "lower(" + columnReference + ")";
+                maskedVal = isIterableValue ?
+                        DDataLike.in((Iterable<String>) value) :
+                        DDataLike.in(value.toString());
+                maskedVal = maskedVal == null ? null : maskedVal.toLowerCase();
+                break;
+            case NOT_STARTS_IGNORE_CASE:
+                isNot = true;
+            case STARTS_IGNORE_CASE:
+                columnExpression = "lower(" + columnReference + ")";
+                maskedVal = isIterableValue ?
+                        DDataLike.starts((Iterable<String>) value) :
+                        DDataLike.starts(value.toString());
+                maskedVal = maskedVal == null ? null : maskedVal.toLowerCase();
+                break;
+        }
+        return maskedVal == null ? "FALSE" :
+                columnExpression + " " + (isNot ? "NOT" : "") +
+                        (isIterableValue ? " SIMILAR TO (" : " LIKE (") +
+                        DDataTypes.maskedValue("VARCHAR", maskedVal) + ")";
     }
 
     private class JoinedTable {

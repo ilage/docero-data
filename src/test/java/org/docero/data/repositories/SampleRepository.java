@@ -95,7 +95,14 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
     List<Sample> listSimilarTo(
             @SampleRepository_Filter_(
                     value = Sample_.STR_PARAMETER,
-                    option = DDataFilterOption.SIMILAR_TO
+                    option = DDataFilterOption.LIKE
+            ) Collection<String> values
+    );
+    @SampleRepository_DDataFetch_(value = DDataFetchType.COLLECTIONS_ARE_LAZY, eagerTrunkLevel = 1)
+    List<Sample> listLikeExt(
+            @SampleRepository_Filter_(
+                    value = Sample_.STR_PARAMETER,
+                    option = DDataFilterOption.ILIKE
             ) Collection<String> values
     );
 

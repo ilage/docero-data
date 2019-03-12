@@ -1274,51 +1274,50 @@ class DDataMapBuilder {
                         e_in.appendChild(doc.createTextNode(jdbcTypeParameterFor("item", itemType)));
                         break;
 
-                    case SIMILAR_TO:
-                        itemType = environment.getTypeUtils()
-                                .erasure(((DeclaredType) filter.variableType).getTypeArguments().get(0));
-                        e = doc.createElement("if");
-                        e.setAttribute("test", filter.parameter + " != null");
-                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() + " SIMILAR TO (#{" + filter.parameter +
-                                ",javaType=java.lang.String,jdbcType=VARCHAR})\n"));
-                        break;
-
                     case ILIKE_HAS:
                         isCaseIndependentLike = true;
                     case LIKE_HAS:
-                        e = doc.createElement("if");
-                        e.setAttribute("test", filter.parameter + " != null");
-                        org.w3c.dom.Element e_like = (org.w3c.dom.Element)
-                                e.appendChild(doc.createElement("foreach"));
-                        e_like.setAttribute("item", "item");
-                        e_like.setAttribute("index", "index");
-                        e_like.setAttribute("collection", filter.parameter);
-                        e_like.setAttribute("open", "AND ");
-                        e_like.setAttribute("close", "");
-                        e_like.setAttribute("separator", " OR ");
-                        e_like.appendChild(doc.createTextNode("t" +
-                                tIdx + "." + filter.property.getColumnRef() +
-                                (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
-                                jdbcTypeParameterFor("item", filter.variableType)));
+                        if ("java.lang.String".equals(filter.variableType.toString())) {
+                            e = doc.createElement("if");
+                            e.setAttribute("test", filter.parameter + " != null");
+                            org.w3c.dom.Element e_like = (org.w3c.dom.Element)
+                                    e.appendChild(doc.createElement("foreach"));
+                            e_like.setAttribute("item", "item");
+                            e_like.setAttribute("index", "index");
+                            e_like.setAttribute("collection", filter.parameter);
+                            e_like.setAttribute("open", "AND ");
+                            e_like.setAttribute("close", "");
+                            e_like.setAttribute("separator", " OR ");
+                            e_like.appendChild(doc.createTextNode("t" +
+                                    tIdx + "." + filter.property.getColumnRef() +
+                                    (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
+                                    jdbcTypeParameterFor("item", filter.variableType)));
+                        } else {
+                            e = makeSimilarTo(filter, doc, tIdx, isCaseIndependentLike);
+                        }
                         break;
                     case ILIKE_HAS_ALL:
                         isCaseIndependentLike = true;
                     case LIKE_HAS_ALL:
-                        e = doc.createElement("if");
-                        e.setAttribute("test", filter.parameter + " != null");
-                        e_like = (org.w3c.dom.Element)
-                                e.appendChild(doc.createElement("foreach"));
-                        e_like.setAttribute("item", "item");
-                        e_like.setAttribute("index", "index");
-                        e_like.setAttribute("collection", filter.parameter);
-                        e_like.setAttribute("open", "AND ");
-                        e_like.setAttribute("close", "");
-                        e_like.setAttribute("separator", " AND ");
-                        e_like.appendChild(doc.createTextNode("t" +
-                                tIdx + "." + filter.property.getColumnRef() +
-                                (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
-                                jdbcTypeParameterFor("item", filter.variableType)));
+                        if ("java.lang.String".equals(filter.variableType.toString())) {
+                            e = doc.createElement("if");
+                            e.setAttribute("test", filter.parameter + " != null");
+                            org.w3c.dom.Element e_like = (org.w3c.dom.Element)
+                                    e.appendChild(doc.createElement("foreach"));
+                            e_like.setAttribute("item", "item");
+                            e_like.setAttribute("index", "index");
+                            e_like.setAttribute("collection", filter.parameter);
+                            e_like.setAttribute("open", "AND ");
+                            e_like.setAttribute("close", "");
+                            e_like.setAttribute("separator", " AND ");
+                            e_like.appendChild(doc.createTextNode("t" +
+                                    tIdx + "." + filter.property.getColumnRef() +
+                                    (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
+                                    jdbcTypeParameterFor("item", filter.variableType)));
+                        } else {
+                            e = makeSimilarTo(filter, doc, tIdx, isCaseIndependentLike);
+                        }
+
                         break;
                     case ILIKE:
                     case ILIKE_STARTS:
@@ -1327,12 +1326,16 @@ class DDataMapBuilder {
                     case LIKE:
                     case LIKE_STARTS:
                     case LIKE_ENDS:
-                        e = doc.createElement("if");
-                        e.setAttribute("test", filter.parameter + " != null");
-                        e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
-                                filter.property.getColumnRef() +
-                                (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
-                                filterParameter + "\n"));
+                        if ("java.lang.String".equals(filter.variableType.toString())) {
+                            e = doc.createElement("if");
+                            e.setAttribute("test", filter.parameter + " != null");
+                            e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                                    filter.property.getColumnRef() +
+                                    (isCaseIndependentLike ? " ILIKE " : " LIKE ") +
+                                    filterParameter + "\n"));
+                        } else {
+                            e = makeSimilarTo(filter, doc, tIdx, isCaseIndependentLike);
+                        }
                         break;
                     default:
                         e = null;
@@ -1392,6 +1395,23 @@ class DDataMapBuilder {
         }
         return versionParameter;
     }
+
+    private org.w3c.dom.Element makeSimilarTo(FilterOption filter, Document doc, int tIdx, boolean isCaseIndependentLike) {
+        org.w3c.dom.Element e = doc.createElement("if");
+        e.setAttribute("test", filter.parameter + " != null");
+        if (isCaseIndependentLike) {
+            e.appendChild(doc.createTextNode("AND lower(t" + tIdx + "." +
+                    filter.property.getColumnRef() + ")" + " SIMILAR TO (lower(#{" + filter.parameter +
+                    ",javaType=java.lang.String,jdbcType=VARCHAR}))\n"));
+        } else {
+            e.appendChild(doc.createTextNode("AND t" + tIdx + "." +
+                    filter.property.getColumnRef() + " SIMILAR TO (#{" + filter.parameter +
+                    ",javaType=java.lang.String,jdbcType=VARCHAR})\n"));
+        }
+        return e;
+
+    }
+
 
     private void addOrder(VariableElement order, org.w3c.dom.Element dynSql) {
         org.w3c.dom.Element ifElt = (org.w3c.dom.Element)

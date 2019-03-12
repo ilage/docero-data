@@ -739,9 +739,28 @@ public class DDataTest {
 
         DDataView view = viewBuilder.build(Sample_WB_.class, new DDataFilter(Sample_WB_.STR_PARAMETER));
         view.setFilter(new DDataFilter(){{
-            this.add(new DDataFilter(Sample_WB_.STR_PARAMETER, DDataFilterOperator.SIMILAR_TO, val));
+            this.add(new DDataFilter(Sample_WB_.STR_PARAMETER, DDataFilterOperator.LIKE, val));
         }});
         assertEquals(1, view.count());
+    }
+    @Test
+    @Transactional
+    // sql-operator LIKE --> SIMILAR TO
+    public void likeExtTest() throws SQLException, IOException, DDataException {
+        setUp();
+
+        List<String> val = Arrays.asList("S1", "%2");
+         List<Sample> st = iSampleRepository.listLikeExt(val);
+         assertNotNull(st);
+         assertEquals(2, st.size());
+        // assertEquals(2,st.size());
+
+        DDataView view = viewBuilder.build(Sample_WB_.class, new DDataFilter(Sample_WB_.STR_PARAMETER));
+        view.setFilter(new DDataFilter(){{
+            this.add(new DDataFilter(Sample_WB_.STR_PARAMETER, DDataFilterOperator.LIKE_IGNORE_CASE, val));
+        }});
+        view.select(0,100);
+        assertEquals(2, view.count());
     }
 
     //@Ignore
