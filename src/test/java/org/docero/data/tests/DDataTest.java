@@ -725,7 +725,7 @@ public class DDataTest {
     @Test
     @Transactional
     // sql-operator SIMILAR TO
-    public void similarToTest() throws SQLException, IOException {
+    public void similarToTest() throws SQLException, IOException, DDataException {
         setUp();
         /*List<String> values = new ArrayList<String>(){{
             this.add("%1");
@@ -736,6 +736,12 @@ public class DDataTest {
         assertNotNull(st);
         assertEquals(1, st.size());
         // assertEquals(2,st.size());
+
+        DDataView view = viewBuilder.build(Sample_WB_.class, new DDataFilter(Sample_WB_.STR_PARAMETER));
+        view.setFilter(new DDataFilter(){{
+            this.add(new DDataFilter(Sample_WB_.STR_PARAMETER, DDataFilterOperator.SIMILAR_TO, val));
+        }});
+        assertEquals(1, view.count());
     }
 
     //@Ignore

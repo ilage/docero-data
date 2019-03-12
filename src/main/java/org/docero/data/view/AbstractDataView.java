@@ -493,22 +493,19 @@ abstract class AbstractDataView {
                                                     .collect(Collectors.joining(",")) + ")";
                                 } else
                                     value = "(" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + ")";
-                            }
-                            else if (filter.getOperator() == DDataFilterOperator.SIMILAR_TO || filter.getOperator() == DDataFilterOperator.NOT_SIMILAR_TO) {
+                            } else if (filter.getOperator() == DDataFilterOperator.SIMILAR_TO || filter.getOperator() == DDataFilterOperator.NOT_SIMILAR_TO) {
                                 if (filter.getValue().getClass().isArray()) {
-                                    value = ((Object[]) filter.getValue()).length == 0 ? null :
-                                            "('" + Arrays.stream((Object[]) filter.getValue())
+                                    value = DDataTypes.maskedValue(columnType, ((Object[]) filter.getValue()).length == 0 ? null :
+                                            "(" + Arrays.stream((Object[]) filter.getValue())
                                                     .map(Object::toString)
-                                                    .map(v -> DDataTypes.maskedValue(columnType, v))
-                                                    .collect(Collectors.joining("|")) + "')";
+                                                    .collect(Collectors.joining("|")) + ")");
                                 } else if (filter.getValue() instanceof Collection) {
-                                    value = ((Collection<Object>) filter.getValue()).isEmpty() ? null :
-                                            "('" + ((Collection<Object>) filter.getValue()).stream()
+                                    value = DDataTypes.maskedValue(columnType, ((Collection<Object>) filter.getValue()).isEmpty() ? null :
+                                            "(" + ((Collection<Object>) filter.getValue()).stream()
                                                     .map(Object::toString)
-                                                    .map(v -> DDataTypes.maskedValue(columnType, v))
-                                                    .collect(Collectors.joining("|")) + "')";
+                                                    .collect(Collectors.joining("|")) + ")");
                                 } else
-                                    value = "('" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + "')";
+                                    value = "(" + DDataTypes.maskedValue(columnType, filter.getValue().toString()) + ")";
                             } else {
                                 if (filter.getValue().getClass().isArray() || filter.getValue() instanceof Collection)
                                     value = "0";

@@ -2,7 +2,9 @@ package org.docero.data.utils;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class DDataLike {
     public static String in(String val) {
@@ -30,14 +32,22 @@ public class DDataLike {
         return val + "%";
     }
 
-    public static String similar(Object val) {
+    public static String starts(Iterable<String> val) {
+        if (val == null) return null;
+        Iterator<String> i = val.iterator();
+        StringBuilder b = new StringBuilder();
+        while (i.hasNext()) {
+            String v = i.next();
+            b.append('|').append(v.endsWith("%") ? v : v + "%");
+        }
+        return b.length() > 0 ? b.substring(1) : null;
+    }
+
+    public static String similar(Iterable<String> val) {
         if (val == null) return "";
-        if (val instanceof String)
-            return Arrays.asList(((String) val).split(",")).stream().collect(Collectors.joining("|"));
-        if (val instanceof Collection)
-            return ((Collection<String>)val).stream().collect(Collectors.joining("|"));
-        if (val.getClass().isArray())
-            return (Arrays.stream((String[])val).collect(Collectors.joining("|")));
-        return "";
+        Iterator<String> i = val.iterator();
+        StringBuilder b = new StringBuilder();
+        while (i.hasNext()) b.append('|').append(i.next());
+        return b.length() > 0 ? b.substring(1) : "";
     }
 }
