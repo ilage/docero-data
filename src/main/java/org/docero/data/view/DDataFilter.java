@@ -6,7 +6,8 @@ import org.docero.data.utils.DDataException;
 
 import java.io.Serializable;
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @SuppressWarnings({"unused", "WeakerAccess"})
@@ -98,6 +99,7 @@ public class DDataFilter {
     private Boolean sortAscending;
     private String mapName;
     private boolean or;
+    private boolean notExists;
 
     /**
      * Find attribute for property name in given attribute
@@ -375,5 +377,22 @@ public class DDataFilter {
      */
     public void setOr(boolean or) {
         this.or = or;
+    }
+
+    /**
+     * @return include child filters with NOT EXISTS operator, default false
+     */
+    public boolean isNotExists() {
+        return notExists;
+    }
+
+    /**
+     * Set include child filters with NOT EXISTS operator, default false
+     *
+     * @param notExists use NOT EXISTS operator
+     */
+
+    public void setNotExists(boolean notExists) {
+        this.notExists = notExists;
     }
 }

@@ -543,7 +543,8 @@ abstract class AbstractDataView {
                         innerClass.getSimpleName() + PROP_PATCH_DELIMITER;
                 int finalN = tablesCounter.incrementAndGet();
                 allJoins.put(key, new JoinedTable(fromTableIndex, finalN, filter.getAttribute()));
-                sql.WHERE("EXISTS(" + new DSQL() {{
+                String existsOperator = filter.isNotExists() ? "NOT EXISTS(" : "EXISTS(";
+                sql.WHERE(existsOperator + new DSQL() {{
                     SELECT("*");
                     FROM(filter.getAttribute().joinTable() + " t" + finalN);
                     WHERE(IntStream.range(0, filter.getAttribute().joinBy().length)
