@@ -7,6 +7,7 @@ import org.docero.data.remote.DDataPrototype;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
+import javax.tools.Diagnostic;
 import java.util.HashMap;
 import java.util.Set;
 
@@ -93,8 +94,7 @@ public class DDataProcessor extends AbstractProcessor {
                 default:
             }
         } catch (Exception e) {
-            //processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,e.getMessage());
-            e.printStackTrace();
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, e.getMessage());
             throw new Error(e);
         }
         return false;

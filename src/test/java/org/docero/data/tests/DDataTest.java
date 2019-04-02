@@ -758,6 +758,10 @@ public class DDataTest {
         DDataView view = viewBuilder.build(Sample_WB_.class, new DDataFilter(Sample_WB_.STR_PARAMETER));
         view.setFilter(new DDataFilter(){{
             this.add(new DDataFilter(Sample_WB_.STR_PARAMETER, DDataFilterOperator.LIKE_IGNORE_CASE, val));
+            this.add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
+                this.setNotExists(true);
+                this.add(new DDataFilter(Inner_WB_.TEXT, DDataFilterOperator.LIKE, "rrrrrrrrrrrrrr"));
+            }});
         }});
         view.select(0,100);
         assertEquals(2, view.count());

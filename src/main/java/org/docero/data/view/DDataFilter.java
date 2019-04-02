@@ -241,6 +241,8 @@ public class DDataFilter {
     public DDataFilter clone() {
         try {
             DDataFilter c = new DDataFilter(this.attribute, this.operator, this.value, this.valueTo);
+            c.setOr(this.or);
+            c.setNotExists(this.notExists);
             if (this.filters != null) {
                 c.filters.addAll(this.filters.stream().map(DDataFilter::clone).collect(Collectors.toList()));
             }

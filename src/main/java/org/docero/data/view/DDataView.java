@@ -47,26 +47,48 @@ public class DDataView extends AbstractDataView {
         return version;
     }
 
+    /**
+     * View data filter getter
+     *
+     * @return used filter
+     */
     public DDataFilter getFilter() {
         return filter;
     }
 
+    /**
+     * View data filter setter
+     *
+     * @param filter used filter
+     */
     public void setFilter(DDataFilter filter) {
         this.filter = filter;
     }
 
     /**
      * Ignore version for versional beans. Default false.
+     *
+     * @return is version fields are ignored
      */
     @Override
     public boolean selectAllVersions() {
         return selectAllVersions;
     }
 
+    /**
+     * Set ignore version for versional beans. Default false.
+     *
+     * @param flag do ignore version fields
+     */
     public void selectAllVersions(boolean flag) {
         selectAllVersions = flag;
     }
 
+    /**
+     * Select rows count for view with applied filter
+     * @return count of records
+     * @throws DDataException on any logical exceptions
+     */
     public long count() throws DDataException {
         long result = 0;
         DSQL sql = buildFrom();
@@ -86,6 +108,15 @@ public class DDataView extends AbstractDataView {
                 Collections.singletonMap("sqlStatement", sql.toString()));*/
     }
 
+    /**
+     * Return SQL expression for select view data. View data may contains collections
+     * in some columns, and then view use sub-selects, this method return only primary select.
+     *
+     * @param offset like a OFFSET in SQL (not used if limit=0)
+     * @param limit like a LIMIT in SQL but if 0 assumed as no limit
+     * @return SQL expression
+     * @throws DDataException on any logical exceptions
+     */
     public String firstLevelSelect(int offset, int limit) throws DDataException {
         return firstLevelSelect(getKeySQL(), offset, limit);
     }
@@ -105,6 +136,13 @@ public class DDataView extends AbstractDataView {
         return limit > 0 ? addBounds(sql.toString(), offset, limit) : sql.toString();
     }
 
+    /**
+     * Select data for view with defined columns and applied filter
+     * @param offset like a OFFSET in SQL (not used if limit=0)
+     * @param limit like a LIMIT in SQL but if 0 assumed as no limit
+     * @return rows object
+     * @throws DDataException on any logical exceptions
+     */
     public DDataViewRows select(int offset, int limit) throws DDataException {
         this.updates = new HashMap<>();
         String keySql = getKeySQL();
@@ -139,6 +177,14 @@ public class DDataView extends AbstractDataView {
             }
         }
         return new DDataViewRows(this, resultMap);
+    }
+
+    /**
+     * Make DDataViewRows object used for inserting new records
+     * @return rows object
+     */
+    public DDataViewRows buildDataLoader() {
+        return new DDataViewRows(this, new ArrayList<Map<String, Object>>());
     }
 
     @SuppressWarnings("unchecked")
@@ -264,6 +310,13 @@ public class DDataView extends AbstractDataView {
         update.computeIfAbsent(beanPath, k -> new HashSet<>()).add(index);
     }
 
+    /**
+     * Write updates on view rows.
+     *
+     * @param exceptionHandler class for exceptions handling
+     * @throws SQLException on jdbc exceptions
+     * @throws DDataException on any logical exceptions
+     */
     public void flushUpdates(DDataExceptionHandler exceptionHandler) throws SQLException, DDataException {
         if (updates == null || updates.size() == 0) return;
         final Date dateNow = DMLOperations.date();

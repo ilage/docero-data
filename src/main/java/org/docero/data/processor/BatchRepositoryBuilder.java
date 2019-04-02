@@ -1,9 +1,12 @@
 package org.docero.data.processor;
 
 import javax.lang.model.element.*;
+import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @SuppressWarnings("WeakerAccess")
@@ -183,14 +186,45 @@ class BatchRepositoryBuilder {
         public void write(JavaClassWriter cf) {
             try {
                 //DataBeanBuilder beanBuilder = dataBuilder.beansByInterface.get(type.toString());
-                DataRepositoryBuilder beanRepository = dataBuilder.repositoriesByBean.get(type.toString());
+                String returnType;
+                DataRepositoryBuilder beanRepository = null;
+                boolean returnNothing = type == null || type.getKind() == TypeKind.VOID;
+                if (!returnNothing) {
+                    returnType = type.toString();
+                    beanRepository = dataBuilder.repositoriesByBean.get(returnType);
+                } else {
+                    returnType = "void";
+                }
+
+                if (beanRepository == null)
+                    for (TypeMirror bean : beans) {
+                        beanRepository = dataBuilder.repositoriesByBean.get(bean.toString());
+                        if (beanRepository.methods.stream().anyMatch(m ->
+                                (returnNothing ?
+                                        (m.returnType == null || m.returnType.getKind() == TypeKind.VOID) :
+                                        (m.returnType != null && returnType.equals(m.returnType.toString()))
+                                ) &&
+                                        m.methodName.equals(name) &&
+                                        m.parameters.size() == parameters.size()
+                        )) break;
+                        else beanRepository = null;
+                    }
+
+                if (beanRepository == null) {
+                    throw new RuntimeException("can't find repository for method " +
+                            name + "(" + parameters.stream()
+                            .map(pp -> pp.type.toString())
+                            .collect(Collectors.joining(",")) +
+                            ") in " + repositoryInterface);
+                }
 
                 cf.println("");
-                cf.startBlock("@Override public " + type + " " + name + "(" +
+                cf.startBlock("@Override public " + returnType + " " + name + "(" +
                         parameters.stream()
                                 .map(pp -> pp.type + " " + pp.name)
                                 .collect(Collectors.joining(",")) + ") {");
-                cf.println("return ((" + beanRepository.repositoryInterface +
+                cf.println((returnNothing ? "" : "return ") +
+                        "((" + beanRepository.repositoryInterface +
                         ") " + beanRepository.repositoryVariableName + ")." + name + "(" +
                         parameters.stream()
                                 .map(pp -> pp.name)

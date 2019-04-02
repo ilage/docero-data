@@ -51,6 +51,13 @@ public class DDataViewRows {
         return new DDataViewRow(view, map.get(index));
     }
 
+    public DDataViewRow addRow() {
+        HashMap<String, Object> buildedRow = new HashMap<>();
+        buildedRow.put("dDataBeanKey_", UUID.randomUUID().toString());
+        map.add(buildedRow);
+        return new DDataViewRow(view, buildedRow);
+    }
+
     public int size() {
         return map.size();
     }
