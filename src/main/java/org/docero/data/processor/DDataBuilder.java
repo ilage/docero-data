@@ -39,7 +39,7 @@ class DDataBuilder {
     final TypeMirror stringType;
     final TypeMirror rowBoundsType;
     //For add SELECT COUNT(*) method
-    final TypeMirror addCountType;
+    final TypeMirror rowCounterType;
     final ArrayList<DataBeanBuilder> unimplementedBeans = new ArrayList<>();
     String basePackage = "org.docero.data";
     String componentName = "dData";
@@ -71,7 +71,7 @@ class DDataBuilder {
         voidType = environment.getElementUtils().getTypeElement(Void.class.getCanonicalName()).asType();
         stringType = environment.getElementUtils().getTypeElement(String.class.getCanonicalName()).asType();
         rowBoundsType = environment.getElementUtils().getTypeElement(RowBounds.class.getCanonicalName()).asType();
-        addCountType = environment.getElementUtils().getTypeElement(RowCounter.class.getCanonicalName()).asType();
+        rowCounterType = environment.getElementUtils().getTypeElement(RowCounter.class.getCanonicalName()).asType();
     }
 
     void logError(String message) {

@@ -197,10 +197,10 @@ class DataRepositoryBuilder {
 
             rootBuilder.checkAbstractRepositoryForPackage(beanPkg);
             cf.startBlock("public final class " +
-                    daoClassName.substring(simpNameDel + 1) +
-                    " extends " + beanPkg + ".AbstractRepository<" +
-                    bean.interfaceType + "," + bean.inversionalKey + ">" +
-                    " implements " + repositoryInterface + (bean.isDictionary() ?
+                            daoClassName.substring(simpNameDel + 1) +
+                            " extends " + beanPkg + ".AbstractRepository<" +
+                            bean.interfaceType + "," + bean.inversionalKey + ">" +
+                            " implements " + repositoryInterface + (bean.isDictionary() ?
                             ", org.docero.data.utils.DDataDictionary<" +
                                     bean.interfaceType + "," + bean.inversionalKey + ">" :
                             ""
@@ -284,15 +284,8 @@ class DataRepositoryBuilder {
                 cf.endBlock("}");
             }
 
-            for (DDataMethodBuilder method : methods) {
-                if (method.hasAddCountMethodParam()) {
-                    // for add SELECT COUNT(*) method
-                    // method.buildCount(cf);
-                    method.buildListAndCount(cf);
-                } else {
-                    method.build(cf);
-                }
-            }
+            for (DDataMethodBuilder method : methods) method.build(cf);
+
             cf.endBlock("}");
         } catch (Exception e) {
             throw new RuntimeException("Can't build repository for " + forInterfaceName.toString(), e);

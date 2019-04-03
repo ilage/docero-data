@@ -184,6 +184,7 @@ public class DDataView extends AbstractDataView {
      * @return rows object
      */
     public DDataViewRows buildDataLoader() {
+        this.updates = new HashMap<>();
         return new DDataViewRows(this, new ArrayList<Map<String, Object>>());
     }
 

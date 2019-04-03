@@ -35,6 +35,8 @@ class DDataMethodBuilder {
     final String updateId;
     final String insertId;
     final String deleteId;
+    final DDataMethodParameter counterParameter;
+    final DDataMethodParameter boundsParameter;
     private List<DDataMapBuilder.FilterOption> filters = Collections.emptyList();
     private VariableElement order;
 
@@ -46,6 +48,12 @@ class DDataMethodBuilder {
         for (VariableElement variableElement : methodElement.getParameters()) {
             parameters.add(new DDataMethodParameter(variableElement.getSimpleName(), variableElement.asType()));
         }
+        counterParameter = parameters.stream()
+                .filter(p -> p.type == repositoryBuilder.rootBuilder.rowCounterType)
+                .findAny().orElse(null);
+        boundsParameter = parameters.stream()
+                .filter(p -> p.type == repositoryBuilder.rootBuilder.rowBoundsType)
+                .findAny().orElse(null);
         throwTypes = methodElement.getThrownTypes();
         typeVariables = ((ExecutableType) methodElement.asType()).getTypeVariables();
         if (returnNothing) {
@@ -94,6 +102,8 @@ class DDataMethodBuilder {
         this.methodType = methodType;
         methodIndex = 0;
         throwTypes = Collections.emptyList();
+        counterParameter = null;
+        boundsParameter = null;
         Elements e = repositoryBuilder.rootBuilder.environment.getElementUtils();
         Types tu = repositoryBuilder.rootBuilder.environment.getTypeUtils();
         switch (methodType) {
@@ -141,40 +151,41 @@ class DDataMethodBuilder {
             JavaClassWriter cf, ArrayList<DDataMethodParameter> parameters
     ) throws IOException {
         boolean hasVersionFilter = false;
-        for (DDataMethodParameter parameter : parameters) {
-            DDataMapBuilder.FilterOption filter = filters.stream()
-                    .filter(f -> f.parameter != null && f.parameter.equals(parameter.name))
-                    .findAny().orElse(null);
-            String parameterFunc = parameter.name;
-            if (filter != null) {
-                if ("VERSION_".equals(filter.enumName)) hasVersionFilter = true;
+        for (DDataMethodParameter parameter : parameters)
+            if (parameter != counterParameter) {
+                DDataMapBuilder.FilterOption filter = filters.stream()
+                        .filter(f -> f.parameter != null && f.parameter.equals(parameter.name))
+                        .findAny().orElse(null);
+                String parameterFunc = parameter.name;
+                if (filter != null) {
+                    if ("VERSION_".equals(filter.enumName)) hasVersionFilter = true;
 
-                switch (filter.option) {
-                    case LIKE:
-                    case ILIKE:
-                        parameterFunc = "org.docero.data.utils.DDataLike.in(" + parameter.name + ")";
-                        break;
-                    case LIKE_HAS:
-                    case ILIKE_HAS:
-                    case LIKE_HAS_ALL:
-                    case ILIKE_HAS_ALL:
-                        parameterFunc = "org.docero.data.utils.DDataLike.has(" + parameter.name + ")";
-                        break;
-                    case LIKE_ENDS:
-                    case ILIKE_ENDS:
-                        parameterFunc = "org.docero.data.utils.DDataLike.ends(" + parameter.name + ")";
-                        break;
-                    case LIKE_STARTS:
-                    case ILIKE_STARTS:
-                        parameterFunc = "org.docero.data.utils.DDataLike.starts(" + parameter.name + ")";
-                        break;
-                    case SIMILAR_TO:
-                        parameterFunc = "org.docero.data.utils.DDataLike.similar(" + parameter.name + ")";
-                        break;
+                    switch (filter.option) {
+                        case LIKE:
+                        case ILIKE:
+                            parameterFunc = "org.docero.data.utils.DDataLike.in(" + parameter.name + ")";
+                            break;
+                        case LIKE_HAS:
+                        case ILIKE_HAS:
+                        case LIKE_HAS_ALL:
+                        case ILIKE_HAS_ALL:
+                            parameterFunc = "org.docero.data.utils.DDataLike.has(" + parameter.name + ")";
+                            break;
+                        case LIKE_ENDS:
+                        case ILIKE_ENDS:
+                            parameterFunc = "org.docero.data.utils.DDataLike.ends(" + parameter.name + ")";
+                            break;
+                        case LIKE_STARTS:
+                        case ILIKE_STARTS:
+                            parameterFunc = "org.docero.data.utils.DDataLike.starts(" + parameter.name + ")";
+                            break;
+                        case SIMILAR_TO:
+                            parameterFunc = "org.docero.data.utils.DDataLike.similar(" + parameter.name + ")";
+                            break;
+                    }
                 }
+                cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
             }
-            cf.println("this.put(\"" + parameter.name + "\", " + parameterFunc + ");");
-        }
         return hasVersionFilter;
     }
 
@@ -254,6 +265,23 @@ class DDataMethodBuilder {
                 cf.print("return getSqlSession().selectOne(\"" + selectId + "\"");
                 break;
             case SELECT:
+                if (counterParameter != null) {
+                    cf.startBlock("if (" + counterParameter.name + "!= null) {");
+                    {
+                        cf.startBlock(counterParameter.name + ".setCount(");
+                        {
+                            cf.println("getSqlSession().selectOne(\"" + selectId + "_count" +
+                                    "\", new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
+                            buildParametersMap(cf, parameters);
+                            cf.print("}})");
+                        }
+                        cf.endBlock(");");
+                        if (boundsParameter != null) {
+                            cf.println("if (" + boundsParameter.name + "== null) return null;");
+                        }
+                    }
+                    cf.endBlock("}");
+                }
                 if (returnSomething) {
                     cf.print("return getSqlSession().");
                     if (returnType.toString().contains("java.util.List")) {
@@ -422,96 +450,6 @@ class DDataMethodBuilder {
         cf.endBlock("}});");
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    /**
-     * Используется для формирования в реализации репозитория метода, который возвращает
-     * и List и count, либо только count примерно так :
-     * if (addCount!= null) {
-     * addCount.setCount(
-     * getSqlSession().selectOne("org.docero.data.repositories.SampleRepository.list_2_count", parameters));
-     * if (bounds== null) return null;
-     * }
-     * return getSqlSession().selectList("org.docero.data.repositories.SampleRepository.list_2", parameters);
-     * }
-     * <p>
-     * Метод вызывается только при наличии параметра с типом 'DDataAddCountType' в интервейсе репозитория,
-     * например :
-     *
-     * @param cf - пишет java-классы
-     * @throws IOException - исключение.
-     * @SampleRepository_Filter_( inner = Inner_.TEXT,
-     * option = DDataFilterOption.LIKE_STARTS
-     * ) String innerText, //inner text is
-     * @SampleRepository_Filter_( Sample_.INNER_ID
-     * ) Integer inner, //inner_id is
-     * DDataAddCountType addCount, // for add  SELECT COUNT(*) method.
-     * DDataOrder<Sample_> sort,
-     * RowBounds bounds
-     */
-    void buildListAndCount(JavaClassWriter cf) throws IOException {
-        String throwsPart = throwTypes.size() > 0 ?
-                "throws " + throwTypes.stream().map(TypeMirror::toString).collect(Collectors.joining(", ")) :
-                "";
-        cf.println("");
-        DataBeanBuilder bean = repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
-
-        cf.startBlock("public " + typeVariables2String() +
-                (returnType == null ? "void" : returnType) + " " + methodName + "(");
-
-        String addCountParamName = null;
-        String boundsParamName = null;
-        if (parameters.size() > 0) {
-            int i = 0;
-            for (DDataMethodParameter parameter : parameters) {
-                cf.print("" + parameter.type + " " + parameter.name);
-                if (++i < parameters.size()) cf.println(",");
-                else cf.println("");
-
-                if (parameter.type == repositoryBuilder.rootBuilder.addCountType) {
-                    addCountParamName = parameter.name;
-                } else if (parameter.type == repositoryBuilder.rootBuilder.rowBoundsType) {
-                    boundsParamName = parameter.name;
-                }
-            }
-            cf.endBlock(") " + throwsPart);
-            cf.startBlock("{");
-        }
-        /////////////////////////////////////////////////////////////////
-
-
-        String selectId = this.selectId != null ? this.selectId : repositoryBuilder.mappingClassName + "." +
-                methodName + (methodIndex == 0 ? "" : "_" + methodIndex);
-
-
-        if (parameters.size() > 0) {
-            cf.startBlock("java.util.HashMap<String, Object> parameters=new java.util.HashMap<java.lang.String, java.lang.Object>(){{");
-            boolean hasVersionFilter = buildParametersMap(cf, parameters);
-            if (repositoryBuilder.versionalType != null && !hasVersionFilter && methodType == SELECT) {
-                Optional<DataBeanPropertyBuilder> versionProp = bean.properties.values().stream().filter(p -> p.isVersionFrom).findAny();
-                cf.println("this.put(\"" + versionProp.get().name + "\", " +
-                        DataBeanBuilder.dateNowFrom(repositoryBuilder.versionalType) +
-                        ");");
-            }
-            cf.endBlock("}};");
-        }
-        cf.startBlock("if (" + addCountParamName + "!= null) {");
-        {
-            cf.println(addCountParamName + ".setCount(");
-            cf.print("getSqlSession().selectOne(\"" + selectId + "_count" + "\", parameters)");
-            cf.println(");");
-            if (boundsParamName != null) {
-                cf.println("if (" + boundsParamName + "== null) return null;");
-            }
-        }
-        cf.endBlock("}");
-        cf.print("return getSqlSession().selectList(\"" + selectId + "\", parameters);");
-        cf.println("");
-        cf.endBlock("}");
-    }
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
     private List<MappedDictionary> searchForDictionariesUseThisBean(ArrayList<DDataMethodParameter> parameters, boolean forImmutableOnly) {
         DataBeanBuilder thisBean =
                 repositoryBuilder.rootBuilder.beansByInterface.get(repositoryBuilder.forInterfaceName());
@@ -538,14 +476,6 @@ class DDataMethodBuilder {
     void setFiltersAndOrder(List<DDataMapBuilder.FilterOption> filters, VariableElement order) {
         if (filters != null) this.filters = filters;
         this.order = order;
-    }
-
-    public boolean hasAddCountMethodParam() {
-        DDataMethodBuilder.DDataMethodParameter forCountParam =
-                this.parameters.stream()
-                        .filter(p -> repositoryBuilder.rootBuilder.addCountType == p.type)
-                        .findAny().orElse(null);
-        return (forCountParam != null) && this.methodName.equals("list") && (this.methodType == SELECT);
     }
 
     List<DDataMapBuilder.FilterOption> getFilters() {

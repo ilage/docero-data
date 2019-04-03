@@ -532,7 +532,7 @@ class DDataMapBuilder {
                 if (!method.returnSimpleType)
                     buildResultMap(mapperRoot, repository, methodName, fetchOptions, mappedTables, filters);
 
-                if (method.hasAddCountMethodParam()) {
+                if (method.counterParameter != null) {
                     org.w3c.dom.Element selectCount = (org.w3c.dom.Element)
                             mapperRoot.appendChild(doc.createElement("select"));
 
