@@ -1,5 +1,6 @@
 package org.docero.data.beans;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.docero.data.DDataBean;
 import org.docero.data.DDataProperty;
 import org.docero.data.rmt.RemoteBean;
@@ -16,6 +17,7 @@ public interface Sample extends SampleTable {
 
     @DDataProperty
     Integer getRemoteId();
+    @JsonIgnore
     void setRemoteId(Integer v);
 
     @Sample_Map_(listParameter = Inner_.SAMPLE_ID)

@@ -8,15 +8,13 @@ import org.docero.data.remote.DDataPrototypeRealization;
 import org.docero.dgen.processor.DGenProperty;
 
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.*;
 import java.util.stream.Collectors;
 
 class DataBeanPropertyBuilder {
@@ -41,6 +39,8 @@ class DataBeanPropertyBuilder {
     final String jdbcType;
     final String readerSql;
     final String writerSql;
+    final List<MethodAnnotationInfo> getterAnnotations = new ArrayList<>();
+    final List<MethodAnnotationInfo> setterAnnotations = new ArrayList<>();
 
     static DataBeanPropertyBuilder from(
             DataBeanBuilder bean, DDataProperty ddProperty, boolean isPrototypeId, ExecutableElement method,
@@ -137,6 +137,74 @@ class DataBeanPropertyBuilder {
             else elemName.append(Character.toUpperCase(c));
         }
         enumName = elemName.toString();
+        if (element.getKind() == ElementKind.METHOD) {
+            String eltName = element.getSimpleName().toString();
+            if (eltName.startsWith("get") || eltName.startsWith("is") || eltName.startsWith("has")) {
+                element.getAnnotationMirrors().stream()
+                        .filter(a -> !a.getAnnotationType().toString().startsWith("org.docero.data."))
+                        .filter(a -> !a.getAnnotationType().toString().contains("_Map_"))
+                        .map(a -> this.mapToMethodAnnotationInfo(rootBuilder, a))
+                        .forEach(getterAnnotations::add);
+                String accessorName = "set" + Character.toUpperCase(name.charAt(0)) + name.substring(1);
+                element.getEnclosingElement().getEnclosedElements().stream()
+                        .filter(e -> accessorName.equals(e.getSimpleName().toString()))
+                        .findAny()
+                        .ifPresent(e -> e.getAnnotationMirrors().stream()
+                                .filter(a -> !a.getAnnotationType().toString().startsWith("org.docero.data."))
+                                .filter(a -> !a.getAnnotationType().toString().contains("_Map_"))
+                                .forEach(a -> setterAnnotations.add(this.mapToMethodAnnotationInfo(rootBuilder, a))));
+            } else {
+                element.getAnnotationMirrors().stream()
+                        .filter(a -> !a.getAnnotationType().toString().startsWith("org.docero.data."))
+                        .filter(a -> !a.getAnnotationType().toString().contains("_Map_"))
+                        .map(a -> this.mapToMethodAnnotationInfo(rootBuilder, a))
+                        .forEach(setterAnnotations::add);
+                String[] accessorName = new String[]{
+                        "get" + Character.toUpperCase(name.charAt(0)) + name.substring(1),
+                        "is" + Character.toUpperCase(name.charAt(0)) + name.substring(1),
+                        "has" + Character.toUpperCase(name.charAt(0)) + name.substring(1)
+                };
+                Arrays.sort(accessorName);
+                element.getEnclosingElement().getEnclosedElements().stream()
+                        .filter(e -> Arrays.binarySearch(accessorName, e.getSimpleName().toString()) >= 0)
+                        .findAny()
+                        .ifPresent(e -> e.getAnnotationMirrors().stream()
+                                .filter(a -> !a.getAnnotationType().toString().startsWith("org.docero.data."))
+                                .filter(a -> !a.getAnnotationType().toString().contains("_Map_"))
+                                .forEach(a -> getterAnnotations.add(this.mapToMethodAnnotationInfo(rootBuilder, a))));
+            }
+        }
+    }
+
+    private MethodAnnotationInfo mapToMethodAnnotationInfo(
+            DDataBuilder rootBuilder,
+            AnnotationMirror annotationMirror) {
+        return new MethodAnnotationInfo(annotationMirror,
+                rootBuilder.environment);
+    }
+
+    static class MethodAnnotationInfo {
+        final ProcessingEnvironment environment;
+        final AnnotationMirror annotationMirror;
+        final Map<? extends ExecutableElement, ? extends AnnotationValue> elementValuesWithDefaults;
+
+        public MethodAnnotationInfo(
+                AnnotationMirror annotationMirror,
+                ProcessingEnvironment environment) {
+            this.annotationMirror = annotationMirror;
+            this.environment = environment;
+            elementValuesWithDefaults = environment.getElementUtils()
+                    .getElementValuesWithDefaults(annotationMirror);
+        }
+
+        public String toString() {
+            return annotationMirror.toString();
+            /* + (elementValuesWithDefaults.size() == 0 ? "" : "(" +
+                    elementValuesWithDefaults.entrySet().stream()
+                            .map(e -> e.getKey().getSimpleName().toString() + "=" + e.getValue().toString())
+                            .collect(Collectors.joining(","))
+                    + ")");*/
+        }
     }
 
     void buildProperty(JavaClassWriter cf) throws IOException {
@@ -149,6 +217,17 @@ class DataBeanPropertyBuilder {
             }
         } else {
             cf.println("private " + type.toString() + " " + name + ";");
+        }
+    }
+
+    private void printKnownXmlAdapters(
+            JavaClassWriter cf, TypeMirror type,
+            List<MethodAnnotationInfo> annotations
+    ) throws IOException {
+        if (annotations.stream()
+                .noneMatch(a -> "javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter"
+                        .equals(a.annotationMirror.getAnnotationType().toString()))) {
+            printKnownXmlAdapters(cf, type);
         }
     }
 
@@ -185,22 +264,34 @@ class DataBeanPropertyBuilder {
                 cf.println("@com.fasterxml.jackson.annotation.JsonIgnore");
             cf.println("@javax.xml.bind.annotation.XmlTransient");
         } else {
+            getterAnnotations.forEach(a -> {
+                try {
+                    cf.println(a.toString());
+                } catch (IOException ignore) {
+                }
+            });
             if (mappedBean != null) {
                 if (mappedBean.abstractBean) {
-                    cf.startBlock("@javax.xml.bind.annotation.XmlElements({");
-                    cf.println(this.dataBean.rootBuilder.beansByInterface.values().stream()
-                            .filter(b -> !b.abstractBean)
-                            .filter(b -> b.getTableRef().equals(mappedBean.getTableRef()))
-                            .map(b -> "@javax.xml.bind.annotation.XmlElement(name=\"" +
-                                    b.name + "\",type = " +
-                                    b.getImplementationName() + ".class)")
-                            .collect(Collectors.joining(",\n\t\t")));
-                    cf.endBlock("})");
-                } else
+                    if (getterAnnotations.stream()
+                            .noneMatch(a -> "javax.xml.bind.annotation.XmlElements"
+                                    .equals(a.annotationMirror.getAnnotationType().toString()))) {
+                        cf.startBlock("@javax.xml.bind.annotation.XmlElements({");
+                        cf.println(this.dataBean.rootBuilder.beansByInterface.values().stream()
+                                .filter(b -> !b.abstractBean)
+                                .filter(b -> b.getTableRef().equals(mappedBean.getTableRef()))
+                                .map(b -> "@javax.xml.bind.annotation.XmlElement(name=\"" +
+                                        b.name + "\",type = " +
+                                        b.getImplementationName() + ".class)")
+                                .collect(Collectors.joining(",\n\t\t")));
+                        cf.endBlock("})");
+                    }
+                } else if (getterAnnotations.stream()
+                        .noneMatch(a -> "javax.xml.bind.annotation.XmlElement"
+                                .equals(a.annotationMirror.getAnnotationType().toString())))
                     cf.println("@javax.xml.bind.annotation.XmlElement(type = " +
                             mappedBean.getImplementationName() + ".class)");
             } else {
-                printKnownXmlAdapters(cf, type);
+                printKnownXmlAdapters(cf, type, getterAnnotations);
             }
         }
         cf.startBlock("public " +
@@ -243,6 +334,12 @@ class DataBeanPropertyBuilder {
         if (mappedBean == null && mapping != null) return; // external data, can't have setter
 
         cf.println("");
+        setterAnnotations.forEach(a -> {
+            try {
+                cf.println(a.toString());
+            } catch (IOException ignore) {
+            }
+        });
         cf.startBlock("public void set" +
                 Character.toUpperCase(name.charAt(0)) +
                 name.substring(1) + "(" +
