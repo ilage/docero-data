@@ -171,6 +171,17 @@ class DDataMapBuilder {
             cf.endBlock("}};");
 
             cf.println("");
+            cf.startBlock("public java.util.Map<Class,Class> getRepositories() {");
+            cf.println("return java.util.Collections.unmodifiableMap(repositories);");
+            cf.endBlock("}");
+
+            cf.println("");
+            cf.startBlock("public <T extends java.io.Serializable, C extends java.io.Serializable, R extends org.docero.data.DDataRepository<T, C>>" +
+                    " Class<R> getBeanRepositoryInterface(Class<T> beanInterface) {");
+            cf.println("return (Class<R>) repositories.get(beanInterface);");
+            cf.endBlock("}");
+
+            cf.println("");
             cf.startBlock("public <T extends java.io.Serializable,C extends java.io.Serializable> " +
                     "org.docero.data.DDataRepository<T,C> getBeanRepository(Class<T> beanInterface, SqlSessionFactory sqlSessionFactory) {");
             cf.println("org.docero.data.DDataRepository<T, C> r = null;");

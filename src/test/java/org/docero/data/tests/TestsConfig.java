@@ -3,6 +3,8 @@ package org.docero.data.tests;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.transaction.TransactionFactory;
 import org.apache.ibatis.type.TypeHandler;
+import org.docero.data.DData;
+import org.docero.data.EnableDDataConfiguration;
 import org.docero.data.rmt.RemoteBean;
 import org.docero.data.rmt.RemoteRepository;
 import org.docero.data.rmt.RemoteRepositoryImpl;
@@ -15,19 +17,19 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.*;
-import org.springframework.core.io.Resource;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
+import org.springframework.context.annotation.Primary;
+import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
-import org.docero.data.*;
 
 import javax.sql.DataSource;
-import java.util.Arrays;
 
 @Configuration
-@Import({DDataConfiguration.class})
 @EnableTransactionManagement
 @EnableCaching
 @EnableDDataConfiguration(packageClass = TestsConfig.class)
@@ -81,8 +83,8 @@ public class TestsConfig {
     }
 
     @Bean
-    public DData dData(SqlSessionFactory sessionFactory) {
-        return new DData(sessionFactory);
+    public DData dData(SqlSessionFactory sessionFactory, GenericApplicationContext applicationContext) {
+        return new DData(sessionFactory, applicationContext);
     }
 
     @Bean

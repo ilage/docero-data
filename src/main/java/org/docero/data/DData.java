@@ -8,6 +8,7 @@ import org.docero.data.utils.DDataObjectFactory;
 import org.docero.data.view.DDataViewBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.support.GenericApplicationContext;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -21,12 +22,31 @@ public class DData {
     private static final ConcurrentHashMap<Class, DDataModule> modules = new ConcurrentHashMap<>();
     private static final DDataDictionariesService dictionariesService = new DDataDictionariesService();
 
+    private final GenericApplicationContext springApplicationContext;
     private final SqlSessionFactory sessionFactory;
     private final Map<Class<?>, Object> buildedRepositories = new ConcurrentHashMap<>();
 
     public DData(SqlSessionFactory sessionFactory) {
         this.sessionFactory = sessionFactory;
+        this.springApplicationContext = null;
         modules.values().forEach(m -> m.register(this, dictionariesService));
+    }
+
+    @SuppressWarnings("unchecked")
+    public DData(SqlSessionFactory sessionFactory, GenericApplicationContext applicationContext) {
+        this.sessionFactory = sessionFactory;
+        this.springApplicationContext = applicationContext;
+        if (applicationContext != null)
+            modules.values().forEach(m -> m.getRepositories().forEach((i, r) -> {
+                if (r.isAssignableFrom(i))
+                    createSpringBean(i, m.getRepositoryByInterface(i, sessionFactory));
+            }));
+        modules.values().forEach(m -> m.register(this, dictionariesService));
+    }
+
+    private <T, R extends T> void createSpringBean(Class<T> i, R r) {
+        springApplicationContext.registerBean(i, () -> r);
+        buildedRepositories.put(i, springApplicationContext.getBean(i));
     }
 
     public DDataViewBuilder getViewBuilder() {
@@ -46,7 +66,10 @@ public class DData {
         if (module == null)
             throw new RuntimeException("unknown d.data repository for " + beanClass.getName());
 
-        buildedRepositories.put(beanClass, r = checkSingletonRepository(
+        Class<DDataRepository<T, C>> repClass = module.getBeanRepositoryInterface(beanClass);
+        r = buildedRepositories.get(repClass);
+        if (r == null)
+            buildedRepositories.put(beanClass, r = checkSingletonRepository(repClass,
                     module.getBeanRepository(beanClass, sessionFactory)));
         return (DDataRepository<T, C>) r;
     }
@@ -59,7 +82,7 @@ public class DData {
         for (DDataModule module : modules.values()) {
             r = module.getRepositoryByInterface(clazz, sessionFactory);
             if (r != null) {
-                buildedRepositories.put(clazz, r = checkSingletonRepository(r));
+                buildedRepositories.put(clazz, r = checkSingletonRepository(clazz, r));
                 return r;
             }
         }
@@ -67,12 +90,12 @@ public class DData {
     }
 
     @SuppressWarnings("unchecked")
-    private synchronized <T> T checkSingletonRepository(T repository) {
-        if (repository == null) return null;
+    private synchronized <T, R extends T> R checkSingletonRepository(Class<T> clazz, R repository) {
+        if (clazz == null) return null;
 
-        T exists = (T) buildedRepositories.get(repository.getClass());
+        R exists = (R) buildedRepositories.get(clazz);
         if (exists == null) {
-            buildedRepositories.put(repository.getClass(), repository);
+            buildedRepositories.put(clazz, repository);
             return repository;
         }
         return exists;

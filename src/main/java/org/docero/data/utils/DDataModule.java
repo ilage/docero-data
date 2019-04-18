@@ -16,9 +16,14 @@ public interface DDataModule {
 
     String[] resources();
 
-    <T extends Serializable, C extends Serializable> DDataRepository<T,C> getBeanRepository(Class<T> beanClass, SqlSessionFactory sessionFactory);
+    <T extends Serializable, C extends Serializable, R extends DDataRepository<T, C>>
+    Class<R> getBeanRepositoryInterface(Class<T> beanClass);
+
+    <T extends Serializable, C extends Serializable> DDataRepository<T, C> getBeanRepository(Class<T> beanClass, SqlSessionFactory sessionFactory);
 
     <R> R getRepositoryByInterface(Class<R> clazz, SqlSessionFactory sessionFactory);
 
     void register(org.docero.data.DData dData, org.docero.data.DDataDictionariesService ds);
+
+    Map<Class,Class> getRepositories();
 }

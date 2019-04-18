@@ -45,6 +45,8 @@ public class DDataTest {
     @Autowired
     private ApplicationContext springContext;
     @Autowired
+    private DData dData;
+    @Autowired
     private DataSource dataSource;
     @Autowired
     private SqlSessionFactory sqlSessionFactory;
@@ -774,10 +776,12 @@ public class DDataTest {
         long t;
         setUp();
 
-        Sample smpl = iSampleRepository.get(1);
+        Sample smpl = dData.getBeanRepository(Sample.class).get(1);//iSampleRepository.get(1);
         Inner inr = smpl.getInner();
         assertNotNull(inr);
         int inrId = inr.getId();
+        DDataRepository<Inner, Integer> iInnerRepository = dData.getBeanRepository(Inner.class);
+        assertEquals(this.iInnerRepository, iInnerRepository);
 
         for (int i = 0; i < 10000; i++) assertNotNull(iInnerRepository.get(inrId));
 
