@@ -847,12 +847,12 @@ public class DDataTest {
             }
 
             @Override
-            public int getChild() {
+            public Integer getChild() {
                 return 1;
             }
 
             @Override
-            public void setChild(int id) {
+            public void setChild(Integer id) {
 
             }
 

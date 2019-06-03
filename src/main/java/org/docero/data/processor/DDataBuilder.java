@@ -31,6 +31,7 @@ class DDataBuilder {
     final TypeMirror temporalType;
     final TypeMirror oldDateType;
     final boolean useSpringCache;
+    final TypeMirror numericType;
     final TypeMirror collectionType;
     final TypeMirror mapType;
     final TypeMirror versionalBeanType;
@@ -68,6 +69,7 @@ class DDataBuilder {
         versionalRepositoryType = environment.getTypeUtils().erasure(
                 environment.getElementUtils().getTypeElement(DDataVersionalRepository.class.getCanonicalName()).asType()
         );
+        numericType = environment.getElementUtils().getTypeElement(java.lang.Number.class.getCanonicalName()).asType();
         voidType = environment.getElementUtils().getTypeElement(Void.class.getCanonicalName()).asType();
         stringType = environment.getElementUtils().getTypeElement(String.class.getCanonicalName()).asType();
         rowBoundsType = environment.getElementUtils().getTypeElement(RowBounds.class.getCanonicalName()).asType();
@@ -329,7 +331,7 @@ class DDataBuilder {
     private HashSet<String> abstractRepositoryCreated = new HashSet<>();
 
     void checkAbstractRepositoryForPackage(String beanPkg) throws IOException {
-        if(!abstractRepositoryCreated.contains(beanPkg)) {
+        if (!abstractRepositoryCreated.contains(beanPkg)) {
             try (JavaClassWriter cf = new JavaClassWriter(environment, beanPkg + ".AbstractRepository")) {
                 cf.println("package " + beanPkg + ";");
                 cf.println("import org.docero.data.DData;");

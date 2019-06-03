@@ -350,18 +350,38 @@ class DataBeanPropertyBuilder {
             cf.println("this." + name + " = " + name + ";");
         }
         if (notCollectionOrMap()) {
+            ProcessingEnvironment environment = dataBean.rootBuilder.environment;
             if (mapping != null) mapping.stream()
                     .forEach(m -> {
-                        if (!(m.property.isVersionFrom || m.property.isId))
+                        // поле версии никогда не может быть изменено через изменение связного объекта
+                        if (!m.property.isVersionFrom)
                             try {
                                 String setter = "this.set" +
                                         Character.toUpperCase(m.property.name.charAt(0)) + m.property.name.substring(1);
                                 String getter = name + ".get" +
                                         Character.toUpperCase(m.mappedProperty.name.charAt(0)) +
                                         m.mappedProperty.name.substring(1);
-                                cf.println(setter + "(" + name + " == null ? " +
-                                        (m.property.type.getKind().isPrimitive() ? "0" : "null") +
-                                        " : " + getter + "());");
+                                if (m.property.isId) {
+                                    // при изменение связного объекта, если для связи используется
+                                    // идентификатор, то он может быть изменён только на не нулевое значение
+                                    boolean isNumber = m.property.type.getKind().isPrimitive() ?
+                                            dataBean.rootBuilder.numericType.toString()
+                                                    .equals(environment.getTypeUtils().boxedClass((PrimitiveType) m.property.type)
+                                                            .getSuperclass().toString()) :
+                                            environment.getTypeUtils().isSubtype(
+                                                    m.property.type, dataBean.rootBuilder.numericType);
+                                    if (isNumber)
+                                        cf.println("if(" + name + " != null && " + getter + "() != 0) " +
+                                                setter + "(" + getter + "());");
+                                    else
+                                        cf.println("if(" + name + " != null && " + getter + "() != null) " +
+                                                setter + "(" + getter + "());");
+                                } else
+                                    // при изменение связного объекта, если для связи используется
+                                    // примитив, то он выставляется в 0 (скорее для генерации ошибки)
+                                    cf.println(setter + "(" + name + " == null ? " +
+                                            (m.property.type.getKind().isPrimitive() ? "0" : "null") +
+                                            " : " + getter + "());");
                             } catch (IOException ignore) {
                             }
                     });
