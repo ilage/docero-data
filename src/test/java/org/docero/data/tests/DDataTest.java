@@ -93,20 +93,19 @@ public class DDataTest {
                     "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (1,'s1',1001,2);\n" +
                     "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (2,'s2',1003,1);\n" +
                     "\n" +
-                    "DROP FUNCTION ddata.sample_proc(INTEGER);\n" +
+                    "DROP FUNCTION IF EXISTS ddata.sample_proc(INTEGER);\n" +
                     "\n" +
                     "CREATE OR REPLACE FUNCTION ddata.sample_proc(rid INTEGER)\n" +
-                    "  RETURNS TABLE (i INT, id INT, s VARCHAR, t2_text VARCHAR, t2_id INT, t2_sample_id INT) AS\n" +
+                    "  RETURNS TABLE (id INT, s VARCHAR, t2_text VARCHAR, t2_id INT, t2_sample_id INT) AS\n" +
                     "$BODY$\n" +
                     "SELECT\n" +
-                    "  t0.\"i\" AS \"i\",\n" +
                     "  t0.\"id\" AS \"id\",\n" +
                     "  t0.\"s\" AS \"s\",\n" +
                     "  t2.\"text\" AS t2_text,\n" +
                     "  t2.\"id\" AS t2_id,\n" +
                     "  t2.\"sample_id\" AS t2_sample_id\n" +
                     "FROM \"ddata\".\"sample\" AS t0\n" +
-                    "LEFT JOIN \"ddata\".\"inner\" AS t2 ON (t0.\"i\" = t2.\"id\")\n" +
+                    "LEFT JOIN \"ddata\".\"inner\" AS t2 ON (t0.\"id\" = t2.\"sample_id\")\n" +
                     "$BODY$\n" +
                     "  LANGUAGE SQL;\n" +
                     "\n" +
@@ -181,7 +180,7 @@ public class DDataTest {
                     "INSERT INTO ddata.\"smgraf\" (parent,child) VALUES (1,1);" +
                     "INSERT INTO ddata.\"smgraf\" (parent,child) VALUES (1,2);" +
                     "" +
-                    "DROP SEQUENCE ddata.sample_seq;\n" +
+                    "DROP SEQUENCE IF EXISTS ddata.sample_seq;\n" +
                     "\n" +
                     "CREATE SEQUENCE ddata.sample_seq\n" +
                     "  INCREMENT 1\n" +
@@ -391,6 +390,33 @@ public class DDataTest {
         assertNotNull(maxCount);
         assertEquals(1, maxCount.length);
         assertEquals(4, maxCount[0]);
+
+        view = viewBuilder.build(Sample_WB_.class, new ArrayList<DDataFilter>() {{
+            add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
+                add(new DDataFilter(Inner_WB_.TEXT));
+                add(new DDataFilter(Inner_WB_.SAMPLE_ID));
+            }});
+        }});
+        view.setFilter(new DDataFilter() {{
+            add(new DDataFilter(Sample_WB_.ID, DDataFilterOperator.GREATE, 0));
+
+            add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.GREATE, 0));
+                add(new DDataFilter(Inner_WB_.ID, DDataFilterOperator.LESS, 100000));
+            }});
+        }});
+
+        row = view.select(0, 100).getRow(0);
+        assertEquals("update linked", row.getColumnValue(0,"listParameter.text"));
+        assertEquals("updated text value", row.getColumnValue(1,"listParameter.text"));
+        row.setColumnValue("Test1", 0,"listParameter.text");
+        assertEquals("Test1", row.getColumnValue(0, "listParameter.text"));
+        view.flushUpdates(t -> {
+            t.printStackTrace();
+            throw new RuntimeException("Too many errors", t);
+        });
+        rows = view.select(0, 100);
+        assertEquals("Test1",rows.getRow(0).getColumnValue(0,"listParameter.text"));
     }
 
     @Test

@@ -42,13 +42,13 @@ class PreparedUpdates implements Closeable {
                 .map(c -> c.attribute).collect(Collectors.toSet())
         );
         mappings = new HashMap<>();
-        entity.mappings.entrySet().stream()
-                .filter(m -> !m.getKey().attribute.isPrimaryKey() && !m.getKey().isVersion)
-                .flatMap(m -> m.getValue().values().stream()
-                        .flatMap(v -> Collections.singletonMap(m.getKey(), v).entrySet().stream())
-                )
-                .filter(m -> dDataView.tableCells.values().contains(m.getValue()))
-                .forEach(m -> mappings.put(m.getKey().name, new PreparedMap(m.getKey(), m.getValue(), false)));
+//        entity.mappings.entrySet().stream()
+//                .filter(m -> !m.getKey().attribute.isPrimaryKey() && !m.getKey().isVersion)
+//                .flatMap(m -> m.getValue().values().stream()
+//                        .flatMap(v -> Collections.singletonMap(m.getKey(), v).entrySet().stream())
+//                )
+//                .filter(m -> dDataView.tableCells.values().contains(m.getValue()))
+//                .forEach(m -> mappings.put(m.getKey().name, new PreparedMap(m.getKey(), m.getValue(), false)));
         if (entity.parent != null)
             entity.parent.mappings.entrySet().stream()
                     .filter(m -> m.getValue().get(entity) != null &&
