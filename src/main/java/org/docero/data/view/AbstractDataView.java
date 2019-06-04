@@ -679,10 +679,7 @@ abstract class AbstractDataView {
                         for (int i = 0; i < colCount; ) {
                             String colName = rsColumns[i++];
                             TableCell column = tableCells.get(colName);
-                            Object colVal;
-                            if (column == null) colVal = rs.getObject(i);
-                            else colVal = getFromResultSet(rs, column.attribute.getJavaType(), i);
-                            putInHierarchy(row, colName, colVal);
+                            putInHierarchy(row, colName, readColumnValue(rs, column, i, i));
                             if (processedRemotes != null) {
                                 String path = colName.indexOf('.') > 0 ?
                                         colName.substring(0, colName.lastIndexOf('.')) :
@@ -710,6 +707,19 @@ abstract class AbstractDataView {
         return results;
     }
 
+    private Object readColumnValue(
+            ResultSet rs, TableCell column,
+            int columnIndex,
+            int rsIndex
+    ) throws SQLException, DDataException {
+        Object colVal;
+        if (column == null) {
+            colVal = rs.getObject(columnIndex);
+            if (rs.wasNull()) colVal = null;
+        } else colVal = getFromResultSet(rs, column.attribute.getJavaType(), rsIndex);
+        return colVal;
+    }
+
     private HashMap<String, Object> getRemoteBeanValue(RemoteBeanRef remoteBeanRef, ResultSet rs, String[] rsColumns) throws SQLException, DDataException {
         Object[] args = new Object[remoteBeanRef.parameters.size()];
         for (int i = 0; i < args.length; i++) {
@@ -717,10 +727,7 @@ abstract class AbstractDataView {
             int j = 0;
             for (; j < rsColumns.length; )
                 if (rsColumns[j++].equals(column.name)) break;
-            Object colVal;
-            if (column == null) colVal = rs.getObject(i);
-            else colVal = getFromResultSet(rs, column.attribute.getJavaType(), j);
-            args[i] = colVal;
+            args[i] = readColumnValue(rs, column, i, j);
         }
         Object o = dictionariesService.get(
                 remoteBeanRef.type,
@@ -753,27 +760,28 @@ abstract class AbstractDataView {
         if (ctype.isAssignableFrom(String.class)) return rs.getString(i);
         if (ctype.isAssignableFrom(LocalDateTime.class)) {
             Timestamp ts = rs.getTimestamp(i);
-            return ts == null ? null : ts.toLocalDateTime();
+            return ts == null || rs.wasNull() ? null : ts.toLocalDateTime();
         }
         if (ctype.isAssignableFrom(LocalDate.class)) {
             java.sql.Date ts = rs.getDate(i);
-            return ts == null ? null : ts.toLocalDate();
+            return ts == null || rs.wasNull() ? null : ts.toLocalDate();
         }
         if (ctype.isAssignableFrom(LocalTime.class)) {
             Time ts = rs.getTime(i);
-            return ts == null ? null : ts.toLocalTime();
+            return ts == null || rs.wasNull() ? null : ts.toLocalTime();
         }
+        Object retVal;
         if (ctype.isAssignableFrom(Date.class) || ctype.isAssignableFrom(Timestamp.class))
-            return rs.getTimestamp(i);
-        if (ctype.isAssignableFrom(java.sql.Date.class)) return rs.getDate(i);
-        if (ctype.isAssignableFrom(java.sql.Time.class)) return rs.getTime(i);
-        if (ctype.isAssignableFrom(BigDecimal.class)) return rs.getBigDecimal(i);
-        if (ctype.isAssignableFrom(BigInteger.class)) return BigInteger.valueOf(rs.getLong(i));
-        if (ctype.isAssignableFrom(Boolean.class)) return rs.getBoolean(i);
-        if (ctype.isAssignableFrom(Float.class)) return rs.getFloat(i);
-        if (ctype.isAssignableFrom(Double.class)) return rs.getDouble(i);
-
-        return rs.getObject(i);
+            retVal = rs.getTimestamp(i);
+        else if (ctype.isAssignableFrom(java.sql.Date.class)) retVal = rs.getDate(i);
+        else if (ctype.isAssignableFrom(java.sql.Time.class)) retVal = rs.getTime(i);
+        else if (ctype.isAssignableFrom(BigDecimal.class)) retVal = rs.getBigDecimal(i);
+        else if (ctype.isAssignableFrom(BigInteger.class)) retVal = BigInteger.valueOf(rs.getLong(i));
+        else if (ctype.isAssignableFrom(Boolean.class)) retVal = rs.getBoolean(i);
+        else if (ctype.isAssignableFrom(Float.class)) retVal = rs.getFloat(i);
+        else if (ctype.isAssignableFrom(Double.class)) retVal = rs.getDouble(i);
+        else retVal = rs.getObject(i);
+        return retVal == null || rs.wasNull() ? null : retVal;
     }
 
     private String makeStringSearchCondition(DDataFilterOperator op, String columnReference, Object value) {
