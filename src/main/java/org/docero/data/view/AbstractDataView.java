@@ -755,8 +755,6 @@ abstract class AbstractDataView {
     }
 
     private Object getFromResultSet(ResultSet rs, Class<?> ctype, int i) throws SQLException, DDataException {
-        if (ctype.isAssignableFrom(Integer.class)) return rs.getInt(i);
-        if (ctype.isAssignableFrom(Long.class)) return rs.getLong(i);
         if (ctype.isAssignableFrom(String.class)) return rs.getString(i);
         if (ctype.isAssignableFrom(LocalDateTime.class)) {
             Timestamp ts = rs.getTimestamp(i);
@@ -771,15 +769,18 @@ abstract class AbstractDataView {
             return ts == null || rs.wasNull() ? null : ts.toLocalTime();
         }
         Object retVal;
-        if (ctype.isAssignableFrom(Date.class) || ctype.isAssignableFrom(Timestamp.class))
+        if (ctype.isAssignableFrom(Integer.class)) retVal = rs.getInt(i);
+        else if (ctype.isAssignableFrom(Long.class)) retVal = rs.getLong(i);
+        else if (ctype.isAssignableFrom(Short.class)) retVal = rs.getShort(i);
+        else if (ctype.isAssignableFrom(Boolean.class)) retVal = rs.getBoolean(i);
+        else if (ctype.isAssignableFrom(Float.class)) retVal = rs.getFloat(i);
+        else if (ctype.isAssignableFrom(Double.class)) retVal = rs.getDouble(i);
+        else if (ctype.isAssignableFrom(Date.class) || ctype.isAssignableFrom(Timestamp.class))
             retVal = rs.getTimestamp(i);
         else if (ctype.isAssignableFrom(java.sql.Date.class)) retVal = rs.getDate(i);
         else if (ctype.isAssignableFrom(java.sql.Time.class)) retVal = rs.getTime(i);
         else if (ctype.isAssignableFrom(BigDecimal.class)) retVal = rs.getBigDecimal(i);
         else if (ctype.isAssignableFrom(BigInteger.class)) retVal = BigInteger.valueOf(rs.getLong(i));
-        else if (ctype.isAssignableFrom(Boolean.class)) retVal = rs.getBoolean(i);
-        else if (ctype.isAssignableFrom(Float.class)) retVal = rs.getFloat(i);
-        else if (ctype.isAssignableFrom(Double.class)) retVal = rs.getDouble(i);
         else retVal = rs.getObject(i);
         return retVal == null || rs.wasNull() ? null : retVal;
     }
