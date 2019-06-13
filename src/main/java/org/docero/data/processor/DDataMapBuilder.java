@@ -1707,11 +1707,11 @@ class DDataMapBuilder {
                                 .findAny().orElse(null);
 
                 StringBuilder columnsMapping = new StringBuilder();
-                columnsMapping.append(mapping.properties.stream()
-                        .filter(DataBeanPropertyBuilder::notIgnored)
-                        .map(p -> p.columnName + "=" + (mappedTable.mappedFromTableIndex == 0 ? "" :
+                columnsMapping.append(mapping.stream()
+                        .filter(m -> m.property.notIgnored())
+                        .map(m -> m.key + "=" + (mappedTable.mappedFromTableIndex == 0 ? "" :
                                 "t" + mappedTable.mappedFromTableIndex + "_") +
-                                p.columnName)
+                                m.property.columnName)
                         .collect(Collectors.joining(",")));
                 if (mappedBean.versionalType != null &&
                         environment.getTypeUtils().isSameType(thisBean.versionalType, mappedBean.versionalType)) {
@@ -1753,7 +1753,7 @@ class DDataMapBuilder {
                         return "t0." +
                                 m.mappedProperty.getColumnRef() + " = " +
                                 m.mappedProperty.getColumnWriter(
-                                        jdbcTypeParameterFor(m.property.columnName, propType, true));
+                                        jdbcTypeParameterFor(m.key, propType, true));
                     }).collect(Collectors.joining(" AND "))).append("\n");
 
                     if (mappedBean.versionalType != null &&

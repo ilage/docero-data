@@ -101,8 +101,10 @@ class Mapping {
         final DataBeanPropertyBuilder property;
         final DataBeanPropertyBuilder mappedProperty;
         final boolean manyToOne;
+        final String key;
 
-        SingleFieldMapping(DataBeanPropertyBuilder property, DataBeanPropertyBuilder mappedProperties, boolean manyToOne) {
+        SingleFieldMapping(String key, DataBeanPropertyBuilder property, DataBeanPropertyBuilder mappedProperties, boolean manyToOne) {
+            this.key = key;
             this.property = property;
             this.mappedProperty = mappedProperties;
             this.manyToOne = manyToOne;
@@ -114,6 +116,7 @@ class Mapping {
         if (properties.size() > 0 && mappedProperties.size() > 0)
             for (int i = 0; i < Math.max(properties.size(), mappedProperties.size()); i++) {
                 l.add(new SingleFieldMapping(
+                        "key_"+i+"_",
                         properties.get(i < properties.size() ? i : 0),
                         mappedProperties.get(i < mappedProperties.size() ? i : 0),
                         manyToOne
