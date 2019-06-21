@@ -13,6 +13,8 @@ import java.sql.*;
 import java.time.temporal.Temporal;
 import java.util.*;
 import java.util.Date;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 @SuppressWarnings("unused")
@@ -86,6 +88,7 @@ public class DDataView extends AbstractDataView {
 
     /**
      * Select rows count for view with applied filter
+     *
      * @return count of records
      * @throws DDataException on any logical exceptions
      */
@@ -113,7 +116,7 @@ public class DDataView extends AbstractDataView {
      * in some columns, and then view use sub-selects, this method return only primary select.
      *
      * @param offset like a OFFSET in SQL (not used if limit=0)
-     * @param limit like a LIMIT in SQL but if 0 assumed as no limit
+     * @param limit  like a LIMIT in SQL but if 0 assumed as no limit
      * @return SQL expression
      * @throws DDataException on any logical exceptions
      */
@@ -138,8 +141,9 @@ public class DDataView extends AbstractDataView {
 
     /**
      * Select data for view with defined columns and applied filter
+     *
      * @param offset like a OFFSET in SQL (not used if limit=0)
-     * @param limit like a LIMIT in SQL but if 0 assumed as no limit
+     * @param limit  like a LIMIT in SQL but if 0 assumed as no limit
      * @return rows object
      * @throws DDataException on any logical exceptions
      */
@@ -181,6 +185,7 @@ public class DDataView extends AbstractDataView {
 
     /**
      * Make DDataViewRows object used for inserting new records
+     *
      * @return rows object
      */
     public DDataViewRows buildDataLoader() {
@@ -303,11 +308,9 @@ public class DDataView extends AbstractDataView {
 
     void addUpdate(DDataViewRow dDataViewRow, int index, String path) {
         int i = path.lastIndexOf('.');
-        String beanPath = i < 0 ? null : path.substring(0, i);
+        String beanPath = i < 0 ? "" : path.substring(0, i);
         TreeMap<String, Set<Integer>> update =
-                updates.computeIfAbsent(dDataViewRow, k -> new TreeMap<>(
-                        (s1, s2) -> s1 == s2 ? 0 : (s1 == null ? 1 : (s2 == null ? -1 : s2.compareTo(s1))))
-                );
+                updates.computeIfAbsent(dDataViewRow, k -> new TreeMap<>(Comparator.reverseOrder()));
         update.computeIfAbsent(beanPath, k -> new HashSet<>()).add(index);
     }
 
@@ -315,7 +318,7 @@ public class DDataView extends AbstractDataView {
      * Write updates on view rows.
      *
      * @param exceptionHandler class for exceptions handling
-     * @throws SQLException on jdbc exceptions
+     * @throws SQLException   on jdbc exceptions
      * @throws DDataException on any logical exceptions
      */
     public void flushUpdates(DDataExceptionHandler exceptionHandler) throws SQLException, DDataException {
@@ -324,10 +327,9 @@ public class DDataView extends AbstractDataView {
 
         Connection connection = sqlSession.getConnection();
         Set<PreparedUpdates> prepared = new TreeSet<>((e1, e2) ->
-                e1.entity.parent == e2.entity ? -1 : (e2.entity.parent == e1.entity ? 1 : (
-                        e1.entity.name == null ? 1 : (
-                                e2.entity.name == null ? -1 : e2.entity.name.compareTo(e1.entity.name)
-                        ))));
+                (e2.one2Many ? 1 : -1) * (e1.entity.parent == e2.entity ? -1 : (e2.entity.parent == e1.entity ? 1 : (
+                        e2.entity.name.compareTo(e1.entity.name)
+                ))));
         try {
             // at first, process rows data by known bean update services (DDataBeanUpdateService)
             // they must do real updates in database and may replace ids of managed bean
@@ -358,8 +360,12 @@ public class DDataView extends AbstractDataView {
                     RowUpdates rowUpdates = new RowUpdates(row, dateNow);
                     TreeMap<String, Set<Integer>> updatedEntities = updates.get(row);
                     HashMap<String, Set<Integer>> updatedParents = new HashMap<>();
-                    for (String entityPropertyPath : updatedEntities.keySet()) {
-                        AbstractDataView.TableEntity entity = this.getEntityForPath(entityPropertyPath);
+                    boolean isNewObject = "yes".equals(row.getColumnValue(0, "dDataAppendRowInTable_"));
+                    CopyOnWriteArrayList<String> orderedPaths = new CopyOnWriteArrayList<>(updatedEntities.keySet());
+                    for (String entityPropertyPath : orderedPaths) {
+                        AbstractDataView.TableEntity entity = this.getEntityForPath(
+                                entityPropertyPath.length()==0 ? null : entityPropertyPath
+                        );
                         @SuppressWarnings("unchecked")
                         DDataBeanUpdateService beanService = getUpdateServiceFor(entity.name);
                         if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
@@ -372,10 +378,18 @@ public class DDataView extends AbstractDataView {
                             for (Integer updatedIndex : updatedEntities.get(entity.name)) {
                                 String firstIdProp = pk.getFirstIdColumnName();
                                 Object anyId = row.getColumnValue(updatedIndex,
-                                        entity.name == null ? firstIdProp :
+                                        entity.name.length() == 0 ? firstIdProp :
                                                 entity.name + "." + firstIdProp);
-                                boolean parentMustBeUpdated = false;
-                                if (idIsNull(anyId)) { //is new element
+
+                                Map<AbstractDataView.TableEntity, AbstractDataView.TableCell> mapFromParent =
+                                        entity.parent == null ? null : entity.parent.mappings.entrySet().stream()
+                                                .filter(parentMap -> !parentMap.getKey().attribute.isPrimaryKey() &&
+                                                        parentMap.getValue().get(entity) != null)
+                                                .map(Map.Entry::getValue).findAny().orElse(null);
+                                pk.one2Many = mapFromParent != null && mapFromParent.values().stream()
+                                        .noneMatch(o -> o.attribute.isCollection());
+
+                                if (isNewObject || idIsNull(anyId)) { //is new element
                                     if (beanService == null) {
                                         for (TableCell cell : entity.cells)
                                             if (cell.attribute.isPrimaryKey() && !cell.isVersion)
@@ -385,21 +399,26 @@ public class DDataView extends AbstractDataView {
                                                         updatedIndex, cell, dateNow);
                                         pk.fillMappings(row, updatedIndex);
                                     }
-                                    rowUpdates.addInsert(pk, updatedIndex);
-                                    parentMustBeUpdated = entity.parent != null && entity.parent.mappings.entrySet()
-                                            .stream().anyMatch(c -> !c.getKey().attribute.isPrimaryKey() &&
-                                                    c.getValue().get(entity) != null);
+
+                                    if (pk.one2Many)
+                                        rowUpdates.addInsertBefore(pk, updatedIndex);
+                                    else
+                                        rowUpdates.addInsertAfter(pk, updatedIndex);
                                 } else
                                     rowUpdates.addUpdate(pk, updatedIndex);
 
                                 // if children inserts modify parent mapping attributes, update parents entities
-                                if (parentMustBeUpdated) {
+                                if (pk.one2Many) {
                                     int lii = entity.name.lastIndexOf('.');
                                     String parentPath = lii < 0 ? null : entity.name.substring(0, lii);
                                     TableEntity parentEntity = getEntityForPath(parentPath);
                                     int parentIndex = entity.isCollection() ? 0 : updatedIndex;
-                                    updatedEntities.computeIfAbsent(parentEntity.name, k -> new HashSet<>())
-                                            .add(parentIndex);
+                                    Set<Integer> uev = updatedEntities.get(parentEntity.name);
+                                    if (uev == null) {
+                                        updatedEntities.put(parentEntity.name, uev = new HashSet<>());
+                                        orderedPaths.add(parentEntity.name);
+                                    }
+                                    uev.add(parentIndex);
                                 }
                             }
                         }
@@ -469,27 +488,29 @@ public class DDataView extends AbstractDataView {
                 }
             }
         } else {
-            Object idValue = null;
-            String genValue = gen.value().length() == 0 ? gen.generator() : gen.value();
-            switch (gen.strategy()) {
-                case SEQUENCE:
-                    try (PreparedStatement st = connection.prepareStatement("SELECT nextval(?);")) {
-                        st.setString(1, genValue);
-                        try (ResultSet rs = st.executeQuery()) {
-                            if (rs.next()) idValue = idFromResult(rs, cell.attribute);
+            Object idValue = row.getColumnValue(index, idPropertyPath);
+            if (idIsNull(idValue)) {
+                String genValue = gen.value().length() == 0 ? gen.generator() : gen.value();
+                switch (gen.strategy()) {
+                    case SEQUENCE:
+                        try (PreparedStatement st = connection.prepareStatement("SELECT nextval(?);")) {
+                            st.setString(1, genValue);
+                            try (ResultSet rs = st.executeQuery()) {
+                                if (rs.next()) idValue = idFromResult(rs, cell.attribute);
+                            }
                         }
-                    }
-                    break;
-                case SELECT:
-                    try (Statement st = connection.createStatement()) {
-                        try (ResultSet rs = st.executeQuery(genValue)) {
-                            if (rs.next()) idValue = idFromResult(rs, cell.attribute);
+                        break;
+                    case SELECT:
+                        try (Statement st = connection.createStatement()) {
+                            try (ResultSet rs = st.executeQuery(genValue)) {
+                                if (rs.next()) idValue = idFromResult(rs, cell.attribute);
+                            }
                         }
-                    }
-                    break;
+                        break;
+                }
+                if (idValue != null)
+                    row.setColumnValue(idValue, index, idPropertyPath, false);
             }
-            if (idValue != null)
-                row.setColumnValue(idValue, index, idPropertyPath, false);
         }
 
         if (idIsNull(row.getColumnValue(index, idPropertyPath)))
@@ -532,31 +553,40 @@ public class DDataView extends AbstractDataView {
     private class RowUpdates {
         final DDataViewRow row;
         final Date dateNow;
-        final List<PreparedUpdates> iu = new ArrayList<>();
-        final List<Integer> ii = new ArrayList<>();
-        final List<PreparedUpdates> uu = new ArrayList<>();
-        final List<Integer> ui = new ArrayList<>();
+        final List<PreparedUpdates> insertBeforeStatements = new ArrayList<>();
+        final List<Integer> insertBeforeIndexes = new ArrayList<>();
+        final List<PreparedUpdates> updatesStatements = new ArrayList<>();
+        final List<Integer> updatesIndexes = new ArrayList<>();
+        final List<PreparedUpdates> insertAfterStatements = new ArrayList<>();
+        final List<Integer> insertAfterIndexes = new ArrayList<>();
 
         RowUpdates(DDataViewRow row, Date dateNow) {
             this.row = row;
             this.dateNow = dateNow;
         }
 
-        void addInsert(PreparedUpdates pk, Integer updatedIndex) {
-            iu.add(pk);
-            ii.add(updatedIndex);
+        void addInsertBefore(PreparedUpdates pk, Integer updatedIndex) {
+            insertBeforeStatements.add(pk);
+            insertBeforeIndexes.add(updatedIndex);
+        }
+
+        void addInsertAfter(PreparedUpdates pk, Integer updatedIndex) {
+            insertAfterStatements.add(pk);
+            insertAfterIndexes.add(updatedIndex);
         }
 
         void addUpdate(PreparedUpdates pk, Integer updatedIndex) {
-            uu.add(pk);
-            ui.add(updatedIndex);
+            updatesStatements.add(pk);
+            updatesIndexes.add(updatedIndex);
         }
 
         void fillStatements() throws SQLException {
-            for (int i = 0; i < iu.size(); i++)
-                iu.get(i).fillInsert(row, ii.get(i), dateNow);
-            for (int i = 0; i < uu.size(); i++)
-                uu.get(i).fillUpdate(row, ui.get(i), dateNow);
+            for (int i = 0; i < insertBeforeStatements.size(); i++)
+                insertBeforeStatements.get(i).fillInsert(row, insertBeforeIndexes.get(i), dateNow);
+            for (int i = 0; i < updatesStatements.size(); i++)
+                updatesStatements.get(i).fillUpdate(row, updatesIndexes.get(i), dateNow);
+            for (int i = 0; i < insertAfterStatements.size(); i++)
+                insertAfterStatements.get(i).fillInsert(row, insertAfterIndexes.get(i), dateNow);
         }
     }
 }

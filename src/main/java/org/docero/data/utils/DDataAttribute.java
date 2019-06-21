@@ -18,10 +18,16 @@ public interface DDataAttribute extends DDataBasicAttribute {
 
     Class<? extends Serializable> getBeanInterface();
 
-    public static boolean equals(DDataAttribute a1, DDataAttribute a2) {
+    static boolean equals(DDataAttribute a1, DDataAttribute a2) {
         return Objects.equals(a1.getColumnName(), a2.getColumnName())
                 && Objects.equals(a1.joinTable(), a2.joinTable())
                 && Arrays.equals(a1.joinBy(), a2.joinBy())
                 && Arrays.equals(a1.joinOn(), a2.joinOn());
+    }
+
+    @SuppressWarnings("unchecked")
+    static Class<? extends DDataAttribute> loadEnum(Class<?> beanInterface) throws ClassNotFoundException {
+        return (Class<? extends DDataAttribute>) DDataAttribute.class.getClassLoader()
+                .loadClass(beanInterface.getCanonicalName() + "_WB_");
     }
 }

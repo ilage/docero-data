@@ -920,7 +920,7 @@ abstract class AbstractDataView {
 
         TableEntity(Class<? extends DDataAttribute> root) {
             this.parent = null;
-            this.name = null;
+            this.name = "";
             this.attributes = new ArrayList<>();
             this.collection = false;
             try {
@@ -936,7 +936,7 @@ abstract class AbstractDataView {
         TableEntity(TableEntity parent, String name, DDataFilter filter) {
             DDataAttribute mapByAttribute = filter.getAttribute();
             this.parent = parent;
-            this.name = name;
+            this.name = name == null ? "" : name;
             Class<? extends DDataAttribute> beanEnum = (Class<? extends DDataAttribute>) mapByAttribute.getJavaType();
             this.attributes = Arrays.stream(beanEnum.getEnumConstants()).collect(Collectors.toList());
             this.collection = mapByAttribute.isCollection();

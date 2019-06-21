@@ -75,6 +75,16 @@ public class DData {
     }
 
     @SuppressWarnings("unchecked")
+    public <T extends Serializable> List<Class<? extends T>> getInterfaces4Supper(Class<T> superClass) {
+        return modules.values().stream()
+                .flatMap(m -> m.getImplementations().keySet().stream())
+                .filter(superClass::isAssignableFrom)
+                .filter(r -> r != superClass)
+                .map(r -> (Class<? extends T>) r)
+                .collect(Collectors.toList());
+    }
+
+    @SuppressWarnings("unchecked")
     public <R> R getRepository(Class<R> clazz) {
         R r = (R) buildedRepositories.get(clazz);
         if (r != null) return r;

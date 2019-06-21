@@ -42,9 +42,10 @@ public class DDataViewRows {
     }
 
     public DDataViewRow getRow(Object key) {
-        return new DDataViewRow(view, map.stream()
+        Map<String, Object> r = map.stream()
                 .filter(o -> Objects.equals(key, o.get("dDataBeanKey_")))
-                .findAny().orElse(null));
+                .findAny().orElse(null);
+        return r == null ? null : new DDataViewRow(view, r);
     }
 
     public DDataViewRow getRow(int index) {
@@ -54,6 +55,7 @@ public class DDataViewRows {
     public DDataViewRow addRow() {
         HashMap<String, Object> buildedRow = new HashMap<>();
         buildedRow.put("dDataBeanKey_", UUID.randomUUID().toString());
+        buildedRow.put("dDataAppendRowInTable_", "yes");
         map.add(buildedRow);
         return new DDataViewRow(view, buildedRow);
     }

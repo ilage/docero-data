@@ -32,6 +32,7 @@ class PreparedUpdates implements Closeable {
     private final Map<String, PreparedMap> mappings;
     private final List<DDataAttribute> unModified;
     private final List<PreparedStatement> psl = new ArrayList<>();
+    public boolean one2Many;
 
     PreparedUpdates(DDataView dDataView, AbstractDataView.TableEntity entity, String entityPropertyPath, Connection connection) throws DDataException, SQLException {
         this.connection = connection;
@@ -46,7 +47,9 @@ class PreparedUpdates implements Closeable {
             entity.parent.mappings.entrySet().stream()
                     .filter(m -> m.getValue().get(entity) != null &&
                             !m.getValue().get(entity).attribute.isPrimaryKey() && !m.getValue().get(entity).isVersion)
-                    .filter(m -> dDataView.tableCells.values().contains(m.getKey()))
+                    .filter(m -> dDataView.tableCells.values().stream().anyMatch(
+                            k -> Objects.equals(m.getKey().name, k.name) && Objects.equals(m.getKey().attribute, k.attribute)
+                    ))
                     .forEach(m -> {
                         AbstractDataView.TableCell cell = m.getValue().get(entity);
                         mappings.put(cell.name, new PreparedMap(cell, m.getKey(), entity.isCollection()));
@@ -102,7 +105,7 @@ class PreparedUpdates implements Closeable {
                     row.getColumnValue(updatedIndex,
                             propertyPath(entity.versionFrom.getPropertyName())));
 
-            if (LOG.isTraceEnabled()) {
+            /*if (LOG.isTraceEnabled()) {
                 LOG.trace(ps.toString());
                 LOG.trace("Parameters: " + (entity.versionTo != null ? (
                                 "NOW(?)," +
@@ -136,7 +139,7 @@ class PreparedUpdates implements Closeable {
                                 row.getColumnValue(updatedIndex,
                                         propertyPath(entity.versionFrom.getPropertyName()))
                 );
-            }
+            }*/
         } else {
             int pIdx = 1;
             for (AbstractDataView.TableCell prop : props)
@@ -150,7 +153,7 @@ class PreparedUpdates implements Closeable {
                 fillStatement(ps, pIdx++, id,
                         row.getColumnValue(updatedIndex,
                                 propertyPath(id.getPropertyName())));
-            if (LOG.isTraceEnabled()) {
+            /*if (LOG.isTraceEnabled()) {
                 LOG.trace(ps.toString());
                 LOG.trace("Parameters: " +
                         props.stream().map(prop -> row.getColumnValue(updatedIndex, prop.name))
@@ -168,7 +171,7 @@ class PreparedUpdates implements Closeable {
                                 .map(val -> val == null ? "NULL" : val.toString())
                                 .collect(Collectors.joining(","))
                 );
-            }
+            }*/
         }
         psl.add(ps);
     }
@@ -245,7 +248,7 @@ class PreparedUpdates implements Closeable {
     }
 
     private String propertyPath(String propertyName) {
-        return entity.name == null || entity.name.length() == 0 ?
+        return entity.name.length() == 0 ?
                 propertyName :
                 entity.name + "." + propertyName;
     }
@@ -381,7 +384,7 @@ class PreparedUpdates implements Closeable {
         if (entity.versionFrom != null)
             fillStatement(pi, pIdx, entity.versionFrom, dateNow);
 
-        if (LOG.isTraceEnabled()) {
+        /*if (LOG.isTraceEnabled()) {
             LOG.trace(pi.toString());
             LOG.trace("Parameters: " +
                     props.stream().map(prop -> row.getColumnValue(updatedIndex, prop.name))
@@ -406,7 +409,7 @@ class PreparedUpdates implements Closeable {
                             .collect(Collectors.joining(",")) +
                     (entity.versionFrom == null ? "" : ",NOW(?)")
             );
-        }
+        }*/
         psl.add(pi);
     }
 
@@ -446,6 +449,7 @@ class PreparedUpdates implements Closeable {
     void execute() throws SQLException {
         for (PreparedStatement ps : psl)
             try {
+                LOG.trace(ps.toString());
                 ps.execute();
             } catch (SQLException e) {
                 LOG.warn("trouble in " + ps.toString());

@@ -71,6 +71,7 @@ public class DDataTest {
     public void setUp() throws SQLException {
         try (Connection conn = dataSource.getConnection()) {
             try (PreparedStatement st = conn.prepareStatement("" +
+                    "DROP TABLE IF EXISTS ddata.\"inner\";" +
                     "DROP TABLE IF EXISTS ddata.\"sample\";" +
                     "CREATE TABLE ddata.\"sample\" (\n" +
                     "  id INT NOT NULL,\n" +
@@ -82,7 +83,6 @@ public class DDataTest {
                     "  CONSTRAINT \"sample_pkey\" PRIMARY KEY (id)\n" +
                     ");\n" +
                     "\n" +
-                    "DROP TABLE IF EXISTS ddata.\"inner\";" +
                     "CREATE TABLE ddata.\"inner\" (\n" +
                     "  id INT NOT NULL,\n" +
                     "  text VARCHAR(125),\n" +
@@ -90,6 +90,10 @@ public class DDataTest {
                     "  d1 INT,\n" +
                     "  CONSTRAINT \"inner_pkey\" PRIMARY KEY (id)\n" +
                     ");" +
+                    "ALTER TABLE ddata.\"inner\"\n" +
+                    "  ADD CONSTRAINT inner_sample_fk FOREIGN KEY (sample_id) REFERENCES ddata.sample (id)\n" +
+                    "   ON UPDATE CASCADE ON DELETE CASCADE\n" +
+                    "   DEFERRABLE;" +
                     "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (1,'s1',1001,2);\n" +
                     "INSERT INTO ddata.\"sample\" (id, s, i, remote_id) VALUES (2,'s2',1003,1);\n" +
                     "\n" +
@@ -812,6 +816,7 @@ public class DDataTest {
         for (int i = 0; i < 10000; i++) assertNotNull(iInnerRepository.get(inrId));
 
         Inner ni = iInnerRepository.create();
+        ni.setSample(smpl);
         ni.setText("new");
         iInnerRepository.insert(ni);
 
