@@ -397,7 +397,15 @@ public class DDataView extends AbstractDataView {
                                                         entity.beanInterface,
                                                         entity.name,
                                                         updatedIndex, cell, dateNow);
+
                                         pk.fillMappings(row, updatedIndex);
+
+                                        for (TableCell cell : entity.cells)
+                                            if (cell.attribute.isPrimaryKey() && !cell.isVersion)
+                                                checkIdAttribute(connection, row,
+                                                        entity.beanInterface,
+                                                        entity.name,
+                                                        updatedIndex, cell, dateNow);
                                     }
 
                                     if (pk.one2Many)
@@ -512,7 +520,18 @@ public class DDataView extends AbstractDataView {
                     row.setColumnValue(idValue, index, idPropertyPath, false);
             }
         }
+    }
 
+
+    private void checkIdAttribute(
+            Connection connection, DDataViewRow row, Class<? extends Serializable> beanInterface,
+            String entityPropertyPath, Integer index, TableCell cell, Date dateNow
+    ) {
+        String pCase = Character.toUpperCase(cell.attribute.getPropertyName().charAt(0)) +
+                cell.attribute.getPropertyName().substring(1);
+        String idPropertyPath = entityPropertyPath.length() == 0 ?
+                cell.attribute.getPropertyName() :
+                entityPropertyPath + "." + cell.attribute.getPropertyName();
         if (idIsNull(row.getColumnValue(index, idPropertyPath)))
             throw new RuntimeException("can't set property " + idPropertyPath);
     }

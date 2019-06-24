@@ -478,12 +478,12 @@ class PreparedUpdates implements Closeable {
                     entity.parent.mappings.entrySet()) {
                 AbstractDataView.TableCell entityCell = pm.getValue().get(entity);
                 if (entityCell != null) {
-                    int parentIndex = entity.isCollection() ? updatedIndex : 0;
+                    int parentIndex = entity.isCollection() ? 0 : updatedIndex;
                     Object pVal = row.getColumnValue(parentIndex, pm.getKey().name);
                     Object eVal = row.getColumnValue(updatedIndex, entityCell.name);
-                    if (pVal == null && !pm.getKey().attribute.isPrimaryKey())
+                    if (pVal == null)// && !pm.getKey().attribute.isPrimaryKey())
                         row.setColumnValue(eVal, parentIndex, pm.getKey().name, false);
-                    else if (eVal == null && !entityCell.attribute.isPrimaryKey())
+                    else if (eVal == null)// && !entityCell.attribute.isPrimaryKey())
                         row.setColumnValue(pVal, updatedIndex, entityCell.name, false);
                 }
             }
@@ -494,9 +494,9 @@ class PreparedUpdates implements Closeable {
             for (AbstractDataView.TableCell childCell : m.getValue().values()) {
                 Object eVal = row.getColumnValue(updatedIndex, entityCell.name);
                 Object cVal = row.getColumnValue(updatedIndex, childCell.name);
-                if (cVal == null && !childCell.attribute.isPrimaryKey())
+                if (cVal == null)// && !childCell.attribute.isPrimaryKey())
                     row.setColumnValue(eVal, updatedIndex, childCell.name, false);
-                else if (eVal == null && !entityCell.attribute.isPrimaryKey())
+                else if (eVal == null)// && !entityCell.attribute.isPrimaryKey())
                     row.setColumnValue(cVal, updatedIndex, entityCell.name, false);
             }
         }

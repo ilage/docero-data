@@ -329,7 +329,23 @@ public class DDataFilter {
      */
     @Override
     public boolean equals(Object o) {
-        return o != null && o instanceof DDataFilter && DDataAttribute.equals(((DDataFilter) o).attribute, attribute);
+        return o != null && o instanceof DDataFilter &&
+                DDataAttribute.equals(((DDataFilter) o).attribute, attribute);
+    }
+
+    /**
+     * All attributes in tree are equals
+     *
+     * @param o compared object
+     * @return true if attributes in tree are equals
+     */
+    public boolean treeEquals(Object o) {
+        return o != null && o instanceof DDataFilter &&
+                DDataAttribute.equals(((DDataFilter) o).attribute, attribute) &&
+                ((filters == null && ((DDataFilter) o).getFilters() == null) ||
+                        (filters != null && ((DDataFilter) o).getFilters() != null &&
+                                filters.stream().allMatch(f -> ((DDataFilter) o).getFilters().stream()
+                                        .anyMatch(i -> i.equals(f)))));
     }
 
     /**
