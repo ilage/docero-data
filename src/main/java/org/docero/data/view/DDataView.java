@@ -325,7 +325,6 @@ public class DDataView extends AbstractDataView {
         if (updates == null || updates.size() == 0) return;
         final Date dateNow = DMLOperations.date();
 
-        Connection connection = sqlSession.getConnection();
         Set<PreparedUpdates> prepared = new TreeSet<>((e1, e2) ->
                 (e2.one2Many ? 1 : -1) * (e1.entity.parent == e2.entity ? -1 : (e2.entity.parent == e1.entity ? 1 : (
                         e2.entity.name.compareTo(e1.entity.name)
@@ -357,81 +356,20 @@ public class DDataView extends AbstractDataView {
             // next, write updated rows to database
             for (DDataViewRow row : updates.keySet())
                 try {
-                    RowUpdates rowUpdates = new RowUpdates(row, dateNow);
                     TreeMap<String, Set<Integer>> updatedEntities = updates.get(row);
-                    HashMap<String, Set<Integer>> updatedParents = new HashMap<>();
-                    boolean isNewObject = "yes".equals(row.getColumnValue(0, "dDataAppendRowInTable_"));
-                    CopyOnWriteArrayList<String> orderedPaths = new CopyOnWriteArrayList<>(updatedEntities.keySet());
-                    for (String entityPropertyPath : orderedPaths) {
-                        AbstractDataView.TableEntity entity = this.getEntityForPath(
-                                entityPropertyPath.length()==0 ? null : entityPropertyPath
-                        );
-                        @SuppressWarnings("unchecked")
-                        DDataBeanUpdateService beanService = getUpdateServiceFor(entity.name);
-                        if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
-                            PreparedUpdates pk = prepared.stream()
-                                    .filter(k -> Objects.equals(entityPropertyPath, k.entityPropertyPath))
-                                    .findAny().orElse(null);
-                            if (pk == null)
-                                prepared.add(pk = new PreparedUpdates(this, entity, entityPropertyPath, connection));
 
-                            for (Integer updatedIndex : updatedEntities.get(entity.name)) {
-                                String firstIdProp = pk.getFirstIdColumnName();
-                                Object anyId = row.getColumnValue(updatedIndex,
-                                        entity.name.length() == 0 ? firstIdProp :
-                                                entity.name + "." + firstIdProp);
+                    Map<String, Set<Integer>> parents2update;
+                    while (!(
+                            parents2update = prepareUpdates(prepared,
+                                    new ArrayList<>(updatedEntities.keySet()), row)
+                    ).isEmpty())
+                        mergeUpdatedEntities(updatedEntities, parents2update);
 
-                                Map<AbstractDataView.TableEntity, AbstractDataView.TableCell> mapFromParent =
-                                        entity.parent == null ? null : entity.parent.mappings.entrySet().stream()
-                                                .filter(parentMap -> !parentMap.getKey().attribute.isPrimaryKey() &&
-                                                        parentMap.getValue().get(entity) != null)
-                                                .map(Map.Entry::getValue).findAny().orElse(null);
-                                pk.one2Many = mapFromParent != null && mapFromParent.values().stream()
-                                        .noneMatch(o -> o.attribute.isCollection());
+                    List<String> kl = new ArrayList<>(updatedEntities.keySet());
+                    Collections.reverse(kl);
+                    prepareUpdates(prepared, kl, row);
 
-                                if (isNewObject || idIsNull(anyId)) { //is new element
-                                    if (beanService == null) {
-                                        for (TableCell cell : entity.cells)
-                                            if (cell.attribute.isPrimaryKey() && !cell.isVersion)
-                                                fillIdAttribute(connection, row,
-                                                        entity.beanInterface,
-                                                        entity.name,
-                                                        updatedIndex, cell, dateNow);
-
-                                        pk.fillMappings(row, updatedIndex);
-
-                                        for (TableCell cell : entity.cells)
-                                            if (cell.attribute.isPrimaryKey() && !cell.isVersion)
-                                                checkIdAttribute(connection, row,
-                                                        entity.beanInterface,
-                                                        entity.name,
-                                                        updatedIndex, cell, dateNow);
-                                    }
-
-                                    if (pk.one2Many)
-                                        rowUpdates.addInsertBefore(pk, updatedIndex);
-                                    else
-                                        rowUpdates.addInsertAfter(pk, updatedIndex);
-                                } else
-                                    rowUpdates.addUpdate(pk, updatedIndex);
-
-                                // if children inserts modify parent mapping attributes, update parents entities
-                                if (pk.one2Many) {
-                                    int lii = entity.name.lastIndexOf('.');
-                                    String parentPath = lii < 0 ? null : entity.name.substring(0, lii);
-                                    TableEntity parentEntity = getEntityForPath(parentPath);
-                                    int parentIndex = entity.isCollection() ? 0 : updatedIndex;
-                                    Set<Integer> uev = updatedEntities.get(parentEntity.name);
-                                    if (uev == null) {
-                                        updatedEntities.put(parentEntity.name, uev = new HashSet<>());
-                                        orderedPaths.add(parentEntity.name);
-                                    }
-                                    uev.add(parentIndex);
-                                }
-                            }
-                        }
-                    }
-                    rowUpdates.fillStatements();
+                    fillStatements(prepared, row);
                 } catch (Exception e) {
                     exceptionHandler.handle(e);
                 }
@@ -442,9 +380,138 @@ public class DDataView extends AbstractDataView {
         }
     }
 
+    private void mergeUpdatedEntities(
+            TreeMap<String, Set<Integer>> updatedEntities,
+            Map<String, Set<Integer>> parents2update
+    ) {
+        parents2update.keySet().forEach(entityPatch -> {
+            Set<Integer> indexes = updatedEntities.computeIfAbsent(entityPatch, (k) -> new HashSet<>());
+            indexes.addAll(parents2update.get(entityPatch));
+        });
+    }
+
+    private void fillStatements(
+            Set<PreparedUpdates> prepared, DDataViewRow row
+    ) throws DDataException, SQLException, NoSuchMethodException {
+        final Date dateNow = DMLOperations.date();
+        Connection connection = sqlSession.getConnection();
+        TreeMap<String, Set<Integer>> updatedEntities = updates.get(row);
+        RowUpdates rowUpdates = new RowUpdates(row, dateNow);
+
+        for (String entityPropertyPath : updatedEntities.keySet()) {
+            AbstractDataView.TableEntity entity = this.getEntityForPath(
+                    entityPropertyPath.length() == 0 ? null : entityPropertyPath
+            );
+            @SuppressWarnings("unchecked")
+            DDataBeanUpdateService beanService = getUpdateServiceFor(entity.name);
+            if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
+                PreparedUpdates pk = prepared.stream()
+                        .filter(k -> Objects.equals(entityPropertyPath, k.entityPropertyPath))
+                        .findAny().orElseThrow(() -> new DDataException("unknown"));
+
+                for (Integer updatedIndex : updatedEntities.get(entity.name)) {
+                    Map<AbstractDataView.TableEntity, AbstractDataView.TableCell> mapFromParent =
+                            entity.parent == null ? null : entity.parent.mappings.entrySet().stream()
+                                    .filter(parentMap -> !parentMap.getKey().attribute.isPrimaryKey() &&
+                                            parentMap.getValue().get(entity) != null)
+                                    .map(Map.Entry::getValue).findAny().orElse(null);
+
+                    if (row.isNewEntity(updatedIndex, entity.name)) { //is new element
+                        if (beanService == null) {
+                            pk.fillMappings(row, updatedIndex);
+
+                            for (TableCell cell : entity.cells)
+                                if (cell.attribute.isPrimaryKey() && !cell.isVersion)
+                                    checkIdAttribute(connection, row,
+                                            entity.beanInterface,
+                                            entity.name,
+                                            updatedIndex, cell, dateNow);
+                        }
+
+                        if (pk.one2Many)
+                            rowUpdates.addInsertBefore(pk, updatedIndex);
+                        else
+                            rowUpdates.addInsertAfter(pk, updatedIndex);
+                    } else
+                        rowUpdates.addUpdate(pk, updatedIndex);
+                }
+            }
+        }
+        rowUpdates.fillStatements();
+    }
+
+    private Map<String, Set<Integer>> prepareUpdates(
+            Set<PreparedUpdates> prepared, List<String> orderedPaths, DDataViewRow row
+    ) throws DDataException, SQLException, NoSuchMethodException {
+        final Date dateNow = DMLOperations.date();
+        Connection connection = sqlSession.getConnection();
+        TreeMap<String, Set<Integer>> updatedEntities = updates.get(row);
+        HashMap<String, Set<Integer>> updatedParents = new HashMap<>();
+
+        for (String entityPropertyPath : orderedPaths) {
+            AbstractDataView.TableEntity entity = this.getEntityForPath(
+                    entityPropertyPath.length() == 0 ? null : entityPropertyPath
+            );
+            @SuppressWarnings("unchecked")
+            DDataBeanUpdateService beanService = getUpdateServiceFor(entity.name);
+            if (beanService == null || beanService.serviceDoesNotMakeUpdates()) {
+                PreparedUpdates pk = prepared.stream()
+                        .filter(k -> Objects.equals(entityPropertyPath, k.entityPropertyPath))
+                        .findAny().orElse(null);
+                if (pk == null)
+                    prepared.add(pk = new PreparedUpdates(this, entity, entityPropertyPath, connection));
+
+                for (Integer updatedIndex : updatedEntities.get(entity.name)) {
+                    boolean isNewRecord = row.isNewEntity(updatedIndex, entity.name);
+                    if (!isNewRecord) {
+                        String columnPrefix = entity.name.length() == 0 ? "" : entity.name + ".";
+                        isNewRecord = pk.ids.stream()
+                                .map(DDataBasicAttribute::getPropertyName)
+                                .map(s -> row.getColumnValue(updatedIndex, columnPrefix + s))
+                                .anyMatch(DDataView::idIsNull);
+                        row.isNewEntity(updatedIndex, entity.name, isNewRecord);
+                    }
+
+                    Map<AbstractDataView.TableEntity, AbstractDataView.TableCell> mapFromParent =
+                            entity.parent == null ? null : entity.parent.mappings.entrySet().stream()
+                                    .filter(parentMap -> !parentMap.getKey().attribute.isPrimaryKey() &&
+                                            parentMap.getValue().get(entity) != null)
+                                    .map(Map.Entry::getValue).findAny().orElse(null);
+                    pk.one2Many = mapFromParent != null && mapFromParent.values().stream()
+                            .noneMatch(o -> o.attribute.isCollection());
+
+                    if (isNewRecord) { //is new element
+                        if (beanService == null) {
+                            for (TableCell cell : entity.cells)
+                                if (cell.attribute.isPrimaryKey() && !cell.isVersion)
+                                    fillIdAttribute(connection, row,
+                                            entity.beanInterface,
+                                            entity.name,
+                                            updatedIndex, cell, dateNow);
+                        }
+                    }
+
+                    // if children inserts modify parent mapping attributes, update parents entities
+                    if (pk.one2Many) {
+                        int lii = entity.name.lastIndexOf('.');
+                        String parentPath = lii < 0 ? null : entity.name.substring(0, lii);
+                        TableEntity parentEntity = getEntityForPath(parentPath);
+                        int parentIndex = entity.isCollection() ? 0 : updatedIndex;
+                        Set<Integer> uev = updatedEntities.get(parentEntity.name);
+                        if (uev == null || !uev.contains(parentIndex)) {
+                            updatedParents.put(parentEntity.name, uev = new HashSet<>());
+                            uev.add(parentIndex);
+                        }
+                    }
+                }
+            }
+        }
+        return updatedParents;
+    }
+
     static boolean idIsNull(Object anyId) {
         return anyId == null || (
-                anyId instanceof Number && ((Number) anyId).longValue() == 0
+                anyId instanceof Number && ((Number) anyId).longValue() == 0L
         );
     }
 
@@ -464,7 +531,7 @@ public class DDataView extends AbstractDataView {
     private void fillIdAttribute(
             Connection connection, DDataViewRow row, Class<? extends Serializable> beanInterface,
             String entityPropertyPath, Integer index, TableCell cell, Date dateNow
-    ) throws NoSuchMethodException, SQLException {
+    ) throws NoSuchMethodException, SQLException, DDataException {
         String pCase = Character.toUpperCase(cell.attribute.getPropertyName().charAt(0)) +
                 cell.attribute.getPropertyName().substring(1);
         Method idProp = beanInterface.getMethod("get" + pCase);

@@ -57,18 +57,18 @@ public abstract class DDataBeanUpdateService<T> {
                     }
                 }
             }
-        // write bean properties to view row if updates to database must be wrote by view
-        if (this.serviceDoesNotMakeUpdates())
-            for (DDataAttribute attribute : entity.attributes) {
-                String property = attribute.getPropertyName();
-                if (!attribute.isMappedBean() && property != null) {
-                    Object val = getProperty(bean, attribute);
-                    if (val != null)
-                        row.setColumnValue(val, index, entityPath.length() == 0 ?
-                                        property : entityPath + "." + property,
-                                false);
-                }
+        // write bean properties to view row
+        //if updates to database must be wrote by view: if (this.serviceDoesNotMakeUpdates())
+        for (DDataAttribute attribute : entity.attributes) {
+            String property = attribute.getPropertyName();
+            if (!attribute.isMappedBean() && property != null) {
+                Object val = getProperty(bean, attribute);
+                if (val != null)
+                    row.setColumnValue(val, index, entityPath.length() == 0 ?
+                                    property : entityPath + "." + property,
+                            false);
             }
+        }
 
         return anyParentItemMayBeModified;
     }

@@ -1,6 +1,7 @@
 package org.docero.data.view;
 
 import org.docero.data.utils.DDataAttribute;
+import org.docero.data.utils.DDataException;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -13,8 +14,11 @@ public class DDataViewRow {
     @SuppressWarnings("unchecked")
     public DDataViewRow(DDataView view, Object o) {
         this.view = view;
-        if (o instanceof Map) map = (Map<Object, Object>) o;
-        else map = null;
+        if (o instanceof Map) {
+            map = (Map<Object, Object>) o;
+            if ("yes".equals(map.get("dDataAppendRowInTable_")))
+                isNewEntity(0, "", true);
+        } else map = null;
     }
 
     public Object[] getColumn(DDataAttribute... path) {
@@ -105,7 +109,7 @@ public class DDataViewRow {
      * @param index index of value in column values
      * @param path  entityPropertyPath to column
      */
-    public void setColumnValue(Object value, int index, DDataAttribute... path) {
+    public void setColumnValue(Object value, int index, DDataAttribute... path) throws DDataException {
         setColumnValue(value, index, Arrays.stream(path)
                 .map(DDataAttribute::getPropertyName)
                 .collect(Collectors.joining(".")));
@@ -120,18 +124,24 @@ public class DDataViewRow {
      * @param path2Parameter entityPropertyPath to column
      */
     @SuppressWarnings("unchecked")
-    public void setColumnValue(Object value, int index, String path2Parameter) {
+    public void setColumnValue(Object value, int index, String path2Parameter) throws DDataException {
         setColumnValue(value, index, path2Parameter, true);
     }
 
+    /**
+     * @param value          устанавливаемое значение
+     * @param index          индекс значения в колонке представлении
+     * @param path2Parameter из имён свойств через точку (определит колонку)
+     * @param addViewUpdate  добавлять как изменение или просто установить значение памяти
+     */
     @SuppressWarnings("unchecked")
-    void setColumnValue(Object value, int index, String path2Parameter, boolean addViewUpdate) {
+    void setColumnValue(Object value, int index, String path2Parameter, boolean addViewUpdate) throws DDataException {
         if (map == null) return;
 
         Map<Object, Object> innerMap = map;
         String[] path = path2Parameter.split("\\.");
         AbstractDataView.TableCell cell = view.tableCells.get(path2Parameter);
-        if (cell == null) throw new RuntimeException("not found column by path '" + path2Parameter + "'");
+        if (cell == null) throw new UnknownTableColumn("not found column by path '" + path2Parameter + "'");
 
         String lastElementPath = null;
         for (int offset = 0; offset < path.length; offset++) {
@@ -172,5 +182,18 @@ public class DDataViewRow {
         }
 
         if (addViewUpdate) view.addUpdate(this, index, path2Parameter);
+    }
+
+    private HashMap<String, Boolean> isNewEntity = null;
+
+    boolean isNewEntity(Integer updatedIndex, String name) {
+        if (isNewEntity == null) return false;
+        Boolean b = isNewEntity.get(name + ":" + updatedIndex);
+        return b == null ? false : b;
+    }
+
+    void isNewEntity(Integer updatedIndex, String name, boolean f) {
+        if (isNewEntity == null) isNewEntity = new HashMap<>();
+        isNewEntity.put(name + ":" + updatedIndex, f);
     }
 }

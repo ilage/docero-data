@@ -73,45 +73,58 @@ abstract class AbstractDataView {
         fillViewEntities(Arrays.asList(columns), null, rootEntity);
     }
 
+    /**
+     * Добавляем в представление колонки идентификаторов связанных сущностей и поля использкуемые для связи
+     *
+     * @param columns список колонок определенных для загрузки
+     * @param path    путь до сущности, начинаем с null
+     * @param parent  родительская сущность
+     */
     private void fillViewEntities(List<DDataFilter> columns, String path, final TableEntity parent) {
-        // basic values
+        String parentVersionColumn = parent.versionFrom == null ? "" : parent.versionFrom.getColumnName();
+        // basic values (двигаемся по иерархии фильтра и добавляем листья дерева, простые поля-свойства)
         for (DDataFilter column : columns) {
             DDataAttribute attribute = column.getAttribute();
-            String versionColumn = parent.versionFrom == null ? "" : parent.versionFrom.getColumnName();
             if (attribute != null && !attribute.isMappedBean()) {
                 String nameInPath = column.getMapName();
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
-                parent.addCell(new TableCell(cp, column, versionColumn.equals(attribute.getColumnName())));
+                parent.addCell(new TableCell(cp, column, parentVersionColumn.equals(attribute.getColumnName())));
             }
         }
-        // mapped beans
+        // mapped beans (для узлов дерева фильтра вызовем себя в рекурсии, но прежде...
         for (DDataFilter column : columns) {
             DDataAttribute attribute = column.getAttribute();
             if (attribute != null && attribute.isMappedBean()) {
                 String nameInPath = column.getMapName();
                 String cp = path == null ? nameInPath : (path + "." + nameInPath);
 
-                TableEntity entity = getEntityForPath(cp);
-                if (entity == null) {
-                    entity = new TableEntity(parent, cp, column);
-                    parent.addEntity(entity);
+                TableEntity child = getEntityForPath(cp);
+                // если это новая сущность в нашем списке, то выясним чем она с нами связана
+                if (child == null) {
+                    child = new TableEntity(parent, cp, column);
+                    parent.addEntity(child);
 
-                    String versionColumn = entity.versionFrom == null ? "" : entity.versionFrom.getColumnName();
-                    if (!column.isExternalData())
-                        for (DDataAttribute entityAttr : entity.attributes) {
-                            int idx = indexOf(attribute.joinOn(), entityAttr.getColumnName());
-                            String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
-                            if (entityAttr.isPrimaryKey() || joinBy != null) {
-                                TableCell idCell = new TableCell(cp + "." + entityAttr.getPropertyName(), entityAttr,
-                                        versionColumn.equals(entityAttr.getColumnName()));
-                                entity.addCell(idCell);
-                                if (joinBy != null) {
+                    if (!column.isExternalData()) {
+                        // это не сущность получаемая от web-сервиса
+                        String versionColumn = child.versionFrom == null ? "" : child.versionFrom.getColumnName();
+                        for (DDataAttribute childAttr : child.attributes) {
+                            int idx = indexOf(attribute.joinOn(), childAttr.getColumnName());
+                            String childJoinedBy = idx < 0 ? null : attribute.joinBy()[idx];
+                            if (childAttr.isPrimaryKey() || childJoinedBy != null) {
+                                // идентификатор связной сущности или поле участвующее в связи
+                                TableCell idCell = new TableCell(
+                                        cp + "." + childAttr.getPropertyName(), childAttr,
+                                        versionColumn.equals(childAttr.getColumnName()));
+                                child.addCell(idCell);
+                                // добавили, а теперь для связи ...
+                                if (childJoinedBy != null) {
                                     TableCell parentMapCell = parent.cells.stream()
-                                            .filter(c -> joinBy.equals(c.attribute.getColumnName()))
+                                            .filter(c -> childJoinedBy.equals(c.attribute.getColumnName()))
                                             .findAny().orElse(null);
                                     if (parentMapCell == null) {
                                         DDataAttribute parentMapAttr = parent.attributes.stream()
-                                                .filter(c -> joinBy.equals(c.getColumnName()))
+                                                .filter(c -> !c.isMappedBean())
+                                                .filter(c -> childJoinedBy.equals(c.getColumnName()))
                                                 .findAny().orElse(null);
                                         assert parentMapAttr != null;
                                         parent.addCell(parentMapCell = new TableCell(
@@ -122,11 +135,11 @@ abstract class AbstractDataView {
                                     }
                                     Map<TableEntity, TableCell> pm = parent.mappings.computeIfAbsent(parentMapCell,
                                             (t) -> new HashMap<>());
-                                    pm.put(entity, idCell);
+                                    pm.put(child, idCell);
                                 }
                             }
                         }
-                    else {
+                    } else {
                         RemoteBeanRef rbr = new RemoteBeanRef(path, nameInPath, attribute.getBeanInterface(),
                                 attribute.joinOn() == null ? null : attribute.joinOn()[0]);
                         for (DDataAttribute entityAttr : parent.attributes) {
@@ -134,6 +147,7 @@ abstract class AbstractDataView {
                             String joinBy = idx < 0 ? null : attribute.joinBy()[idx];
                             if (joinBy != null) {
                                 TableCell parentMapCell = parent.cells.stream()
+                                        .filter(c -> !c.attribute.isMappedBean())
                                         .filter(c -> joinBy.equals(c.attribute.getColumnName()))
                                         .findAny().orElseGet(() -> {
                                             TableCell pmc = new TableCell(
@@ -151,8 +165,9 @@ abstract class AbstractDataView {
                 }
 
                 if (!column.isExternalData() && column.getFilters() != null)
-                    fillViewEntities(column.getFilters(), cp, entity);
+                    fillViewEntities(column.getFilters(), cp, child);
             } else if (attribute == null && column.getFilters() != null)
+                // атрибут простой, но имеет вложенные фильтры не представляю как это может быть, но
                 fillViewEntities(column.getFilters(), path, parent);
         }
     }
@@ -166,7 +181,7 @@ abstract class AbstractDataView {
     }
 
     TableEntity getEntityForPath(String s) {
-        return tableEntities.get(s);
+        return tableEntities.get("".equals(s) ? null : s);
     }
 
     DSQL buildFrom() {
@@ -426,7 +441,7 @@ abstract class AbstractDataView {
             if (field.isEnumConstant()) {
                 DDataAttribute attribute = (DDataAttribute) Enum.valueOf(clazz, field.getName());
                 String propertyName = attribute.getPropertyName();
-                if (propertyName != null && column.getName().equals(propertyName)) {
+                if (propertyName != null && propertyName.equals(column.getName())) {
                     return !column.hasFilters() ||
                             column.getFilters().stream().allMatch(c -> isApplicable(attribute.getJavaType(), c));
                 }
@@ -964,7 +979,7 @@ abstract class AbstractDataView {
 
         void addEntity(TableEntity entity) {
             entities.add(entity);
-            tableEntities.put(entity.name, entity);
+            tableEntities.put("".equals(entity.name) ? null : entity.name, entity);
         }
     }
 

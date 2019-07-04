@@ -55,6 +55,7 @@ public class DDataViewRows {
     public DDataViewRow addRow() {
         HashMap<String, Object> buildedRow = new HashMap<>();
         buildedRow.put("dDataBeanKey_", UUID.randomUUID().toString());
+        // мы предполагаем что для корневой сущности ID может быть загружен из таблицы, явно зададим что он новый
         buildedRow.put("dDataAppendRowInTable_", "yes");
         map.add(buildedRow);
         return new DDataViewRow(view, buildedRow);

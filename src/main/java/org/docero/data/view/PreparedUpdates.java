@@ -25,14 +25,14 @@ class PreparedUpdates implements Closeable {
     /**
      * ids without version
      */
-    private final List<DDataAttribute> ids = new ArrayList<>();
+    final List<DDataAttribute> ids = new ArrayList<>();
     private final List<AbstractDataView.TableCell> props = new ArrayList<>();
 
     private final Connection connection;
     private final Map<String, PreparedMap> mappings;
     private final List<DDataAttribute> unModified;
     private final List<PreparedStatement> psl = new ArrayList<>();
-    public boolean one2Many;
+    boolean one2Many;
 
     PreparedUpdates(DDataView dDataView, AbstractDataView.TableEntity entity, String entityPropertyPath, Connection connection) throws DDataException, SQLException {
         this.connection = connection;
@@ -358,10 +358,6 @@ class PreparedUpdates implements Closeable {
         }
     }
 
-    String getFirstIdColumnName() {
-        return ids.iterator().next().getPropertyName();
-    }
-
     void fillInsert(DDataViewRow row, Integer updatedIndex, java.util.Date dateNow) throws SQLException {
         PreparedStatement pi = prepareInsert();
 
@@ -472,7 +468,7 @@ class PreparedUpdates implements Closeable {
      * @param row          - data row
      * @param updatedIndex - index of array value (parent entity)
      */
-    void fillMappings(DDataViewRow row, Integer updatedIndex) {
+    void fillMappings(DDataViewRow row, Integer updatedIndex) throws DDataException {
         if (entity.parent != null)
             for (Map.Entry<AbstractDataView.TableCell, Map<AbstractDataView.TableEntity, AbstractDataView.TableCell>> pm :
                     entity.parent.mappings.entrySet()) {
