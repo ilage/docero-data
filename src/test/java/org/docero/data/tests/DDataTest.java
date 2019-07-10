@@ -721,6 +721,9 @@ public class DDataTest {
             this.add(1003);
         }}).size());
 
+        iSampleRepository.remove(sample.getUuid(), 1);
+
+        iSampleRepository.removeWithJoins(sample.getUuid(), sample.getInner().getText());
     }
 
     @Test

@@ -109,4 +109,20 @@ public interface SampleRepository extends DDataRepository<Sample, Integer> {
     List<Sample> listByUUid(@SampleRepository_Filter_(
             value = Sample_.UUID
     ) UUID uuid);
+
+    void remove(
+            @SampleRepository_Filter_(
+                    Sample_.UUID
+            ) UUID uuid,
+            @SampleRepository_Filter_(
+                    Sample_.REMOTE_ID
+            ) Integer remoteId);
+
+    void removeWithJoins(
+            @SampleRepository_Filter_(
+                    Sample_.UUID
+            ) UUID uuid,
+            @SampleRepository_Filter_(
+                    inner = Inner_.TEXT
+            ) String text);
 }

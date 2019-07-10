@@ -1353,7 +1353,7 @@ class DDataMapBuilder {
                 }
 
                 if (e != null)
-                    if (currentJoin != null && (!addJoins || !currentJoin.useInFieldsList)) {
+                    if (currentJoin != null && (!addJoins || !currentJoin.useInFieldsList || method.methodType == DDataMethodBuilder.MType.DELETE)) {
                         IfExists ifExists = whereExists.get(currentJoin.property.name);
                         if (ifExists == null) {
                             org.w3c.dom.Element existsElt = doc.createElement("trim");
@@ -1388,22 +1388,23 @@ class DDataMapBuilder {
             elt.appendChild(ex.element);
             where.add(elt);
         });
-        if (addJoins) addJoins(mappedTables, sql, versionParameter);
+        if (addJoins && method.methodType != DDataMethodBuilder.MType.DELETE)
+            addJoins(mappedTables, sql, versionParameter);
 
-        if (method.methodType == DDataMethodBuilder.MType.SELECT || method.methodType == DDataMethodBuilder.MType.GET) {
-            domElement.appendChild(doc.createTextNode(sql.toString()));
-            if (where.size() > 0) {
-                org.w3c.dom.Element whereElt = doc.createElement("trim");
-                whereElt.setAttribute("prefix", "WHERE");
-                whereElt.setAttribute("prefixOverrides", "AND ");
-                domElement.appendChild(whereElt);
-                where.forEach(whereElt::appendChild);
-            }
-        } else {
+        //if (method.methodType == DDataMethodBuilder.MType.SELECT || method.methodType == DDataMethodBuilder.MType.GET) {
+        domElement.appendChild(doc.createTextNode(sql.toString()));
+        if (where.size() > 0) {
+            org.w3c.dom.Element whereElt = doc.createElement("trim");
+            whereElt.setAttribute("prefix", "WHERE");
+            whereElt.setAttribute("prefixOverrides", "AND ");
+            domElement.appendChild(whereElt);
+            where.forEach(whereElt::appendChild);
+        }
+        /*} else {
             sql.append("WHERE\n");
             domElement.appendChild(doc.createTextNode(sql.toString()));
             where.forEach(domElement::appendChild);
-        }
+        }*/
         return versionParameter;
     }
 
