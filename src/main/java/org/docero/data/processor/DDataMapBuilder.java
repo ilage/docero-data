@@ -1468,9 +1468,17 @@ class DDataMapBuilder {
                             ).collect(Collectors.joining(" AND ")));
                     DataBeanBuilder thisBean = joinMap.properties.get(0).dataBean;
                     DataBeanBuilder leftBean = joinMap.mappedProperties.get(0).dataBean;
-                    if (leftBean.versionalType != null &&
-                            environment.getTypeUtils().isSameType(thisBean.versionalType, leftBean.versionalType)) {
-
+                    if (leftBean.versionalType != null) {
+                        if (versionParameter == null || versionParameter.property == null) {
+                            if (thisBean.versionalType == null)
+                                throw new RuntimeException("try to join versional bean '" +
+                                        leftBean.name + "' to non-versional '" +
+                                        thisBean.name + "' without option");
+                            else if (!environment.getTypeUtils().isSameType(thisBean.versionalType, leftBean.versionalType))
+                                throw new RuntimeException("try to join versional beans [" +
+                                        leftBean.name + "," + thisBean.name +
+                                        "] with different version types");
+                        }
                         DataBeanPropertyBuilder thisVersionFrom =
                                 thisBean.properties.values().stream().filter(p -> p.isVersionFrom)
                                         .findAny().orElse(null);
