@@ -358,58 +358,67 @@ abstract class AbstractDataView {
 
     List<DSQL> getSubSelects() {
         ArrayList<DSQL> subSelects = new ArrayList();
-        for (CollectionJoin column : selectsForCollections.values()) {
-            DSQL sql = new DSQL();
-            sql.FROM(rootEntity.table + " as t0");
-            HashSet<Integer> joinedInSubQuery = new HashSet<>();
-            HashSet<String> columnsInSubQuery = new HashSet<>();
-            addJoinForSubSelects(sql, column.table, joinedInSubQuery);
+        Set<String> checkKeys = new HashSet<>();
+        while (checkKeys.size() < selectsForCollections.size()) {
+            Set<String> unprocessedKeys = selectsForCollections.keySet().stream()
+                    .filter(e -> !checkKeys.contains(e))
+                    .collect(Collectors.toSet());
+            checkKeys.addAll(unprocessedKeys);
 
-            sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
-            for (DDataFilter col : column.filters) {
-                String uniqKey = column.uniqPath + col.getMapName() + ":" +
-                        col.getAttribute().getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
-                JoinedTable jt = allJoins.get(uniqKey);
-                if (jt != null) addJoinForSubSelects(sql, jt, joinedInSubQuery);
+            for (String k : unprocessedKeys) {
+                CollectionJoin column = selectsForCollections.get(k);
+                DSQL sql = new DSQL();
+                sql.FROM(rootEntity.table + " as t0");
+                HashSet<Integer> joinedInSubQuery = new HashSet<>();
+                HashSet<String> columnsInSubQuery = new HashSet<>();
+                addJoinForSubSelects(sql, column.table, joinedInSubQuery);
 
-                addColumnToViewSql(sql, column.byAttribute, col, column.path, column.uniqPath, column.table.tableIndex,
-                        joinedInSubQuery, columnsInSubQuery, false);
-            }
-            //add ids if not present in columnsInSubQuery (setSortAscending(true))
-            for (Field a : column.clazz.getDeclaredFields())
-                if (a.isEnumConstant()) {
-                    DDataAttribute idAttribute = (DDataAttribute)
-                            Enum.valueOf(column.clazz, a.getName());
-                    if (idAttribute.isPrimaryKey()) {
-                        String idKey = column.path + idAttribute.getPropertyName();
-                        if (!columnsInSubQuery.contains(idKey))
+                sql.SELECT(getKeySQL() + " as \"dDataBeanKey_\"");
+                for (DDataFilter col : column.filters) {
+                    String uniqKey = column.uniqPath + col.getMapName() + ":" +
+                            col.getAttribute().getJavaType().getSimpleName() + PROP_PATCH_DELIMITER;
+                    JoinedTable jt = allJoins.get(uniqKey);
+                    if (jt != null) addJoinForSubSelects(sql, jt, joinedInSubQuery);
+
+                    addColumnToViewSql(sql, column.byAttribute, col, column.path, column.uniqPath, column.table.tableIndex,
+                            joinedInSubQuery, columnsInSubQuery, false);
+                }
+                //add ids if not present in columnsInSubQuery (setSortAscending(true))
+                for (Field a : column.clazz.getDeclaredFields())
+                    if (a.isEnumConstant()) {
+                        DDataAttribute idAttribute = (DDataAttribute)
+                                Enum.valueOf(column.clazz, a.getName());
+                        if (idAttribute.isPrimaryKey()) {
+                            String idKey = column.path + idAttribute.getPropertyName();
+                            if (!columnsInSubQuery.contains(idKey))
+                                try {
+                                    addColumnToViewSql(sql, column.byAttribute, new DDataFilter(idAttribute) {{
+                                                this.setSortAscending(true);
+                                            }}, column.path, column.uniqPath, column.table.tableIndex,
+                                            joinedInSubQuery, columnsInSubQuery, false);
+                                    columnsInSubQuery.add(idKey);
+                                } catch (DDataException ignore) {
+                                }
+                        }
+                    }
+                // add non id mapping columns used by column.byAttribute.joinMapping.values
+                for (String columnName : column.byAttribute.joinOn()) {
+                    DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(column.clazz, columnName);
+                    if (mapAttr != null) {
+                        String mapKey = column.path + mapAttr.getPropertyName();
+                        if (!columnsInSubQuery.contains(mapKey))
                             try {
-                                addColumnToViewSql(sql, column.byAttribute, new DDataFilter(idAttribute) {{
-                                            this.setSortAscending(true);
-                                        }}, column.path, column.uniqPath, column.table.tableIndex,
+                                addColumnToViewSql(sql, column.byAttribute,
+                                        new DDataFilter(mapAttr),
+                                        column.path, column.uniqPath, column.table.tableIndex,
                                         joinedInSubQuery, columnsInSubQuery, false);
-                                columnsInSubQuery.add(idKey);
+                                columnsInSubQuery.add(mapKey);
                             } catch (DDataException ignore) {
                             }
                     }
                 }
-            // add non id mapping columns used by column.byAttribute.joinMapping.values
-            for (String columnName : column.byAttribute.joinOn()) {
-                DDataAttribute mapAttr = getNotIdAttrubuteByColumnName(column.clazz, columnName);
-                if (mapAttr != null) {
-                    String mapKey = column.path + mapAttr.getPropertyName();
-                    if (!columnsInSubQuery.contains(mapKey))
-                        try {
-                            addColumnToViewSql(sql, column.byAttribute,
-                                    new DDataFilter(mapAttr),
-                                    column.path, column.uniqPath, column.table.tableIndex,
-                                    joinedInSubQuery, columnsInSubQuery, false);
-                            columnsInSubQuery.add(mapKey);
-                        } catch (DDataException ignore) {
-                        }
-                }
+                subSelects.add(sql);
             }
-            subSelects.add(sql);
         }
         return subSelects;
     }
