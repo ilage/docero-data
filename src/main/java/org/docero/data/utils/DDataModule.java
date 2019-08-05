@@ -1,6 +1,7 @@
 package org.docero.data.utils;
 
 import org.apache.ibatis.session.SqlSessionFactory;
+import org.docero.data.DData;
 import org.docero.data.DDataRepository;
 
 import java.io.Serializable;
@@ -26,4 +27,12 @@ public interface DDataModule {
     void register(org.docero.data.DData dData, org.docero.data.DDataDictionariesService ds);
 
     Map<Class,Class> getRepositories();
+
+    <T extends java.io.Serializable, C extends java.io.Serializable> T save(
+            T t,
+            Class beanInterface,
+            SqlSessionFactory sqlSessionFactory,
+            UpdateOptions updateOptions,
+            DData dData
+    );
 }

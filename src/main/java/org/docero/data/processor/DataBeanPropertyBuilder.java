@@ -265,17 +265,14 @@ class DataBeanPropertyBuilder {
             cf.println("@javax.xml.bind.annotation.XmlTransient");
         } else {
             getterAnnotations.forEach(a -> {
-                try {
-                    cf.println(a.toString());
-                } catch (IOException ignore) {
-                }
+                cf.println(a.toString());
             });
             if (mappedBean != null) {
                 if (mappedBean.abstractBean) {
                     if (getterAnnotations.stream()
                             .noneMatch(a -> "javax.xml.bind.annotation.XmlElements"
                                     .equals(a.annotationMirror.getAnnotationType().toString()))) {
-                        cf.startBlock("@javax.xml.bind.annotation.XmlElements({");
+                        cf.println("@javax.xml.bind.annotation.XmlElements({");
                         cf.println(this.dataBean.rootBuilder.beansByInterface.values().stream()
                                 .filter(b -> !b.abstractBean)
                                 .filter(b -> b.getTableRef().equals(mappedBean.getTableRef()))
@@ -283,7 +280,7 @@ class DataBeanPropertyBuilder {
                                         b.name + "\",type = " +
                                         b.getImplementationName() + ".class)")
                                 .collect(Collectors.joining(",\n\t\t")));
-                        cf.endBlock("})");
+                        cf.println("})");
                     }
                 } else if (getterAnnotations.stream()
                         .noneMatch(a -> "javax.xml.bind.annotation.XmlElement"
@@ -294,7 +291,7 @@ class DataBeanPropertyBuilder {
                 printKnownXmlAdapters(cf, type, getterAnnotations);
             }
         }
-        cf.startBlock("public " +
+        cf.println("public " +
                 type.toString() + " get" +
                 Character.toUpperCase(name.charAt(0)) +
                 name.substring(1) + "() {"
@@ -315,17 +312,17 @@ class DataBeanPropertyBuilder {
                         Character.toUpperCase(mProp.name.charAt(0)) + mProp.name.substring(1) + "()";
                 if (mappedBean.dictionary != DictionaryType.SMALL || isCollection) {
                     if (mProp.type.getKind().isPrimitive())
-                        cf.startBlock("if(" + name + " == null && " + getter + " != 0) {");
+                        cf.println("if(" + name + " == null && " + getter + " != 0) {");
                     else
-                        cf.startBlock("if(" + name + " == null && " + getter + " != null) {");
+                        cf.println("if(" + name + " == null && " + getter + " != null) {");
                     cf.println(name + " = cached(" + mappedType + ".class," + getter + ");");
-                    cf.endBlock("}");
+                    cf.println("}");
                 } else
                     cf.println(type + " " + name + " = cached(" + mappedType + ".class," + getter + ");");
             }
         }
         cf.println("return " + name + ";");
-        cf.endBlock("}");
+        cf.println("}");
     }
 
     void buildSetter(JavaClassWriter cf) throws IOException {
@@ -335,12 +332,9 @@ class DataBeanPropertyBuilder {
 
         cf.println("");
         setterAnnotations.forEach(a -> {
-            try {
-                cf.println(a.toString());
-            } catch (IOException ignore) {
-            }
+            cf.println(a.toString());
         });
-        cf.startBlock("public void set" +
+        cf.println("public void set" +
                 Character.toUpperCase(name.charAt(0)) +
                 name.substring(1) + "(" +
                 type.toString() + " " +
@@ -354,39 +348,37 @@ class DataBeanPropertyBuilder {
             if (mapping != null) mapping.stream()
                     .forEach(m -> {
                         // поле версии никогда не может быть изменено через изменение связного объекта
-                        if (!m.property.isVersionFrom)
-                            try {
-                                String setter = "this.set" +
-                                        Character.toUpperCase(m.property.name.charAt(0)) + m.property.name.substring(1);
-                                String getter = name + ".get" +
-                                        Character.toUpperCase(m.mappedProperty.name.charAt(0)) +
-                                        m.mappedProperty.name.substring(1);
-                                if (m.property.isId) {
-                                    // при изменение связного объекта, если для связи используется
-                                    // идентификатор, то он может быть изменён только на не нулевое значение
-                                    boolean isNumber = m.property.type.getKind().isPrimitive() ?
-                                            dataBean.rootBuilder.numericType.toString()
-                                                    .equals(environment.getTypeUtils().boxedClass((PrimitiveType) m.property.type)
-                                                            .getSuperclass().toString()) :
-                                            environment.getTypeUtils().isSubtype(
-                                                    m.property.type, dataBean.rootBuilder.numericType);
-                                    if (isNumber)
-                                        cf.println("if(" + name + " != null && " + getter + "() != 0) " +
-                                                setter + "(" + getter + "());");
-                                    else
-                                        cf.println("if(" + name + " != null && " + getter + "() != null) " +
-                                                setter + "(" + getter + "());");
-                                } else
-                                    // при изменение связного объекта, если для связи используется
-                                    // примитив, то он выставляется в 0 (скорее для генерации ошибки)
-                                    cf.println(setter + "(" + name + " == null ? " +
-                                            (m.property.type.getKind().isPrimitive() ? "0" : "null") +
-                                            " : " + getter + "());");
-                            } catch (IOException ignore) {
-                            }
+                        if (!m.property.isVersionFrom) {
+                            String setter = "this.set" +
+                                    Character.toUpperCase(m.property.name.charAt(0)) + m.property.name.substring(1);
+                            String getter = name + ".get" +
+                                    Character.toUpperCase(m.mappedProperty.name.charAt(0)) +
+                                    m.mappedProperty.name.substring(1);
+                            if (m.property.isId) {
+                                // при изменение связного объекта, если для связи используется
+                                // идентификатор, то он может быть изменён только на не нулевое значение
+                                boolean isNumber = m.property.type.getKind().isPrimitive() ?
+                                        dataBean.rootBuilder.numericType.toString()
+                                                .equals(environment.getTypeUtils().boxedClass((PrimitiveType) m.property.type)
+                                                        .getSuperclass().toString()) :
+                                        environment.getTypeUtils().isSubtype(
+                                                m.property.type, dataBean.rootBuilder.numericType);
+                                if (isNumber)
+                                    cf.println("if(" + name + " != null && " + getter + "() != 0) " +
+                                            setter + "(" + getter + "());");
+                                else
+                                    cf.println("if(" + name + " != null && " + getter + "() != null) " +
+                                            setter + "(" + getter + "());");
+                            } else
+                                // при изменение связного объекта, если для связи используется
+                                // примитив, то он выставляется в 0 (скорее для генерации ошибки)
+                                cf.println(setter + "(" + name + " == null ? " +
+                                        (m.property.type.getKind().isPrimitive() ? "0" : "null") +
+                                        " : " + getter + "());");
+                        }
                     });
         }
-        cf.endBlock("}");
+        cf.println("}");
     }
 
     void buildEnumElement(JavaClassWriter cf, HashMap<String, DataBeanBuilder> beansByInterface, ProcessingEnvironment environment) throws IOException {

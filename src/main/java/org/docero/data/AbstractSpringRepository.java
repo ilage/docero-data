@@ -3,13 +3,15 @@ package org.docero.data;
 import java.io.Serializable;
 
 public abstract class AbstractSpringRepository<T extends java.io.Serializable, C extends java.io.Serializable>
-        extends org.mybatis.spring.support.SqlSessionDaoSupport implements org.docero.data.DDataRepository<T, C> {
+        extends org.mybatis.spring.support.SqlSessionDaoSupport
+        implements org.docero.data.DDataRepository<T, C> {
     protected void cache(Serializable bean) {
         DData.cache(bean);
     }
 
     protected <U extends Serializable> java.util.List<U> listCached(
-            Class<U> type, org.apache.ibatis.session.SqlSession session, String selectId) {
+            Class<U> type, org.apache.ibatis.session.SqlSession session,
+            String selectId) {
         return DData.list(type, session, selectId);
     }
 
@@ -20,4 +22,5 @@ public abstract class AbstractSpringRepository<T extends java.io.Serializable, C
     protected void clearVersion(Class<? extends Serializable> type) {
         DData.clearVersion(type);
     }
+
 }

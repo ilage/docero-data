@@ -8,6 +8,7 @@ import org.docero.data.repositories.*;
 import org.docero.data.rmt.Remote_WB_;
 import org.docero.data.utils.*;
 import org.docero.data.view.*;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.slf4j.Logger;
@@ -411,16 +412,16 @@ public class DDataTest {
         }});
 
         row = view.select(0, 100).getRow(0);
-        assertEquals("update linked", row.getColumnValue(0,"listParameter.text"));
-        assertEquals("updated text value", row.getColumnValue(1,"listParameter.text"));
-        row.setColumnValue("Test1", 0,"listParameter.text");
+        assertEquals("update linked", row.getColumnValue(0, "listParameter.text"));
+        assertEquals("updated text value", row.getColumnValue(1, "listParameter.text"));
+        row.setColumnValue("Test1", 0, "listParameter.text");
         assertEquals("Test1", row.getColumnValue(0, "listParameter.text"));
         view.flushUpdates(t -> {
             t.printStackTrace();
             throw new RuntimeException("Too many errors", t);
         });
         rows = view.select(0, 100);
-        assertEquals("Test1",rows.getRow(0).getColumnValue(0,"listParameter.text"));
+        assertEquals("Test1", rows.getRow(0).getColumnValue(0, "listParameter.text"));
     }
 
     @Test
@@ -773,11 +774,12 @@ public class DDataTest {
         // assertEquals(2,st.size());
 
         DDataView view = viewBuilder.build(Sample_WB_.class, new DDataFilter(Sample_WB_.STR_PARAMETER));
-        view.setFilter(new DDataFilter(){{
+        view.setFilter(new DDataFilter() {{
             this.add(new DDataFilter(Sample_WB_.STR_PARAMETER, DDataFilterOperator.LIKE, val));
         }});
         assertEquals(1, view.count());
     }
+
     @Test
     @Transactional
     // sql-operator LIKE --> SIMILAR TO
@@ -785,20 +787,20 @@ public class DDataTest {
         setUp();
 
         List<String> val = Arrays.asList("S1", "%2");
-         List<Sample> st = iSampleRepository.listLikeExt(val);
-         assertNotNull(st);
-         assertEquals(2, st.size());
+        List<Sample> st = iSampleRepository.listLikeExt(val);
+        assertNotNull(st);
+        assertEquals(2, st.size());
         // assertEquals(2,st.size());
 
         DDataView view = viewBuilder.build(Sample_WB_.class, new DDataFilter(Sample_WB_.STR_PARAMETER));
-        view.setFilter(new DDataFilter(){{
+        view.setFilter(new DDataFilter() {{
             this.add(new DDataFilter(Sample_WB_.STR_PARAMETER, DDataFilterOperator.LIKE_IGNORE_CASE, val));
             this.add(new DDataFilter(Sample_WB_.LIST_PARAMETER) {{
                 this.setNotExists(true);
                 this.add(new DDataFilter(Inner_WB_.TEXT, DDataFilterOperator.LIKE, "rrrrrrrrrrrrrr"));
             }});
         }});
-        view.select(0,100);
+        view.select(0, 100);
         assertEquals(2, view.count());
     }
 
@@ -992,6 +994,7 @@ public class DDataTest {
 
     @Test
     @Transactional
+    @Ignore
     public void TestJAXB() throws SQLException, IOException, JAXBException {
         setUp();
 
@@ -1046,4 +1049,307 @@ public class DDataTest {
         assertNotNull(hs_d);
         assertEquals(hi.getDateFrom(), hs_d.getInner().getDateFrom());
     }
+
+    @Test
+    @Transactional
+    public void updateViaSaveToSampleKeyTest() throws SQLException {
+        setUp();
+        Sample sample = new SampleImpl();
+        SampleRepository_Dao_ repository = dData.getRepository(SampleRepository_Dao_.class);
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Sample_WB_.ITEM)
+                .exclude(Sample_WB_.LIST_PARAMETER)
+                .exclude(Sample_WB_.INNER);
+        sample.setId(1);
+        sample.setStrParameter("update");
+        dData.save(sample, updateOptions);
+        assertTrue(repository.get(1).getStrParameter().equals("update"));
+
+    }
+
+    @Test
+    @Transactional
+    public void insertViaSaveToSampleKeyTest() throws SQLException, IOException {
+        Sample sample = new SampleImpl();
+        Inner inner = new InnerImpl();
+        int sizeBeforeOfTable;
+        int sizeAfterOfTable;
+        SampleRepository_Dao_ repository = dData.getRepository(SampleRepository_Dao_.class);
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Sample_WB_.ITEM)
+                .exclude(Sample_WB_.LIST_PARAMETER);
+        setUp();
+        sample.setId(5);
+        sample.setStrParameter("insert");
+        sample.setInner(inner);
+        //inner.setId(1);
+
+        sizeBeforeOfTable = repository.list(null, null, null, null, null, null).size();
+        dData.save(sample, updateOptions);
+        sizeAfterOfTable = repository.list(null, null, null, null, null, null).size();
+
+        assertTrue(sizeAfterOfTable > sizeBeforeOfTable);
+    }
+
+    @Test
+    @Transactional
+    public void withAllAttributesSaveToSampleKeyTest() throws SQLException {
+        setUp();
+        String marker = "insert";
+        Sample sample = new SampleImpl();
+        Inner inner = new InnerImpl();
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .includeXmlProps()
+                .includeJsonProps();
+        sample.setInner(inner);
+        sample.setId(15);
+        sample.setStrParameter(marker);
+        sample.setListParameter(Collections.singletonList(inner));
+        sample.setRemoteId(888);
+        sample.setUuid(new UUID(1, 2));
+        sample.setHash(new byte[]{1});
+        ItemInnerImpl item = new ItemInnerImpl();
+        ((SampleImpl) sample).setItem(item);
+        inner.setSample(sample);
+        inner.setSampleId(sample.getId());
+        inner.setText("test");
+        inner.setId(666);
+        inner.setD1(777);
+        Sample beamFromDB = dData.save(sample, updateOptions);
+        assertTrue(beamFromDB.getStrParameter().equals(marker));
+
+    }
+
+    @Test
+    @Transactional
+    public void updateViaSaveToCompositeKeyTest() throws SQLException {
+        setUp();
+        CompositeKeyRepository_Dao_ repository = dData.getRepository(CompositeKeyRepository_Dao_.class);
+        CompositeKeySample compositeKeySample = new CompositeKeySampleImpl();
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(CompositeKeySample_WB_.INNER);
+
+        CompositeKeySample_Key_ key =
+                new CompositeKeySample_Key_(LocalDateTime.of(2017, 1, 1, 0, 0, 0), 1);
+        compositeKeySample.setDateFrom(LocalDateTime.of(2017, 1, 1, 0, 0, 0));
+        compositeKeySample.setId(1);
+        compositeKeySample.setValue("update");
+        dData.save(compositeKeySample, updateOptions);
+        compositeKeySample = repository.get(key);
+        assertTrue(compositeKeySample.getValue().equals("update"));
+    }
+
+    @Test
+    @Transactional
+    public void insertViaSaveCompositeKeyTest() throws SQLException {
+        int sizeBeforeOfTable;
+        int sizeAfterOfTable;
+        CompositeKeyRepository_Dao_ repository = dData.getRepository(CompositeKeyRepository_Dao_.class);
+        CompositeKeySample compositeKeySample = new CompositeKeySampleImpl();
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(CompositeKeySample_WB_.INNER);
+        setUp();
+
+        compositeKeySample.setDateFrom(LocalDateTime.of(2018, 2, 2, 2, 2, 2));
+        compositeKeySample.setId(5);
+        compositeKeySample.setValue("insert");
+
+        sizeBeforeOfTable = repository.list(null, null).size();
+        dData.save(compositeKeySample, updateOptions);
+        sizeAfterOfTable = repository.list(null, null).size();
+
+        assertTrue(sizeAfterOfTable > sizeBeforeOfTable);
+    }
+
+    @Test
+    @Transactional
+    public void saveToSampleKeyWithExcludeTest() throws SQLException {
+        setUp();
+        SampleRepository_Dao_ repository = dData.getRepository(SampleRepository_Dao_.class);
+        UpdateOptions updateOptions;
+        SampleImpl sample = new SampleImpl();
+        sample.setId(1);
+        sample.setInnerId(1001);
+        sample.setRemoteId(2);
+        sample.setListParameter(Collections.emptyList());
+
+        updateOptions = UpdateOptions.build()
+                .exclude(Sample_WB_.LIST_PARAMETER)
+                .exclude(Sample_WB_.ITEM)
+                .exclude(Sample_WB_.INNER);
+        sample.setStrParameter("update");
+        dData.save(sample, updateOptions);
+        assertTrue(repository.get(1).getStrParameter().equals("update"));
+
+        updateOptions = updateOptions
+                .exclude(Sample_WB_.LIST_PARAMETER)
+                .exclude(Sample_WB_.ITEM)
+                .exclude(Sample_WB_.INNER)
+                .exclude(Sample_WB_.STR_PARAMETER);
+        sample.setStrParameter("notUpdate");
+        dData.save(sample, updateOptions);
+        assertFalse(repository.get(1).getStrParameter().equals("notUpdate"));
+    }
+
+    @Test
+    @Transactional
+    public void saveToInnerBeanTest() throws SQLException {
+        setUp();
+        String marker = "yes";
+        SampleRepository_Dao_ repository = dData.getRepository(SampleRepository_Dao_.class);
+        Sample sample = new SampleImpl();
+        InnerImpl inner = new InnerImpl();
+        sample.setId(1);
+        sample.setInnerId(1001);
+        sample.setRemoteId(2);
+        inner.setText(marker);
+        inner.setId(1001);
+        inner.setSampleId(1);
+        sample.setInner(inner);
+        inner.setSample(sample);
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Sample_WB_.LIST_PARAMETER)
+                .exclude(Sample_WB_.ITEM)
+                .exclude(Inner_WB_.V1)
+                .includeXmlProps();
+        dData.save(sample, updateOptions);
+        String text = repository.get(1).getInner().getText();
+        assertTrue(text.equals(marker));
+    }
+
+    @Test
+    @Transactional
+    @Ignore
+    // больше не расчитывается что связаные бины будут удаляться если их связь 1 к 1 и не общий ключ
+    public void DroppedViaSaveInnerBeanTest() throws SQLException {
+        boolean hasInnerBean;
+        SampleRepository_Dao_ repository = dData.getRepository(SampleRepository_Dao_.class);
+        Sample sample = new SampleImpl();
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Sample_WB_.LIST_PARAMETER)
+                .exclude(Sample_WB_.ITEM)
+                .includeXmlProps();
+        setUp();
+        sample.setId(1);
+        sample.setInnerId(1001);
+        sample.setRemoteId(2);
+        hasInnerBean = repository.get(1).getInner() != null;
+        dData.save(sample, updateOptions);
+        assertTrue(hasInnerBean && (repository.get(1).getInner() == null));
+    }
+
+    @Test
+    @Transactional
+    public void updateViaSaveToCollectionsInnerBeanTest() throws SQLException {
+        setUp();
+        Sample sample = new SampleImpl();
+        sample.setId(1);
+        Inner inner1 = new InnerImpl();
+        inner1.setId(1001);
+        inner1.setText("i1");
+        inner1.setSampleId(1);
+        inner1.setSample(sample);
+        Inner inner2 = new InnerImpl();
+        inner2.setSample(sample);
+        inner2.setId(1004);
+        inner2.setText("i4");
+        inner2.setSampleId(1);
+        ArrayList arrayList = new ArrayList();
+        arrayList.add(inner1);
+        arrayList.add(inner2);
+        sample.setListParameter(arrayList);
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Inner_WB_.V1)
+                .exclude(Sample_WB_.INNER)
+                .includeXmlProps()
+                .includeJsonProps();
+        Sample save = dData.save(sample, updateOptions);
+        assertTrue(save.getListParameter().size() == 2);
+    }
+
+    @Test
+    @Transactional
+    public void saveToEmptyCollectionsInnerBeanTest() throws SQLException {
+        setUp();
+        Sample sample = new SampleImpl();
+        sample.setId(1);
+        sample.setListParameter(null);
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Inner_WB_.V1)
+                .exclude(Sample_WB_.INNER)
+                .includeXmlProps()
+                .includeJsonProps();
+        Sample save = dData.save(sample, updateOptions);
+        assertNull(save.getListParameter());
+    }
+
+    @Test
+    @Transactional
+    public void insertViaSaveToCollectionsInnerBeanTest() throws SQLException {
+        setUp();
+        Sample sample = new SampleImpl();
+        sample.setId(3);
+        Inner inner1 = new InnerImpl();
+        inner1.setId(1001);
+        inner1.setText("i1");
+        inner1.setSample(sample);
+        Inner inner2 = new InnerImpl();
+        inner2.setSample(sample);
+        inner2.setId(1004);
+        inner2.setText("i4");
+        ArrayList arrayList = new ArrayList();
+        arrayList.add(inner1);
+        arrayList.add(inner2);
+        sample.setListParameter(arrayList);
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Sample_WB_.INNER)
+                .exclude(Inner_WB_.V1)
+                .exclude(Inner_WB_.D1);
+        Sample save = dData.save(sample, updateOptions);
+        assertTrue(save.getListParameter().size() == 2);
+    }
+
+    @Test
+    @Transactional
+    //пометить sample.inner как @XmlTransient
+    public void includedXmlPropsTest() throws SQLException {
+        setUp();
+        SampleRepository_Dao_ repository = dData.getRepository(SampleRepository_Dao_.class);
+        Sample sample = new SampleImpl();
+        Inner inner = new InnerImpl();
+        inner.setId(1001);
+        inner.setText("test");
+        inner.setSampleId(1);
+        sample.setId(1);
+        sample.setInner(inner);
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Inner_WB_.SAMPLE)
+                .exclude(Sample_WB_.LIST_PARAMETER)
+                .exclude(Inner_WB_.V1)
+                .includeXmlProps();
+        dData.save(sample, updateOptions);
+        assertTrue(repository.get(1).getInner() != null);
+    }
+
+    @Test
+    @Transactional
+    public void registerOfUpdateOptionsTest() throws SQLException {
+        setUp();
+
+        SampleRepository_Dao_ repository = dData.getRepository(SampleRepository_Dao_.class);
+        UpdateOptions updateOptions = UpdateOptions.build()
+                .exclude(Sample_WB_.ITEM)
+                .exclude(Sample_WB_.LIST_PARAMETER)
+                .exclude(Sample_WB_.INNER);
+        updateOptions.register(Inner_WB_.SAMPLE.getBeanInterface(), s -> ((Sample) s).setStrParameter("update"));
+        Sample sample = new SampleImpl();
+        sample.setId(1);
+        sample.setStrParameter("hello");
+        updateOptions.handledBean(sample);
+
+        dData.save(sample, updateOptions);
+        assertTrue(repository.get(1).getStrParameter().equals("update"));
+    }
+
+
 }

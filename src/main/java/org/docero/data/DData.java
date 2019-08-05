@@ -5,15 +5,14 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.docero.data.remote.DDataRemoteRepository;
 import org.docero.data.utils.DDataModule;
 import org.docero.data.utils.DDataObjectFactory;
+import org.docero.data.utils.UpdateOptions;
 import org.docero.data.view.DDataViewBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.support.GenericApplicationContext;
 
 import java.io.Serializable;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -49,20 +48,67 @@ public class DData {
         buildedRepositories.put(i, springApplicationContext.getBean(i));
     }
 
+    private void extractorOfInterfaces(Class clazz, Set set){
+        for (Class anInterface : clazz.getInterfaces()) {
+            set.add(anInterface);
+            extractorOfInterfaces(anInterface,set);
+        }
+    }
+
+    private Set<Class> extractionAllInterfaces(Class clazz){
+        HashSet interfacesOfObject = new LinkedHashSet();
+        interfacesOfObject.add(clazz);
+        extractorOfInterfaces(clazz,interfacesOfObject);
+        return interfacesOfObject;
+    }
+
     public DDataViewBuilder getViewBuilder() {
         return new DDataViewBuilder(sessionFactory, dictionariesService);
     }
 
+    public <T extends Serializable> T save(T t, UpdateOptions updateOptions) {
+        Class beanInterface = null;
+        DDataModule module = null;
+        for (Class interfaceOfBean : extractionAllInterfaces(t.getClass())) {
+            for (DDataModule m : modules.values()) {
+                if (m.getImplementations().containsKey(interfaceOfBean))
+                    beanInterface = interfaceOfBean;
+                if(beanInterface!=null) {
+                    module = m;
+                    break;
+                }
+            }
+            if (module == null)
+                continue;
+            return module.save(t, beanInterface, sessionFactory, updateOptions, this);
+        }
+        throw new RuntimeException("unknown d.data repository for " + t.getClass().getName());
+    }
+
+    public <T extends Serializable> T save(T t) {
+        return save(t,UpdateOptions.build().includeJsonProps().includeXmlProps());
+    }
+
 
     @SuppressWarnings({"unchecked", "SuspiciousMethodCalls"})
-    public <T extends Serializable, C extends Serializable> DDataRepository<T, C>
-    getBeanRepository(Class<T> beanClass) {
+    public <T extends Serializable, C extends Serializable> DDataRepository<T, C> getBeanRepository(Class<T> beanClass) {
         Object r = buildedRepositories.get(beanClass);
         if (r != null) return (DDataRepository<T, C>) r;
 
-        DDataModule module = modules.values().stream()
-                .filter(m -> m.getImplementations().containsKey(beanClass))
-                .findAny().orElse(null);
+        Class beanInterface = null;
+        DDataModule module = null;
+        for (Class interfaceOfBean : extractionAllInterfaces(beanClass)) {
+            for (DDataModule m : modules.values()) {
+                if (m.getImplementations().containsKey(interfaceOfBean))
+                    beanInterface = interfaceOfBean;
+                if(beanInterface!=null) {
+                    module = m;
+                    break;
+                }
+            }
+            if (module != null)
+                break;
+        }
         if (module == null)
             throw new RuntimeException("unknown d.data repository for " + beanClass.getName());
 
