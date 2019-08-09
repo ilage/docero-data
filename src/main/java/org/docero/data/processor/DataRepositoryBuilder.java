@@ -200,7 +200,7 @@ class DataRepositoryBuilder {
             rootBuilder.checkAbstractRepositoryForPackage(beanPkg);
             cf.startBlock("public final class " +
                             daoClassName.substring(simpNameDel + 1) +
-                    " extends " + beanPkg + ".AbstractModuleRepository<" +
+                    " extends " + rootBuilder.basePackage + ".AbstractModuleRepository<" +
                             bean.interfaceType + "," + bean.inversionalKey + ">" +
                             " implements " + repositoryInterface + (bean.isDictionary() ?
                             ", org.docero.data.utils.DDataDictionary<" +
