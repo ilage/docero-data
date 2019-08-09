@@ -13,7 +13,6 @@ public class UpdateOptions {
     private boolean isIncludeXmlProps;
     private ArrayList<DDataAttribute> excluded = new ArrayList<>();
     private Map<Class, Consumer> beanHandlers = new HashMap<>();
-    private Set interfacesOfObject = new HashSet();
 
     private UpdateOptions(boolean isIncludeJsonProps, boolean isIncludeXmlProps) {
         this.isIncludeJsonProps = isIncludeJsonProps;
@@ -58,11 +57,21 @@ public class UpdateOptions {
     }
 
 
-    private Set<Class> extractionAllInterfaces(Class clazz){
+    private void extractorOfInterfaces(Class clazz, Set set) {
         for (Class anInterface : clazz.getInterfaces()) {
-            interfacesOfObject.add(anInterface);
-            extractionAllInterfaces(anInterface);
+            if (clazz.getSuperclass() != null) {
+                set.add(clazz.getSuperclass());
+                extractorOfInterfaces(clazz.getSuperclass(), set);
+            }
+            set.add(anInterface);
+            extractorOfInterfaces(anInterface, set);
         }
+    }
+
+    private Set<Class> extractionAllInterfaces(Class clazz) {
+        HashSet interfacesOfObject = new LinkedHashSet();
+        interfacesOfObject.add(clazz);
+        extractorOfInterfaces(clazz, interfacesOfObject);
         return interfacesOfObject;
     }
 

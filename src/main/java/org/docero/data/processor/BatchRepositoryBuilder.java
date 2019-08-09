@@ -175,51 +175,55 @@ class BatchRepositoryBuilder {
         }
 
         public void write(JavaClassWriter cf) {
-            //DataBeanBuilder beanBuilder = dataBuilder.beansByInterface.get(type.toString());
-            String returnType;
-            DataRepositoryBuilder beanRepository = null;
-            boolean returnNothing = type == null || type.getKind() == TypeKind.VOID;
-            if (!returnNothing) {
-                returnType = type.toString();
-                beanRepository = dataBuilder.repositoriesByBean.get(returnType);
-            } else {
-                returnType = "void";
-            }
-
-            if (beanRepository == null)
-                for (TypeMirror bean : beans) {
-                    beanRepository = dataBuilder.repositoriesByBean.get(bean.toString());
-                    if (beanRepository.methods.stream().anyMatch(m ->
-                            (returnNothing ?
-                                    (m.returnType == null || m.returnType.getKind() == TypeKind.VOID) :
-                                    (m.returnType != null && returnType.equals(m.returnType.toString()))
-                            ) &&
-                                    m.methodName.equals(name) &&
-                                    m.parameters.size() == parameters.size()
-                    )) break;
-                    else beanRepository = null;
+            try {
+                //DataBeanBuilder beanBuilder = dataBuilder.beansByInterface.get(type.toString());
+                String returnType;
+                DataRepositoryBuilder beanRepository = null;
+                boolean returnNothing = type == null || type.getKind() == TypeKind.VOID;
+                if (!returnNothing) {
+                    returnType = type.toString();
+                    beanRepository = dataBuilder.repositoriesByBean.get(returnType);
+                } else {
+                    returnType = "void";
                 }
 
-            if (beanRepository == null) {
-                throw new RuntimeException("can't find repository for method " +
-                        name + "(" + parameters.stream()
-                        .map(pp -> pp.type.toString())
-                        .collect(Collectors.joining(",")) +
-                        ") in " + repositoryInterface);
-            }
+                if (beanRepository == null)
+                    for (TypeMirror bean : beans) {
+                        beanRepository = dataBuilder.repositoriesByBean.get(bean.toString());
+                        if (beanRepository.methods.stream().anyMatch(m ->
+                                (returnNothing ?
+                                        (m.returnType == null || m.returnType.getKind() == TypeKind.VOID) :
+                                        (m.returnType != null && returnType.equals(m.returnType.toString()))
+                                ) &&
+                                        m.methodName.equals(name) &&
+                                        m.parameters.size() == parameters.size()
+                        )) break;
+                        else beanRepository = null;
+                    }
 
-            cf.println("\n" +
-                    "@Override public " + returnType + " " + name + "(" +
-                    parameters.stream()
-                            .map(pp -> pp.type + " " + pp.name)
-                            .collect(Collectors.joining(",")) + ") {\n" +
-                    (returnNothing ? "" : "return ") +
-                    "((" + beanRepository.repositoryInterface +
-                    ") " + beanRepository.repositoryVariableName + ")." + name + "(" +
-                    parameters.stream()
-                            .map(pp -> pp.name)
-                            .collect(Collectors.joining(",")) + ");\n" +
-                    "}");
+                if (beanRepository == null) {
+                    throw new RuntimeException("can't find repository for method " +
+                            name + "(" + parameters.stream()
+                            .map(pp -> pp.type.toString())
+                            .collect(Collectors.joining(",")) +
+                            ") in " + repositoryInterface);
+                }
+
+                cf.println("");
+                cf.startBlock("@Override public " + returnType + " " + name + "(" +
+                        parameters.stream()
+                                .map(pp -> pp.type + " " + pp.name)
+                                .collect(Collectors.joining(",")) + ") {");
+                cf.println((returnNothing ? "" : "return ") +
+                        "((" + beanRepository.repositoryInterface +
+                        ") " + beanRepository.repositoryVariableName + ")." + name + "(" +
+                        parameters.stream()
+                                .map(pp -> pp.name)
+                                .collect(Collectors.joining(",")) + ");");
+                cf.endBlock("}");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 }

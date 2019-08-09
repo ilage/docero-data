@@ -48,17 +48,21 @@ public class DData {
         buildedRepositories.put(i, springApplicationContext.getBean(i));
     }
 
-    private void extractorOfInterfaces(Class clazz, Set set){
+    private void extractorOfInterfaces(Class clazz, Set set) {
         for (Class anInterface : clazz.getInterfaces()) {
+            if (clazz.getSuperclass() != null) {
+                set.add(clazz.getSuperclass());
+                extractorOfInterfaces(clazz.getSuperclass(), set);
+            }
             set.add(anInterface);
-            extractorOfInterfaces(anInterface,set);
+            extractorOfInterfaces(anInterface, set);
         }
     }
 
-    private Set<Class> extractionAllInterfaces(Class clazz){
+    private Set<Class> extractionAllInterfaces(Class clazz) {
         HashSet interfacesOfObject = new LinkedHashSet();
         interfacesOfObject.add(clazz);
-        extractorOfInterfaces(clazz,interfacesOfObject);
+        extractorOfInterfaces(clazz, interfacesOfObject);
         return interfacesOfObject;
     }
 
@@ -73,7 +77,7 @@ public class DData {
             for (DDataModule m : modules.values()) {
                 if (m.getImplementations().containsKey(interfaceOfBean))
                     beanInterface = interfaceOfBean;
-                if(beanInterface!=null) {
+                if (beanInterface != null) {
                     module = m;
                     break;
                 }
@@ -86,7 +90,7 @@ public class DData {
     }
 
     public <T extends Serializable> T save(T t) {
-        return save(t,UpdateOptions.build().includeJsonProps().includeXmlProps());
+        return save(t, UpdateOptions.build().includeJsonProps().includeXmlProps());
     }
 
 
