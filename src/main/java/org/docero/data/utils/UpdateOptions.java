@@ -58,11 +58,11 @@ public class UpdateOptions {
 
 
     private void extractorOfInterfaces(Class clazz, Set set) {
+        if (clazz.getSuperclass() != null) {
+            set.add(clazz.getSuperclass());
+            extractorOfInterfaces(clazz.getSuperclass(), set);
+        }
         for (Class anInterface : clazz.getInterfaces()) {
-            if (clazz.getSuperclass() != null) {
-                set.add(clazz.getSuperclass());
-                extractorOfInterfaces(clazz.getSuperclass(), set);
-            }
             set.add(anInterface);
             extractorOfInterfaces(anInterface, set);
         }

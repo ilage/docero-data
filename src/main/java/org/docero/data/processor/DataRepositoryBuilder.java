@@ -516,7 +516,15 @@ class DataRepositoryBuilder {
                 continue;
             }
 
-            if (mapping != null && !property.isCollection()) {
+            if ( isMapingIdOnId(bean, property) && !property.isCollection()) {
+                String daoClassNameMappedBean = rootBuilder.repositoriesByBean.get(property.mappedType.toString()).daoClassName;
+                cf.println("if(((" + beanImpl + ")bean).get" + capitalizeName + "() != null){\n" +
+                        daoClassNameMappedBean + " dao = dData.getRepository(" + daoClassNameMappedBean + ".class);");
+                cf.println("dao.save(((" + beanImpl + ")bean).get" + capitalizeName + "(),updateOptions,dData,savedBeans);");
+                cf.println("}");
+            }
+
+            if (isManyToSingle(bean, property) && !isMapingIdOnId(bean, property) && !property.isCollection()) {
                 String[] mappedProps = mapping.mappedProperties.stream().map(s -> s.name).toArray(String[]::new);
                 String daoClassNameMappedBean = rootBuilder.repositoriesByBean.get(property.mappedType.toString()).daoClassName;
                 String[] mappingProps = mapping.properties.stream().map(s -> s.name).toArray(String[]::new);
@@ -563,7 +571,7 @@ class DataRepositoryBuilder {
                 continue;
             String[] mappedProps = mappingInvert.mappedProperties.stream().map(s -> s.name).toArray(String[]::new);
             String[] mappingProps = mappingInvert.properties.stream().map(s -> s.name).toArray(String[]::new);
-            if (property.isCollection()) {
+            if (!isMapingIdOnId(bean, property) && property.isCollection()) {
                 String daoClassNameMappedBean = rootBuilder.repositoriesByBean.get(property.mappedType.toString()).daoClassName;
                 cf.println("if(bean.get" + getCapitalizeName(property.name) + "() != null){\n" +
                         daoClassNameMappedBean + " dao = dData.getRepository(" + daoClassNameMappedBean + ".class);" +
@@ -576,7 +584,7 @@ class DataRepositoryBuilder {
                         "}}");
                 continue;
             }
-            if (mappedBean != null && !property.isCollection()) {
+            if (!isMapingIdOnId(bean, property) && mappedBean != null && !property.isCollection()) {
                 String inversionalKey = rootBuilder.beansByInterface.get(property.mappedType.toString()).inversionalKey;
                 String daoClassNameMappedBean = rootBuilder.repositoriesByBean.get(property.mappedType.toString()).daoClassName;
                 cf.println("if(((" + beanImpl + ") bean).get" + capitalizeName + "() != null &&" +
@@ -766,6 +774,14 @@ class DataRepositoryBuilder {
                 && rootBuilder.mappings.get(
                 property.type + bean.interfaceType.toString().substring(bean.interfaceType.toString().lastIndexOf('.'))
         ) == null;
+    }
+
+    private boolean isMapingIdOnId(DataBeanBuilder bean, DataBeanPropertyBuilder property) {
+        if (rootBuilder.mappings.get(property.dataBean.interfaceType + "." + property.name) != null &&
+                rootBuilder.mappings.get(property.dataBean.interfaceType + "." + property.name).stream().allMatch(s -> s.property.isId)
+                && rootBuilder.mappings.get(property.dataBean.interfaceType + "." + property.name).stream().allMatch(s -> s.mappedProperty.isId))
+            return true;
+        return false;
     }
 
     private void mapOfAttributesBuilder(JavaClassWriter cf, DataBeanBuilder bean) throws IOException {
